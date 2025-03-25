@@ -15,13 +15,31 @@ SecretHound é uma ferramenta CLI desenvolvida em Go para extração de segredos
 ## Instalação
 
 ```bash
-# Instruções de instalação serão adicionadas futuramente
+# Clonando o repositório
+git clone https://github.com/your-username/secrethound.git
+cd secrethound
+
+# Instalando as dependências
+go mod download
+
+# Compilando
+go build -o secrethound
 ```
 
 ## Uso Básico
 
 ```bash
-# Exemplos de uso serão adicionados futuramente
+# Escaneando uma única URL
+./secrethound scan https://example.com/script.js
+
+# Escaneando múltiplas URLs
+./secrethound scan https://example.com/script1.js https://example.com/script2.js
+
+# Escaneando a partir de um arquivo com lista de URLs
+./secrethound scan -i urls.txt -o resultados.json
+
+# Ativando modo verbose para logs detalhados
+./secrethound scan -i urls.txt -v
 ```
 
 ## Configuração
@@ -29,8 +47,38 @@ SecretHound é uma ferramenta CLI desenvolvida em Go para extração de segredos
 A ferramenta pode ser configurada por meio de flags:
 
 ```bash
-# Opções de configuração serão adicionadas futuramente
+# Ajuste de timeout (em segundos)
+./secrethound scan -i urls.txt -t 60
+
+# Configuração do número de workers concorrentes
+./secrethound scan -i urls.txt -n 20
+
+# Definição de arquivo de saída
+./secrethound scan -i urls.txt -o resultados.json
+
+# Limitação de taxa de requisições por domínio
+./secrethound scan -i urls.txt -l 5
+
+# Número máximo de retentativas em caso de falha
+./secrethound scan -i urls.txt -r 5
+
+# Uso de arquivo de regexes customizado
+./secrethound scan -i urls.txt --regex-file minhas-regexes.txt
 ```
+
+## Padrões Suportados
+
+SecretHound pode detectar dezenas de tipos diferentes de segredos, incluindo:
+
+- Chaves de API (Google, AWS, Firebase, etc.)
+- Tokens de acesso (Facebook, Twitter, GitHub, etc.)
+- Credenciais (senhas, tokens Basic e Bearer)
+- Chaves privadas (RSA, SSH, PGP)
+- Tokens JWT
+- URLs sensíveis (Firebase, AWS S3)
+- E muito mais!
+
+Para ver a lista completa de regexes suportadas, consulte o arquivo `regex.txt`.
 
 ## Licença
 

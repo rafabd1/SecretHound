@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrorType represents the type of error
@@ -13,6 +15,7 @@ const (
 	ProcessingError
 	RateLimitError
 	WAFError
+	TemporaryError
 )
 
 // AppError represents an application error
@@ -37,4 +40,103 @@ func (e *AppError) Error() string {
 		return fmt.Sprintf("%s: %v", e.Message, e.Err)
 	}
 	return e.Message
+}
+
+// Is implements the errors.Is interface
+func (e *AppError) Is(target error) bool {
+	t, ok := target.(*AppError)
+	if !ok {
+		return false
+	}
+	return e.Type == t.Type
+}
+
+// IsNetworkError checks if an error is a network error
+func IsNetworkError(err error) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Type == NetworkError
+	}
+	return false
+}
+
+// IsRateLimitError checks if an error is a rate limit error
+func IsRateLimitError(err error) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Type == RateLimitError
+	}
+	
+	// Also check for common rate limit error messages
+	errStr := strings.ToLower(err.Error())
+	rateLimitKeywords := []string{
+		"rate limit",
+		"too many requests",
+		"throttle",
+		"429",
+	}
+	
+	for _, keyword := range rateLimitKeywords {
+		if strings.Contains(errStr, keyword) {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// IsWAFError checks if an error is a WAF error
+func IsWAFError(err error) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Type == WAFError
+	}
+	
+	// Also check for common WAF error messages
+	errStr := strings.ToLower(err.Error())
+	wafKeywords := []string{
+		"waf",
+		"firewall",
+		"blocked",
+		"security",
+		"403 forbidden",
+	}
+	
+	for _, keyword := range wafKeywords {
+		if strings.Contains(errStr, keyword) {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// IsTemporaryError checks if an error is temporary and retryable
+func IsTemporaryError(err error) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Type == TemporaryError
+	}
+	
+	// Also check for common temporary error messages
+	errStr := strings.ToLower(err.Error())
+	tempKeywords := []string{
+		"timeout",
+		"temporary",
+		"retriable",
+		"connection reset",
+		"connection refused",
+		"network is unreachable",
+		"server is busy",
+		"try again",
+		"temporary failure",
+	}
+	
+	for _, keyword := range tempKeywords {
+		if strings.Contains(errStr, keyword) {
+			return true
+		}
+	}
+	
+	return false
 }
