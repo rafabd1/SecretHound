@@ -96,13 +96,15 @@ func (l *Logger) processLogs() {
 func (l *Logger) writeLog(msg LogMessage) {
 	// Skip INFO, DEBUG and WARNING messages if not in verbose mode
 	if !l.verbose && (msg.Level == INFO || msg.Level == DEBUG || msg.Level == WARNING) {
-		// Special case for important INFO messages
+		// Special case for important INFO messages - always show these
 		if msg.Level == INFO {
 			msgText := msg.Message
 			if !strings.Contains(msgText, "Starting") &&
-				!strings.Contains(msgText, "Found") &&
-				!strings.Contains(msgText, "Processed") &&
-				!strings.Contains(msgText, "Using") {
+			   !strings.Contains(msgText, "Found") &&
+			   !strings.Contains(msgText, "Processing") &&
+			   !strings.Contains(msgText, "Using") &&
+			   !strings.Contains(msgText, "Processed") &&
+			   !strings.Contains(msgText, "Added") {
 				return
 			}
 		} else {
