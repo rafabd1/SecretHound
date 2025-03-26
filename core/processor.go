@@ -404,3 +404,12 @@ func (p *Processor) BatchProcess(contents map[string]string, concurrency int) (m
 	
 	return results, nil
 }
+
+// GetRegexPatternCount returns the count of regex patterns
+func (p *Processor) GetRegexPatternCount() int {
+	if p.regexManager != nil {
+		return p.regexManager.GetPatternCount()
+	}
+	return 0
+}
+

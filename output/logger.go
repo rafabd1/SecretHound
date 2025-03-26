@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,10 +30,10 @@ type LogMessage struct {
 
 // Logger provides structured logging with queue management
 type Logger struct {
-	verbose  bool
-	mu       sync.Mutex
-	logQueue chan LogMessage
-	done     chan struct{}
+	verbose     bool
+	outputMu    sync.Mutex // Mutex for coordinating terminal output
+	logQueue    chan LogMessage
+	done        chan struct{}
 
 	// Color functions
 	debugColor   func(format string, a ...interface{}) string
@@ -41,6 +42,10 @@ type Logger struct {
 	errorColor   func(format string, a ...interface{}) string
 	successColor func(format string, a ...interface{}) string
 	timeColor    func(format string, a ...interface{}) string
+	
+	// Progress bar integration
+	progressBar  *ProgressBar
+	progressMu   sync.Mutex
 }
 
 // NewLogger creates a new logger
@@ -65,6 +70,13 @@ func NewLogger(verbose bool) *Logger {
 	return logger
 }
 
+// SetProgressBar configures the progress bar for the logger
+func (l *Logger) SetProgressBar(pb *ProgressBar) {
+	l.progressMu.Lock()
+	defer l.progressMu.Unlock()
+	l.progressBar = pb
+}
+
 // processLogs processes log messages from the queue
 func (l *Logger) processLogs() {
 	for {
@@ -72,17 +84,38 @@ func (l *Logger) processLogs() {
 		case <-l.done:
 			return
 		case msg := <-l.logQueue:
+			// Lock output to prevent race with progress bar
+			l.outputMu.Lock()
 			l.writeLog(msg)
+			l.outputMu.Unlock()
 		}
 	}
 }
 
 // writeLog writes a log message to the console
 func (l *Logger) writeLog(msg LogMessage) {
-	// Skip INFO and DEBUG messages if not in verbose mode
-	if !l.verbose && (msg.Level == INFO || msg.Level == DEBUG) {
-		return
+	// Skip INFO, DEBUG and WARNING messages if not in verbose mode
+	if !l.verbose && (msg.Level == INFO || msg.Level == DEBUG || msg.Level == WARNING) {
+		// Special case for important INFO messages
+		if msg.Level == INFO {
+			msgText := msg.Message
+			if !strings.Contains(msgText, "Starting") &&
+				!strings.Contains(msgText, "Found") &&
+				!strings.Contains(msgText, "Processed") &&
+				!strings.Contains(msgText, "Using") {
+				return
+			}
+		} else {
+			return
+		}
 	}
+
+	// Inform progress bar that we're about to log
+	l.progressMu.Lock()
+	if l.progressBar != nil {
+		l.progressBar.MoveForLog()
+	}
+	l.progressMu.Unlock()
 
 	timestamp := l.timeColor("[%s]", msg.Time.Format("15:04:05"))
 	var prefix string
@@ -107,15 +140,18 @@ func (l *Logger) writeLog(msg LogMessage) {
 	}
 
 	fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
+
+	// Restore progress bar after logging
+	l.progressMu.Lock()
+	if l.progressBar != nil {
+		l.progressBar.ShowAfterLog()
+	}
+	l.progressMu.Unlock()
 }
 
 // enqueueLog adds a log message to the queue
 func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) {
-	// Early return for non-verbose INFO and DEBUG messages to avoid unnecessary formatting
-	if !l.verbose && (level == INFO || level == DEBUG) {
-		return
-	}
-
+	// Create log message
 	msg := LogMessage{
 		Level:   level,
 		Message: fmt.Sprintf(format, args...),
@@ -128,7 +164,9 @@ func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) 
 		// Message sent successfully
 	default:
 		// Queue is full, write directly to avoid blocking
+		l.outputMu.Lock()
 		l.writeLog(msg)
+		l.outputMu.Unlock()
 	}
 }
 
@@ -180,7 +218,7 @@ func (l *Logger) IsVerbose() bool {
 
 // SetVerbose sets the verbose mode
 func (l *Logger) SetVerbose(verbose bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.outputMu.Lock()
+	defer l.outputMu.Unlock()
 	l.verbose = verbose
 }
