@@ -79,15 +79,17 @@ func (l *Logger) processLogs() {
 
 // writeLog writes a log message to the console
 func (l *Logger) writeLog(msg LogMessage) {
+	// Skip INFO and DEBUG messages if not in verbose mode
+	if !l.verbose && (msg.Level == INFO || msg.Level == DEBUG) {
+		return
+	}
+
 	timestamp := l.timeColor("[%s]", msg.Time.Format("15:04:05"))
 	var prefix string
 	var formatted string
 
 	switch msg.Level {
 	case DEBUG:
-		if !l.verbose {
-			return
-		}
 		prefix = l.debugColor("[DEBUG]")
 		formatted = l.debugColor("%s", msg.Message)
 	case INFO:
@@ -109,6 +111,11 @@ func (l *Logger) writeLog(msg LogMessage) {
 
 // enqueueLog adds a log message to the queue
 func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) {
+	// Early return for non-verbose INFO and DEBUG messages to avoid unnecessary formatting
+	if !l.verbose && (level == INFO || level == DEBUG) {
+		return
+	}
+
 	msg := LogMessage{
 		Level:   level,
 		Message: fmt.Sprintf(format, args...),
@@ -130,7 +137,7 @@ func (l *Logger) Debug(format string, args ...interface{}) {
 	l.enqueueLog(DEBUG, format, args...)
 }
 
-// Info logs an informational message
+// Info logs an informational message (only shown in verbose mode)
 func (l *Logger) Info(format string, args ...interface{}) {
 	l.enqueueLog(INFO, format, args...)
 }
