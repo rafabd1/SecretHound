@@ -2,8 +2,12 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
+	"os"
+	"github.com/fatih/color"
+
 
 	"github.com/secrethound/networking"
 	"github.com/secrethound/output"
@@ -51,69 +55,135 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	
-	return &Scheduler{
-		domainManager: domainManager,
-		client:        client,
-		processor:     processor,
-		writer:        writer,
-		logger:        logger,
-		concurrency:   10, // Default, will be overridden by Schedule
-		ctx:           ctx,
-		cancel:        cancel,
-		domainLastAccess: utils.NewSafeMap[string, time.Time](),
-		domainCooldown: 500 * time.Millisecond, // Intervalo entre requisições ao mesmo domínio
-		stats: SchedulerStats{
-			DomainRetries: make(map[string]int),
-			StartTime:     time.Now(),
-		},
-	}
+		return &Scheduler{
+			domainManager: domainManager,
+			client:        client,
+			processor:     processor,
+			writer:        writer,
+			logger:        logger,
+			concurrency:   10, // Default, will be overridden by Schedule
+			ctx:           ctx,
+			cancel:        cancel,
+			domainLastAccess: utils.NewSafeMap[string, time.Time](),
+			domainCooldown: 500 * time.Millisecond, // Intervalo entre requisições ao mesmo domínio
+			stats: SchedulerStats{
+				DomainRetries: make(map[string]int),
+				StartTime:     time.Now(),
+			},
+		}
 }
+	// Schedule distributes URLs among worker threads
+	func (s *Scheduler) Schedule(urls []string) error {
+		s.mutex.Lock()
+		s.stats.TotalURLs = len(urls)
+		s.stats.StartTime = time.Now()
+		s.mutex.Unlock()
 
-// Schedule distributes URLs among worker threads
-func (s *Scheduler) Schedule(urls []string) error {
-	s.mutex.Lock()
-	s.stats.TotalURLs = len(urls)
-	s.stats.StartTime = time.Now()
-	s.mutex.Unlock()
-	
-	s.logger.Info("Starting to schedule %d URLs for processing", len(urls))
-	
-	// Group URLs by domain before scheduling
-	s.domainManager.GroupURLsByDomain(urls)
-	domains := s.domainManager.GetDomainList()
-	s.logger.Info("Grouped URLs into %d domains", len(domains))
-	
-	// Initialize the URL queue by distributing domains across workers
-	s.buildBalancedWorkQueue(domains)
-	
-	// Create a worker pool with the configured concurrency
-	s.workerPool = utils.NewWorkerPool(s.concurrency, len(urls))
-	
-	// Start worker goroutines
-	for i := 0; i < s.concurrency; i++ {
-		s.waitGroup.Add(1)
-		go s.worker(i)
+		// Force log these important messages with direct terminal output to ensure visibility
+		fmt.Fprintf(os.Stderr, "[%s] %s %s\n", 
+			time.Now().Format("15:04:05"),
+			color.CyanString("[INFO]"), 
+			fmt.Sprintf("Starting to schedule %d URLs for processing", len(urls)))
+
+		// Group URLs by domain before scheduling
+		s.domainManager.GroupURLsByDomain(urls)
+		domains := s.domainManager.GetDomainList()
+		
+		fmt.Fprintf(os.Stderr, "[%s] %s %s\n", 
+			time.Now().Format("15:04:05"),
+			color.CyanString("[INFO]"), 
+			fmt.Sprintf("Grouped URLs into %d domains", len(domains)))
+
+		// Initialize the URL queue by distributing domains across workers
+		s.buildBalancedWorkQueue(domains)
+
+		// Explicitly log important initial statistics to make sure they appear
+		fmt.Fprintf(os.Stderr, "[%s] %s %s\n", 
+			time.Now().Format("15:04:05"),
+			color.CyanString("[INFO]"), 
+			fmt.Sprintf("Using %d concurrent workers", s.concurrency))
+		
+		fmt.Fprintf(os.Stderr, "[%s] %s %s\n", 
+			time.Now().Format("15:04:05"),
+			color.CyanString("[INFO]"), 
+			fmt.Sprintf("Rate limit set to %d requests per domain", s.client.GetRateLimit()))
+
+		// Critical pause to ensure all initial stats are displayed
+		time.Sleep(300 * time.Millisecond)
+
+		// Create and start progress bar
+		progressBar := output.NewProgressBar(len(urls), 40)
+		progressBar.SetPrefix("Processing: ")
+
+		// Connect progress bar to logger
+		s.logger.SetProgressBar(progressBar)
+
+		// Start tracking stats in real-time
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+
+		go func() {
+			for {
+				select {
+				case <-ticker.C:
+					s.mutex.Lock()
+					processedCount := s.stats.ProcessedURLs
+					secretsFound := s.stats.TotalSecrets
+					s.mutex.Unlock()
+
+					// Update progress bar
+					progressBar.Update(processedCount)
+
+					// Update suffix with statistics
+					progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
+						secretsFound,
+						float64(processedCount)/time.Since(s.stats.StartTime).Seconds()))
+				case <-s.ctx.Done():
+					return
+				}
+			}
+		}()
+		
+		// Start progress bar AFTER all important info is displayed
+		progressBar.Start()
+
+		// Create a worker pool with the configured concurrency
+		s.workerPool = utils.NewWorkerPool(s.concurrency, len(urls))
+
+		// Start worker goroutines
+		for i := 0; i < s.concurrency; i++ {
+			s.waitGroup.Add(1)
+			go s.worker(i)
+		}
+
+		// Wait for all workers to complete
+		s.waitGroup.Wait()
+
+		// Stop the progress bar
+		progressBar.Stop()
+
+		// Record end time and log summary
+		s.mutex.Lock()
+		s.stats.EndTime = time.Now()
+		duration := s.stats.EndTime.Sub(s.stats.StartTime)
+		urlsPerSecond := float64(s.stats.ProcessedURLs) / duration.Seconds()
+		s.mutex.Unlock()
+
+		// Print detailed statistics
+		s.logger.Info("Processing completed in %.2f seconds", duration.Seconds())
+		s.logger.Info("Processed %d URLs (%.2f URLs/second)", s.stats.ProcessedURLs, urlsPerSecond)
+		s.logger.Info("Found %d secrets", s.stats.TotalSecrets)
+		s.logger.Info("Failed to process %d URLs", s.stats.FailedURLs)
+		s.logger.Info("Encountered rate limiting %d times", s.stats.RateLimitHits)
+		s.logger.Info("Encountered WAF blocks %d times", s.stats.WAFBlockHits)
+
+		// Show domain statistics if in verbose mode
+		if s.logger.IsVerbose() {
+			s.printDomainStatistics()
+		}
+
+		return nil
 	}
-	
-	// Wait for all workers to complete
-	s.waitGroup.Wait()
-	
-	// Record end time and log summary
-	s.mutex.Lock()
-	s.stats.EndTime = time.Now()
-	duration := s.stats.EndTime.Sub(s.stats.StartTime)
-	urlsPerSecond := float64(s.stats.ProcessedURLs) / duration.Seconds()
-	s.mutex.Unlock()
-	
-	s.logger.Info("Processing completed in %.2f seconds", duration.Seconds())
-	s.logger.Info("Processed %d URLs (%.2f URLs/second)", s.stats.ProcessedURLs, urlsPerSecond)
-	s.logger.Info("Found %d secrets", s.stats.TotalSecrets)
-	s.logger.Info("Failed to process %d URLs", s.stats.FailedURLs)
-	s.logger.Info("Encountered rate limiting %d times", s.stats.RateLimitHits)
-	s.logger.Info("Encountered WAF blocks %d times", s.stats.WAFBlockHits)
-	
-	return nil
-}
 
 // buildBalancedWorkQueue distributes domains in a balanced way to the work queue
 func (s *Scheduler) buildBalancedWorkQueue(domains []string) {
@@ -544,4 +614,58 @@ func (s *Scheduler) GetActiveWorkers() int {
 		return s.workerPool.ActiveJobs()
 	}
 	return 0
+}
+
+// printDomainStatistics prints domain-specific statistics
+func (s *Scheduler) printDomainStatistics() {
+	// Get domain statistics from domain manager
+	domainStats := s.domainManager.GetDomainStatus()
+	
+	// Get blocking information
+	blockedDomains := s.domainManager.GetBlockedDomains()
+	
+	s.logger.Info("Domain Statistics:")
+	
+	// Sort domains by URL count for consistent output
+	domains := make([]string, 0, len(domainStats))
+	for domain := range domainStats {
+		domains = append(domains, domain)
+	}
+	
+	utils.SortByValueDesc(domains, func(domain string) int {
+		return domainStats[domain].TotalURLs
+	})
+	
+	for _, domain := range domains {
+		stats := domainStats[domain]
+		
+		// Check if domain is currently blocked
+		blockStatus := ""
+		if expiry, blocked := blockedDomains[domain]; blocked {
+			remaining := time.Until(expiry).Round(time.Second)
+			blockStatus = fmt.Sprintf(" [BLOCKED for %s]", remaining)
+		}
+		
+		s.logger.Info("  - %s: %d URLs, %d processed, %d failed%s", 
+			domain, stats.TotalURLs, stats.ProcessedURLs, stats.FailedURLs, blockStatus)
+	}
+	
+	// Show retry information
+	s.logger.Info("Domain Retry Counts:")
+	
+	retryDomains := make([]string, 0, len(s.stats.DomainRetries))
+	for domain := range s.stats.DomainRetries {
+		retryDomains = append(retryDomains, domain)
+	}
+	
+	utils.SortByValueDesc(retryDomains, func(domain string) int {
+		return s.stats.DomainRetries[domain]
+	})
+	
+	for _, domain := range retryDomains {
+		count := s.stats.DomainRetries[domain]
+		if count > 0 {
+			s.logger.Info("  - %s: retried %d times", domain, count)
+		}
+	}
 }

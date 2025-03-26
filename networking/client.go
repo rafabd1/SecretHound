@@ -283,6 +283,18 @@ func (c *Client) checkRateLimit(domain string) error {
 	return nil
 }
 
+// GetRateLimit returns the default rate limit per domain
+func (c *Client) GetRateLimit() int {
+    if c.rateLimiter == nil || len(c.rateLimiter.domain) == 0 {
+        return 3 // Default rate limit
+    }
+    // Return the first domain's rate limit as the default
+    for _, bucket := range c.rateLimiter.domain {
+        return bucket.refillRate
+    }
+    return 3
+}
+
 // shouldRetryStatus determines if a request should be retried based on the status code
 func (c *Client) shouldRetryStatus(statusCode int, retryCount int, domain string) (bool, time.Duration) {
 	switch {

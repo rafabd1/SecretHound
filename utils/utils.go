@@ -181,3 +181,23 @@ func ContainsAny(s string, substrings ...string) bool {
 	}
 	return false
 }
+
+// IsTerminal checks if the given file descriptor is a terminal
+func IsTerminal(fd uintptr) bool {
+	// No Windows, we need to use syscall from the golang.org/x/sys/windows package
+	// For Unix-like systems, we'd use isatty from golang.org/x/sys/unix
+	// For simplicity, we'll just check for colorable output
+	// If we want exact terminal detection, we'd need to add the sys packages
+	
+	if IsWindows() {
+		// On Windows we can use this as a fallback check
+		// This won't detect all terminal types but works for common cases
+		return os.Getenv("TERM") != "" || 
+			   os.Getenv("WT_SESSION") != "" || // Windows Terminal
+			   os.Getenv("CMDER_ROOT") != "" || // Cmder
+			   os.Getenv("SESSIONNAME") != "" // Terminal session exists
+	}
+	
+	// For Unix-like systems (simplified check)
+	return os.Getenv("TERM") != ""
+}
