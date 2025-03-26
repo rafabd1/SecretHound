@@ -25,6 +25,10 @@ type Scheduler struct {
 	cancel        context.CancelFunc
 	waitGroup     sync.WaitGroup
 	stats         SchedulerStats
+	// Novo campo para rastrear o último acesso a um domínio
+	domainLastAccess *utils.SafeMap[string, time.Time]
+	// Configuração para evitar requisições muito próximas ao mesmo domínio
+	domainCooldown time.Duration
 }
 
 // SchedulerStats contains statistics about the scheduler's operation
@@ -56,6 +60,8 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 		concurrency:   10, // Default, will be overridden by Schedule
 		ctx:           ctx,
 		cancel:        cancel,
+		domainLastAccess: utils.NewSafeMap[string, time.Time](),
+		domainCooldown: 500 * time.Millisecond, // Intervalo entre requisições ao mesmo domínio
 		stats: SchedulerStats{
 			DomainRetries: make(map[string]int),
 			StartTime:     time.Now(),
@@ -68,10 +74,17 @@ func (s *Scheduler) Schedule(urls []string) error {
 	s.mutex.Lock()
 	s.stats.TotalURLs = len(urls)
 	s.stats.StartTime = time.Now()
-	s.waitingURLs = urls
 	s.mutex.Unlock()
 	
 	s.logger.Info("Starting to schedule %d URLs for processing", len(urls))
+	
+	// Group URLs by domain before scheduling
+	s.domainManager.GroupURLsByDomain(urls)
+	domains := s.domainManager.GetDomainList()
+	s.logger.Info("Grouped URLs into %d domains", len(domains))
+	
+	// Initialize the URL queue by distributing domains across workers
+	s.buildBalancedWorkQueue(domains)
 	
 	// Create a worker pool with the configured concurrency
 	s.workerPool = utils.NewWorkerPool(s.concurrency, len(urls))
@@ -102,11 +115,117 @@ func (s *Scheduler) Schedule(urls []string) error {
 	return nil
 }
 
+// buildBalancedWorkQueue distributes domains in a balanced way to the work queue
+func (s *Scheduler) buildBalancedWorkQueue(domains []string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	
+	// Clear the waiting URLs queue
+	s.waitingURLs = make([]string, 0)
+	
+	// Calculate the initial URLs to process by taking one URL from each domain
+	// to ensure fair distribution across domains
+	roundRobinCount := 0
+	continueFetching := true
+	
+	// Ordenar domínios pelo número de URLs (decrescente) para priorizar domínios maiores
+	utils.SimpleSortByDomainCount(domains, func(domain string) int {
+		return len(s.domainManager.GetURLsForDomain(domain))
+	})
+	
+	for continueFetching {
+		continueFetching = false
+		
+		// Do one pass over all domains
+		for _, domain := range domains {
+			urls := s.domainManager.GetURLsForDomain(domain)
+			
+			if roundRobinCount < len(urls) {
+				// Add the URL at the current position to the queue
+				s.waitingURLs = append(s.waitingURLs, urls[roundRobinCount])
+				continueFetching = true
+			}
+		}
+		
+		roundRobinCount++
+	}
+	
+	// Shuffle slightly to avoid perfect predictability but maintain domain separation
+	s.shuffleWithDomainAwareness(s.waitingURLs)
+	
+	s.logger.Debug("Built balanced work queue with %d URLs", len(s.waitingURLs))
+}
+
+// shuffleWithDomainAwareness shuffles the URLs while trying to keep URLs from same domain separated
+func (s *Scheduler) shuffleWithDomainAwareness(urls []string) {
+	if len(urls) <= 1 {
+		return
+	}
+	
+	// Create a map of domain to list of indices of URLs for that domain
+	domainIndices := make(map[string][]int)
+	
+	// Populate the map
+	for i, url := range urls {
+		domain, err := utils.ExtractDomain(url)
+		if err != nil {
+			continue
+		}
+		
+		domainIndices[domain] = append(domainIndices[domain], i)
+	}
+	
+	// Rearrange URLs to spread out domains
+	if len(domainIndices) > 1 {
+		// Sort domains by the number of URLs they have (descending)
+		domains := make([]string, 0, len(domainIndices))
+		for domain := range domainIndices {
+			domains = append(domains, domain)
+		}
+		
+		utils.SortByValueDesc(domains, func(domain string) int {
+			return len(domainIndices[domain])
+		})
+		
+		// Create a new URL queue with better distribution
+		newURLs := make([]string, len(urls))
+		position := 0
+		
+		// Place URLs in a round-robin fashion by domain
+		for len(domains) > 0 {
+			for i := 0; i < len(domains); i++ {
+				domain := domains[i]
+				indices := domainIndices[domain]
+				
+				if len(indices) == 0 {
+					// Remove this domain as it has no more URLs
+					domains = append(domains[:i], domains[i+1:]...)
+					i-- // Adjust for the removed domain
+					continue
+				}
+				
+				// Place the URL at the current position
+				newURLs[position] = urls[indices[0]]
+				position++
+				
+				// Remove the placed URL's index
+				domainIndices[domain] = indices[1:]
+			}
+		}
+		
+		// Copy back to the original slice
+		copy(urls, newURLs)
+	}
+}
+
 // worker is a goroutine that processes URLs
 func (s *Scheduler) worker(id int) {
 	defer s.waitGroup.Done()
 	
 	s.logger.Debug("Worker %d started", id)
+	
+	// Track domains this worker has recently accessed to avoid hammering the same domain
+	recentDomains := utils.NewLRUCache(5) // Remember last 5 domains
 	
 	for {
 		// Check if context is canceled
@@ -120,14 +239,14 @@ func (s *Scheduler) worker(id int) {
 		
 		// Get the next URL to process
 		url, ok := s.GetNextURL()
-		if !ok {
+		if (!ok) {
 			s.logger.Debug("Worker %d stopping: no more URLs to process", id)
 			return
 		}
 		
 		// Extract domain from URL
 		domain, err := utils.ExtractDomain(url)
-		if (err != nil) {
+		if err != nil {
 			s.logger.Warning("Worker %d: failed to extract domain from URL %s: %v", id, url, err)
 			s.incrementFailedURLs()
 			continue
@@ -140,6 +259,37 @@ func (s *Scheduler) worker(id int) {
 			time.Sleep(100 * time.Millisecond) // Small delay to prevent busy-waiting
 			continue
 		}
+		
+		// Verificar se o domínio foi acessado recentemente por qualquer worker
+		lastAccess, found := s.domainLastAccess.Get(domain)
+		if found && time.Since(lastAccess) < s.domainCooldown {
+			// Se o domínio foi acessado recentemente e temos alternativas, requeue
+			if s.hasAlternativeURL(domain) {
+				s.logger.Debug("Worker %d: domain %s was recently accessed, requeueing URL %s", id, domain, url)
+				s.requeueURL(url)
+				time.Sleep(20 * time.Millisecond) // Pequeno atraso antes de tentar novamente
+				continue
+			}
+			
+			// Se não há alternativa, esperar até que o cooldown passe
+			wait := s.domainCooldown - time.Since(lastAccess)
+			if wait > 0 {
+				s.logger.Debug("Worker %d: waiting %s before accessing domain %s again", id, wait, domain)
+				time.Sleep(wait)
+			}
+		}
+		
+		// Check if this worker has recently accessed this domain - if so, try to get a different URL
+		if recentDomains.Contains(domain) && s.hasAlternativeURL(domain) {
+			s.logger.Debug("Worker %d: recently accessed domain %s, requeueing URL %s", id, domain, url)
+			s.requeueURL(url)
+			time.Sleep(50 * time.Millisecond) // Small delay before trying again
+			continue
+		}
+		
+		// Track this domain access
+		recentDomains.Put(domain, time.Now())
+		s.domainLastAccess.Set(domain, time.Now())
 		
 		// Fetch and process the content
 		s.logger.Debug("Worker %d: processing URL %s", id, url)
@@ -283,8 +433,71 @@ func (s *Scheduler) requeueURL(url string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	
-	// Add to the end of the waiting URLs list
+	// Domain-aware requeuing - add to the end but try to avoid clustering same domains
+	// If the queue is longer than 20 items, insert at a more appropriate position
+	if len(s.waitingURLs) > 20 {
+		domain, err := utils.ExtractDomain(url)
+		if err == nil {
+			// Try to find a position where this domain doesn't have neighbors
+			bestPosition := len(s.waitingURLs) // Default to end
+			bestScore := 0
+			
+			// Score positions based on domain distance
+			for i := 0; i < len(s.waitingURLs); i++ {
+				score := 0
+				
+				// Check nearby positions, prioritizing gaps between different domains
+				for j := -3; j <= 3; j++ {
+					if i+j >= 0 && i+j < len(s.waitingURLs) {
+						neighborDomain, err := utils.ExtractDomain(s.waitingURLs[i+j])
+						if err == nil && neighborDomain != domain {
+							score += 1
+						}
+					}
+				}
+				
+				if score > bestScore {
+					bestScore = score
+					bestPosition = i
+				}
+			}
+			
+			// Insert at the best position if we found a good spot
+			if bestScore > 0 && bestPosition < len(s.waitingURLs) {
+				// Insert the URL at the best position
+				s.waitingURLs = append(s.waitingURLs[:bestPosition], append([]string{url}, s.waitingURLs[bestPosition:]...)...)
+				return
+			}
+		}
+	}
+	
+	// Fallback to simply adding to the end
 	s.waitingURLs = append(s.waitingURLs, url)
+}
+
+// hasAlternativeURL checks if there are URLs from different domains in the queue
+func (s *Scheduler) hasAlternativeURL(currentDomain string) bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	
+	// Check first 20 URLs in the queue to avoid excessive scanning
+	checkLimit := 20
+	if len(s.waitingURLs) < checkLimit {
+		checkLimit = len(s.waitingURLs)
+	}
+	
+	for i := 0; i < checkLimit; i++ {
+		if i >= len(s.waitingURLs) {
+			break
+		}
+		
+		domain, err := utils.ExtractDomain(s.waitingURLs[i])
+		if err == nil && domain != currentDomain {
+			return true
+		}
+	}
+	
+	return false
 }
 
 // GetStats returns current scheduler statistics

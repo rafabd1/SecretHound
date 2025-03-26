@@ -150,7 +150,11 @@ func (dm *DomainManager) GetURLsForDomain(domain string) []string {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
 	
-	return dm.domains[domain]
+	// Return a copy to avoid race conditions
+	urls := make([]string, len(dm.domains[domain]))
+	copy(urls, dm.domains[domain])
+	
+	return urls
 }
 
 // RemoveURL removes a URL from its domain group
@@ -235,8 +239,7 @@ func (dm *DomainManager) GetBlockedDomainCount() int {
 	count := 0
 	for domain := range dm.blockedDomains {
 		if dm.isBlockedNoLock(domain) {
-			count++
-		}
+			count++		}
 	}
 	
 	return count
@@ -282,4 +285,32 @@ func (dm *DomainManager) GetDomainStructure() map[string]int {
 	}
 	
 	return structure
+}
+
+// GetDomainList returns a list of all domains
+func (dm *DomainManager) GetDomainList() []string {
+	dm.mu.RLock()
+	defer dm.mu.RUnlock()
+	
+	domains := make([]string, 0, len(dm.domains))
+	for domain := range dm.domains {
+		domains = append(domains, domain)
+	}
+	
+	return domains
+}
+
+// GetUnblockedDomains returns domains that are not currently blocked
+func (dm *DomainManager) GetUnblockedDomains() []string {
+	dm.mu.RLock()
+	defer dm.mu.RUnlock()
+	
+	domains := make([]string, 0, len(dm.domains))
+	for domain := range dm.domains {
+		if !dm.isBlockedNoLock(domain) {
+			domains = append(domains, domain)
+		}
+	}
+	
+	return domains
 }
