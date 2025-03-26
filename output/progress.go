@@ -1,14 +1,14 @@
 package output
 
 import (
-    "fmt"
-    "io"
-    "os"
-    "strings"
-    "sync"
-    "time"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"sync"
+	"time"
 
-    "github.com/secrethound/utils"
+	"github.com/secrethound/utils"
 )
 
 // ProgressBar represents a thread-safe progress bar
@@ -71,18 +71,40 @@ func (pb *ProgressBar) Start() {
     pb.autoRefresh = pb.isTerminal // Only auto-refresh in terminal environments
     pb.mu.Unlock()
     
+    // Notify the terminal controller that a progress bar is active
+    tc := GetTerminalController()
+    tc.SetProgressBarActive(true)
+    
     // Initial render if in a terminal
     if pb.isTerminal {
         // Start output control manager - this serializes all terminal output
         go pb.outputManager()
 
+        // Forçar uma renderização inicial
+        pb.requestRender()
+
         // Start auto-refresh goroutine
         go func() {
+            defer func() {
+                // Recovery from panic
+                if r := recover(); r != nil {
+                    fmt.Fprintf(os.Stderr, "Recovered from panic in progress bar: %v\n", r)
+                }
+            }()
+            
             for {
                 select {
                 case <-pb.done:
                     return
                 case <-time.After(pb.refresh):
+                    pb.mu.Lock()
+                    isActive := pb.isActive && !pb.renderPaused
+                    pb.mu.Unlock()
+                    
+                    if !isActive {
+                        return
+                    }
+                    
                     pb.requestRender()
                 }
             }
@@ -104,6 +126,14 @@ func (pb *ProgressBar) outputManager() {
             if shouldRender {
                 pb.actualRender()
             }
+        case <-time.After(1 * time.Second): // Timeout para evitar deadlock
+            pb.mu.Lock()
+            isActive := pb.isActive
+            pb.mu.Unlock()
+            
+            if !isActive {
+                return // Se não estiver mais ativo, encerra a goroutine
+            }
         }
     }
 }
@@ -114,7 +144,7 @@ func (pb *ProgressBar) requestRender() {
     isActive := pb.isActive && !pb.renderPaused
     pb.mu.Unlock()
     
-    if isActive {
+    if (isActive) {
         // Non-blocking send
         select {
         case pb.outputControl <- struct{}{}:
@@ -128,22 +158,62 @@ func (pb *ProgressBar) requestRender() {
 // Stop stops the progress bar
 func (pb *ProgressBar) Stop() {
     pb.mu.Lock()
+    
     if !pb.isActive {
         pb.mu.Unlock()
         return
     }
     
+    // Forçar a desativação da barra
     pb.isActive = false
     pb.autoRefresh = false
+    
+    // Garante que o canal done seja fechado
+    select {
+    case <-pb.done:
+        // Canal já foi fechado, não faz nada
+    default:
+        close(pb.done)
+    }
+    
     pb.mu.Unlock()
+    
+    // Notify the terminal controller that no progress bar is active
+    tc := GetTerminalController()
+    tc.SetProgressBarActive(false)
+    
+    // Espere um momento para garantir que goroutines percebam o encerramento
+    time.Sleep(20 * time.Millisecond)
     
     // Clear the progress bar
     if pb.isTerminal {
         pb.clearBar()
         fmt.Fprintln(pb.writer)
     }
+}
+
+// Finalize limpa recursos e garante que a barra de progresso seja finalizada
+func (pb *ProgressBar) Finalize() {
+    pb.Stop() // Make sure it's stopped first
     
-    close(pb.done)
+    pb.mu.Lock()
+    if pb.outputControl != nil {
+        // Clear the channel explicitly
+        select {
+        case <-pb.outputControl:
+            // Consumed one item
+        default:
+            // Channel was already empty
+        }
+    }
+    pb.outputControl = nil // Set to nil to release resources
+    pb.mu.Unlock()
+    
+    // Final cleanup
+    if pb.isTerminal {
+        fmt.Fprint(pb.writer, "\033[2K\r")
+        fmt.Fprintln(pb.writer)
+    }
 }
 
 // Update updates the progress bar
@@ -194,9 +264,9 @@ func (pb *ProgressBar) ResumeRender() {
 // The actual rendering function - called only by outputManager
 func (pb *ProgressBar) actualRender() {
     pb.mu.Lock()
-    defer pb.mu.Unlock()
     
     if !pb.isActive || !pb.isTerminal {
+        pb.mu.Unlock()
         return
     }
     
@@ -242,27 +312,56 @@ func (pb *ProgressBar) actualRender() {
         pb.suffix,
     )
     
-    // Use ANSI escape codes for precise line control
-    fmt.Fprint(pb.writer, "\033[2K\r"+status)
     pb.lastPrintedChars = len(status)
+    pb.mu.Unlock()
+    
+    // Output the status string with terminal controller coordination
+    tc := GetTerminalController()
+    tc.BeginOutput()
+    fmt.Fprint(pb.writer, "\033[2K\r"+status)
+    tc.EndOutput()
 }
 
 // MoveForLog prepares for log output by clearing the current line
 func (pb *ProgressBar) MoveForLog() {
     pb.mu.Lock()
     isActiveAndTerminal := pb.isActive && pb.isTerminal
+    
+    // Pause rendering during log operation
     pb.renderPaused = true
+    
+    // Important: drain any pending renders to prevent race conditions
+    select {
+    case <-pb.outputControl:
+        // Drained one request
+    default:
+        // No pending requests
+    }
+    
     pb.mu.Unlock()
     
     if isActiveAndTerminal {
         // Clear the line completely using ANSI escape codes
         fmt.Fprint(pb.writer, "\033[2K\r")
+        
+        // Add a small delay to ensure terminal processes the clear command
+        time.Sleep(1 * time.Millisecond)
     }
 }
 
 // ShowAfterLog restores the progress bar after a log message
 func (pb *ProgressBar) ShowAfterLog() {
-    pb.ResumeRender()
+    pb.mu.Lock()
+    wasRenderPaused := pb.renderPaused
+    isActiveAndTerminal := pb.isActive && pb.isTerminal
+    pb.renderPaused = false
+    pb.mu.Unlock()
+    
+    if wasRenderPaused && isActiveAndTerminal {
+        // Force an immediate render with a small delay to ensure logs are displayed first
+        time.Sleep(1 * time.Millisecond)
+        pb.actualRender()
+    }
 }
 
 // clearBar clears the current progress bar from the terminal

@@ -3,7 +3,6 @@ package output
 import (
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -94,61 +93,58 @@ func (l *Logger) processLogs() {
 
 // writeLog writes a log message to the console
 func (l *Logger) writeLog(msg LogMessage) {
-	// Skip INFO, DEBUG and WARNING messages if not in verbose mode
-	if !l.verbose && (msg.Level == INFO || msg.Level == DEBUG || msg.Level == WARNING) {
-		// Special case for important INFO messages - always show these
-		if msg.Level == INFO {
-			msgText := msg.Message
-			if !strings.Contains(msgText, "Starting") &&
-			   !strings.Contains(msgText, "Found") &&
-			   !strings.Contains(msgText, "Processing") &&
-			   !strings.Contains(msgText, "Using") &&
-			   !strings.Contains(msgText, "Processed") &&
-			   !strings.Contains(msgText, "Added") {
-				return
-			}
-		} else {
-			return
-		}
-	}
+    // Skip INFO, DEBUG and WARNING messages if not in verbose mode
+    if !l.verbose && (msg.Level == INFO || msg.Level == DEBUG || msg.Level == WARNING) {
+        return
+    }
 
-	// Inform progress bar that we're about to log
-	l.progressMu.Lock()
-	if l.progressBar != nil {
-		l.progressBar.MoveForLog()
-	}
-	l.progressMu.Unlock()
+    // Acesso ao TerminalController para coordenação da saída
+    tc := GetTerminalController()
+    
+    // Guarde uma referência ao ProgressBar para evitar lock durante a escrita
+    l.progressMu.Lock()
+    pb := l.progressBar
+    l.progressMu.Unlock()
+    
+    // Pausa na renderização se existir uma barra de progresso
+    if pb != nil {
+        pb.PauseRender()
+    }
+    
+    // Usar o controlador de terminal para coordenar a saída
+    tc.CoordinateOutput(func() {
+        // Format and print the log message
+        timestamp := l.timeColor("[%s]", msg.Time.Format("15:04:05"))
+        var prefix string
+        var formatted string
 
-	timestamp := l.timeColor("[%s]", msg.Time.Format("15:04:05"))
-	var prefix string
-	var formatted string
+        switch msg.Level {
+        case DEBUG:
+            prefix = l.debugColor("[DEBUG]")
+            formatted = l.debugColor("%s", msg.Message)
+        case INFO:
+            prefix = l.infoColor("[INFO]")
+            formatted = msg.Message
+        case WARNING:
+            prefix = l.warningColor("[WARNING]")
+            formatted = l.warningColor("%s", msg.Message)
+        case ERROR:
+            prefix = l.errorColor("[ERROR]")
+            formatted = l.errorColor("%s", msg.Message)
+        case SUCCESS:
+            prefix = l.successColor("[SUCCESS]")
+            formatted = l.successColor("%s", msg.Message)
+        }
 
-	switch msg.Level {
-	case DEBUG:
-		prefix = l.debugColor("[DEBUG]")
-		formatted = l.debugColor("%s", msg.Message)
-	case INFO:
-		prefix = l.infoColor("[INFO]")
-		formatted = msg.Message
-	case WARNING:
-		prefix = l.warningColor("[WARNING]")
-		formatted = l.warningColor("%s", msg.Message)
-	case ERROR:
-		prefix = l.errorColor("[ERROR]")
-		formatted = l.errorColor("%s", msg.Message)
-	case SUCCESS:
-		prefix = l.successColor("[SUCCESS]")
-		formatted = l.successColor("%s", msg.Message)
-	}
-
-	fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
-
-	// Restore progress bar after logging
-	l.progressMu.Lock()
-	if l.progressBar != nil {
-		l.progressBar.ShowAfterLog()
-	}
-	l.progressMu.Unlock()
+        fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
+    })
+    
+    // Se temos uma barra de progresso, restaure-a após o log
+    if pb != nil {
+        // Pequena pausa para garantir que o log seja visível
+        time.Sleep(1 * time.Millisecond)
+        pb.ResumeRender()
+    }
 }
 
 // enqueueLog adds a log message to the queue
@@ -208,9 +204,52 @@ func (l *Logger) SecretFound(secretType, value, url string) {
 	l.Success("Found %s: %s in %s", secretType, truncatedValue, url)
 }
 
-// Close ensures all log messages are processed before exiting
+// Melhorar a implementação da função Flush para garantir que todas as mensagens de log sejam processadas
+
+func (l *Logger) Flush() {
+    // Implementação mais robusta para drenar a fila de log
+    startTime := time.Now()
+    maxWaitTime := 500 * time.Millisecond
+    
+    for len(l.logQueue) > 0 {
+        // Verificar se excedeu o tempo máximo de espera
+        if time.Since(startTime) > maxWaitTime {
+            break
+        }
+        
+        // Pausa breve para dar chance de processar
+        time.Sleep(10 * time.Millisecond)
+    }
+    
+    // Pausa final para garantir processamento de mensagens
+    time.Sleep(50 * time.Millisecond)
+    
+    // Garantir que a barra de progresso seja finalizada corretamente
+    l.progressMu.Lock()
+    if l.progressBar != nil {
+        l.progressBar.Stop()
+        l.progressBar.Finalize()
+        l.progressBar = nil
+    }
+    l.progressMu.Unlock()
+}
+
+// Close garante que todas as mensagens de log sejam processadas antes de encerrar
 func (l *Logger) Close() {
-	close(l.done)
+    // Primeiro, drene a fila
+    l.Flush()
+    
+    // Sinalize que nenhuma nova mensagem deve ser aceita
+    close(l.done)
+    
+    // Libere recursos associados à barra de progresso
+    l.progressMu.Lock()
+    if l.progressBar != nil {
+        l.progressBar.Stop()
+        l.progressBar.Finalize()
+        l.progressBar = nil
+    }
+    l.progressMu.Unlock()
 }
 
 // IsVerbose returns whether the logger is in verbose mode

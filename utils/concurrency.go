@@ -19,6 +19,8 @@ type WorkerPool struct {
 	queueSize    int
 	activeJobs   int
 	activeJobsMu sync.Mutex
+	isClosed     bool
+	mu           sync.Mutex
 }
 
 // jobTask represents a job to be executed by a worker
@@ -85,7 +87,7 @@ func (wp *WorkerPool) worker(id int) {
 			// Context was cancelled, exit
 			return
 		case job, ok := <-wp.jobQueue:
-			if !ok {
+			if (!ok) {
 				// Job queue was closed, exit
 				return
 			}
@@ -149,7 +151,18 @@ func (wp *WorkerPool) Errors() <-chan error {
 
 // Wait waits for all jobs to complete
 func (wp *WorkerPool) Wait() {
+	// Espere todas as tarefas serem concluídas
 	<-wp.done
+	
+	// Para garantir que todos os canais foram fechados corretamente
+	wp.mu.Lock()
+	allDone := wp.isClosed
+	wp.mu.Unlock()
+	
+	if !allDone {
+		// Forçar o encerramento se necessário
+		wp.ShutdownNow()
+	}
 }
 
 // WaitWithTimeout waits for all jobs to complete with a timeout
@@ -174,8 +187,17 @@ func (wp *WorkerPool) Shutdown() {
 func (wp *WorkerPool) ShutdownNow() {
 	// Signal to all workers to stop
 	wp.cancel()
-	// Close the job queue
-	close(wp.jobQueue)
+	
+	wp.mu.Lock()
+	if !wp.isClosed {
+		// Close the job queue
+		close(wp.jobQueue)
+		wp.isClosed = true
+	}
+	wp.mu.Unlock()
+	
+	// Espere um pouco para garantir que as goroutines percebam o encerramento
+	time.Sleep(10 * time.Millisecond)
 }
 
 // ActiveJobs returns the number of active jobs

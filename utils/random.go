@@ -73,3 +73,27 @@ func Shuffle(slice []string) {
 		slice[i], slice[j] = slice[j], slice[i]
 	})
 }
+
+// RandomChoice randomly selects an element from a slice
+func RandomChoice[T any](items []T) T {
+	randMutex.Lock()
+	defer randMutex.Unlock()
+	
+	if len(items) == 0 {
+		var zero T
+		return zero
+	}
+	
+	return items[randGen.Intn(len(items))]
+}
+
+// ShuffleSlice randomly shuffles a slice in-place
+func ShuffleSlice[T any](items []T) {
+	randMutex.Lock()
+	defer randMutex.Unlock()
+	
+	for i := range items {
+		j := randGen.Intn(i + 1)
+		items[i], items[j] = items[j], items[i]
+	}
+}
