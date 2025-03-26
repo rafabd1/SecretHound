@@ -96,9 +96,23 @@ rate limiting and WAF blocks.`,
 
 		// Create regex manager
 		regexManager := core.NewRegexManager()
-		err = regexManager.LoadPatternsFromFile(regexFile)
-		if err != nil {
-			return fmt.Errorf("failed to load regex patterns: %v", err)
+		
+		// Try to load from file if specified
+		if regexFile != "" {
+			err = regexManager.LoadPatternsFromFile(regexFile)
+			if err != nil {
+				logger.Warning("Failed to load regex patterns from file: %v", err)
+				logger.Info("Loading predefined patterns instead")
+			}
+		} 
+		
+		// Load predefined patterns if no file or file loading failed
+		if regexFile == "" || err != nil {
+			logger.Info("Using built-in regex patterns")
+			err = regexManager.LoadPredefinedPatterns()
+			if err != nil {
+				return fmt.Errorf("failed to load predefined regex patterns: %v", err)
+			}
 		}
 
 		// Create processor

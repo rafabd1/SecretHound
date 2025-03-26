@@ -33,7 +33,7 @@ var Config = Configuration{
 	Concurrency: 10,
 	RateLimit:   0, // 0 means auto-adjust
 	Verbose:     false,
-	RegexFile:   "regex.txt",
+	RegexFile:   "", // Empty string means use predefined patterns
 }
 
 // LoadConfig loads configuration from a YAML file

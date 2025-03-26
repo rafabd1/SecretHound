@@ -1,0 +1,4 @@
+# Lista de URLs para teste
+https://exemplo.com/script1.js
+https://exemplo.com/script2.js
+https://cdn.exemplo.com/lib/jquery.min.js

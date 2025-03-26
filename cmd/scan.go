@@ -84,13 +84,18 @@ You can provide URLs as arguments or use the -i flag to specify a file containin
 		// Create regex manager
 		regexManager := core.NewRegexManager()
 		
-		// First try to load from file
-		err = regexManager.LoadPatternsFromFile(regexFile)
-		if err != nil {
-			logger.Warning("Failed to load regex patterns from file: %v", err)
-			logger.Info("Loading predefined patterns instead")
-			
-			// Fall back to predefined patterns
+		 // Try to load from file if specified
+		if regexFile != "" {
+			err = regexManager.LoadPatternsFromFile(regexFile)
+			if err != nil {
+				logger.Warning("Failed to load regex patterns from file: %v", err)
+				logger.Info("Loading predefined patterns instead")
+			}
+		} 
+		
+		// Load predefined patterns if no file or file loading failed
+		if regexFile == "" || err != nil {
+			logger.Info("Using built-in regex patterns")
 			err = regexManager.LoadPredefinedPatterns()
 			if err != nil {
 				return fmt.Errorf("failed to load predefined regex patterns: %v", err)
