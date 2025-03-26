@@ -1,11 +1,11 @@
 # SecretHound
 
-SecretHound é uma ferramenta CLI desenvolvida em Go para extração de segredos de arquivos JavaScript.
+SecretHound é uma ferramenta CLI desenvolvida em Go para extração de segredos de arquivos.
 
 ## Características
 
 - Extração de segredos via expressões regulares
-- Processamento multi-thread de URLs
+- Processamento multi-thread de URLs, arquivos locais e diretórios
 - Sistema inteligente para evitar bloqueios, rate limiting e WAF
 - Cliente HTTP robusto com gerenciamento de retries e timeout
 - Agrupamento de URLs por domínio para otimizar requisições
@@ -38,9 +38,29 @@ go build -o secrethound
 # Escaneando a partir de um arquivo com lista de URLs
 ./secrethound scan -i urls.txt -o resultados.json
 
+# Escaneando um arquivo local
+./secrethound scan -i /caminho/para/arquivo.js
+
+# Escaneando um diretório inteiro
+./secrethound scan -i /caminho/para/diretorio
+
+# Escaneando uma mistura de URLs e arquivos locais
+./secrethound scan https://example.com/script.js /caminho/para/arquivo.js
+
 # Ativando modo verbose para logs detalhados
 ./secrethound scan -i urls.txt -v
 ```
+
+## Formatos de Input Suportados
+
+SecretHound aceita diferentes formatos de input:
+
+1. **URLs diretas**: Qualquer URL acessível via HTTP/HTTPS, não limitado a JavaScript.
+2. **Arquivos locais**: Qualquer arquivo legível como texto (não apenas JavaScript).
+3. **Diretórios**: Todos os arquivos não-binários em um diretório serão escaneados.
+4. **Listas de URLs/caminhos**: Um arquivo de texto contendo URLs ou caminhos de arquivo (um por linha).
+
+Qualquer combinação desses formatos pode ser usada simultaneamente.
 
 ## Configuração
 
