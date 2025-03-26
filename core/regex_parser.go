@@ -120,9 +120,7 @@ func ParseRegexFile(filePath string) (map[string]string, error) {
 			patternRegex := strings.Trim(parts[1], " '\",")
 			
 			// Remove trailing comma if present
-			if strings.HasSuffix(patternRegex, ",") {
-				patternRegex = patternRegex[:len(patternRegex)-1]
-			}
+			patternRegex = strings.TrimSuffix(patternRegex, ",")
 			
 			patterns[patternName] = patternRegex
 		}

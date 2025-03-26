@@ -66,6 +66,32 @@ A ferramenta pode ser configurada por meio de flags:
 ./secrethound scan -i urls.txt --regex-file minhas-regexes.txt
 ```
 
+## Padrões de Regex
+
+Por padrão, o SecretHound usa os padrões de regex embutidos para detectar segredos. 
+Estes padrões estão definidos no código e cobrem mais de 50 tipos diferentes de segredos.
+
+Se você quiser usar seus próprios padrões, você pode criar um arquivo de texto com o formato a seguir
+e usá-lo com a flag `--regex-file`:
+
+```
+REGEX_PATTERNS = {
+    "nome_do_padrao": "expressao_regular",
+    "outro_padrao": "outra_expressao_regular"
+}
+```
+
+Exemplo:
+
+```
+REGEX_PATTERNS = {
+    "aws_key": "AKIA[0-9A-Z]{16}",
+    "password": "(?i)password['\"]?\\s*[:=]\\s*['\"]([^'\"]+)['\"]"
+}
+```
+
+Um arquivo de exemplo está disponível em `examples/regex.txt`.
+
 ## Padrões Suportados
 
 SecretHound pode detectar dezenas de tipos diferentes de segredos, incluindo:

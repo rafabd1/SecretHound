@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	
+	"github.com/secrethound/utils"
 )
 
 // RegexManager handles loading and applying regex patterns
@@ -25,6 +27,11 @@ func NewRegexManager() *RegexManager {
 
 // LoadPatternsFromFile loads regex patterns from a file
 func (rm *RegexManager) LoadPatternsFromFile(filePath string) error {
+	// First check if the file exists
+	if !utils.FileExists(filePath) {
+		return fmt.Errorf("regex file not found: %s", filePath)
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open regex file: %v", err)
@@ -68,9 +75,7 @@ func (rm *RegexManager) LoadPatternsFromFile(filePath string) error {
 			patternRegex := strings.Trim(parts[1], " '\",")
 			
 			// Remove trailing comma if present
-			if strings.HasSuffix(patternRegex, ",") {
-				patternRegex = patternRegex[:len(patternRegex)-1]
-			}
+			patternRegex = strings.TrimSuffix(patternRegex, ",")
 			
 			// Compile regex
 			re, err := regexp.Compile(patternRegex)

@@ -21,7 +21,6 @@ type Scheduler struct {
 	concurrency   int
 	mutex         sync.Mutex
 	waitingURLs   []string
-	activeWorkers int
 	ctx           context.Context
 	cancel        context.CancelFunc
 	waitGroup     sync.WaitGroup
@@ -128,7 +127,7 @@ func (s *Scheduler) worker(id int) {
 		
 		// Extract domain from URL
 		domain, err := utils.ExtractDomain(url)
-		if err != nil {
+		if (err != nil) {
 			s.logger.Warning("Worker %d: failed to extract domain from URL %s: %v", id, url, err)
 			s.incrementFailedURLs()
 			continue
@@ -324,4 +323,12 @@ func (s *Scheduler) Stop() {
 // SetConcurrency sets the number of concurrent workers
 func (s *Scheduler) SetConcurrency(concurrency int) {
 	s.concurrency = concurrency
+}
+
+// GetActiveWorkers returns the number of active workers
+func (s *Scheduler) GetActiveWorkers() int {
+	if s.workerPool != nil {
+		return s.workerPool.ActiveJobs()
+	}
+	return 0
 }
