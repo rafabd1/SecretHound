@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/secrethound/cmd"
 )
@@ -19,6 +20,14 @@ func main() {
 	
 	// Setup signal handling for graceful exit
 	setupSignalHandling()
+
+	// Set a global timeout to prevent hanging
+	go func() {
+		// Maximum time the program can run (adjust as needed)
+		time.Sleep(10 * time.Minute)
+		fmt.Fprintf(os.Stderr, "\nForced exit after 10 minutes timeout\n")
+		os.Exit(0)
+	}()
 
 	// Execute the root command
 	cmd.Execute()
@@ -34,8 +43,8 @@ func setupSignalHandling() {
 		fmt.Fprintln(os.Stderr, "\nReceived interrupt signal. Shutting down...")
 		fmt.Fprintln(os.Stderr, "Please wait for active tasks to complete...")
 		// Give a short delay for any cleanup that might be happening
-		// The program will exit through os.Exit(1) after this
-		os.Exit(1)
+		time.Sleep(500 * time.Millisecond)
+		os.Exit(0)
 	}()
 }
 

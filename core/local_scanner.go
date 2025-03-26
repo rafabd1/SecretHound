@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,8 @@ type LocalScanner struct {
 	concurrency int
 	stats       LocalScannerStats
 	mu          sync.Mutex
+	ctx         context.Context
+	cancelFunc  context.CancelFunc
 }
 
 // LocalScannerStats tracks statistics for the local scanner
@@ -34,6 +37,8 @@ type LocalScannerStats struct {
 
 // NewLocalScanner creates a new local file scanner
 func NewLocalScanner(processor *Processor, writer *output.Writer, logger *output.Logger) *LocalScanner {
+	ctx, cancel := context.WithCancel(context.Background())
+	
 	return &LocalScanner{
 		processor:   processor,
 		writer:      writer,
@@ -42,6 +47,8 @@ func NewLocalScanner(processor *Processor, writer *output.Writer, logger *output
 		stats: LocalScannerStats{
 			StartTime: time.Now(),
 		},
+		ctx:        ctx,
+		cancelFunc: cancel,
 	}
 }
 
@@ -62,7 +69,19 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	// Create a progress bar
 	progressBar := output.NewProgressBar(len(files), 40)
 	progressBar.SetPrefix("Processing: ")
+	
+	// Connect progress bar to logger immediately
+	s.logger.SetProgressBar(progressBar)
+	
+	// Start the progress bar and make it visible
 	progressBar.Start()
+	
+	// Render an initial update to ensure it appears
+	progressBar.Update(0)
+	progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: 0.0/s", 0))
+	
+	// Force a small pause to ensure the bar is rendered before processing starts
+	time.Sleep(50 * time.Millisecond)
 
 	// Create a ticker to update progress
 	ticker := time.NewTicker(500 * time.Millisecond)
@@ -71,6 +90,12 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	// Start ticker goroutine to update progress bar
 	done := make(chan struct{})
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("Recovered from panic in progress update: %v", r)
+			}
+		}()
+		
 		for {
 			select {
 			case <-ticker.C:
@@ -90,40 +115,105 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		}
 	}()
 
-	// Process files using a worker pool
-	pool := utils.NewWorkerPool(s.concurrency, len(files))
+	// Create a custom worker pool with semaphore instead of using a more complex pool
+	// This simplifies the concurrency model and reduces risk of deadlocks
+	var wg sync.WaitGroup
+	resultChan := make(chan int, len(files))
+	errorChan := make(chan error, len(files))
 	
-	// Submit each file for processing
+	// Semaphore to limit concurrency
+	sem := make(chan struct{}, s.concurrency)
+	
+	// Launch workers for each file - simplified from previous approach
 	for _, file := range files {
-		filePath := file // Create a copy for the closure
-		pool.Submit(func() (interface{}, error) {
-			return s.processFile(filePath)
-		})
+		filePath := file // Create a copy for closure
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Acquire semaphore slot
+			sem <- struct{}{}
+			defer func() { <-sem }() // Release slot when done
+			
+			// Process the file
+			count, err := s.processFile(filePath)
+			
+			// Update progress counter regardless of result
+			s.mu.Lock()
+			s.stats.ProcessedFiles++
+			processedCount := s.stats.ProcessedFiles
+			s.mu.Unlock()
+			
+			// Update progress bar for each completed file
+			progressBar.Update(processedCount)
+			
+			// Send result or error
+			if err != nil {
+				errorChan <- err
+			} else {
+				resultChan <- count
+			}
+		}()
 	}
-
-	// Collect results
+	
+	// Wait for all goroutines in a separate goroutine
+	go func() {
+		wg.Wait()
+		close(resultChan)
+		close(errorChan)
+		close(done) // Signal ticker to stop
+	}()
+	
+	// Add a timeout for the whole operation
+	timeout := time.After(5 * time.Minute)
+	
+	// Process results until channels are closed
 	secretsFound := 0
 	var errorList []error
 	
-	// Process results as they come in
-	for result := range pool.Results() {
-		res := result.(int)
-		secretsFound += res
+	// Keep reading from channels until either timeout or completion
+	filesProcessed := 0
+	totalFiles := len(files)
+	
+	for filesProcessed < totalFiles {
+		select {
+		case res, ok := <-resultChan:
+			if !ok {
+				// Channel closed
+				continue
+			}
+			secretsFound += res
+			filesProcessed++
+		case err, ok := <-errorChan:
+			if !ok {
+				// Channel closed
+				continue
+			}
+			errorList = append(errorList, err)
+			filesProcessed++
+		case <-timeout:
+			// Timeout occurred
+			s.logger.Warning("Processing timed out after 5 minutes")
+			goto cleanup
+		}
 	}
 	
-	// Process errors
-	for err := range pool.Errors() {
-		errorList = append(errorList, err)
+cleanup:
+	// Make sure ticker goroutine is stopped
+	if done != nil {
+		select {
+		case <-done:
+			// Already closed
+		default:
+			close(done)
+		}
 	}
 	
-	// Wait for all files to be processed
-	pool.Wait()
-	
-	// Signal ticker goroutine to stop
-	close(done)
-	
-	// Stop the progress bar
+	// Stop and finalize the progress bar
 	progressBar.Stop()
+	progressBar.Finalize()
+	
+	// Remove the progress bar from the logger
+	s.logger.SetProgressBar(nil)
 	
 	// Record end time and log summary
 	s.mu.Lock()
@@ -139,6 +229,9 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	s.logger.Info("Found %d secrets in local files", secretsFound)
 	s.logger.Info("Failed to process %d files", s.stats.FailedFiles)
 	
+	// Flush logger to ensure all messages are processed
+	s.logger.Flush()
+	
 	// If there were errors, return the first one
 	if len(errorList) > 0 {
 		return fmt.Errorf("encountered %d errors during local file scanning, first error: %v", 
@@ -150,6 +243,14 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 
 // processFile scans a single file for secrets
 func (s *LocalScanner) processFile(filePath string) (int, error) {
+	// Check if context is canceled
+	select {
+	case <-s.ctx.Done():
+		return 0, fmt.Errorf("processing interrupted")
+	default:
+		// Continue processing
+	}
+	
 	// Check if the file exists and is readable
 	fi, err := os.Stat(filePath)
 	if err != nil {
@@ -248,4 +349,9 @@ func (s *LocalScanner) GetStats() LocalScannerStats {
 	
 	statsCopy := s.stats
 	return statsCopy
+}
+
+// Cleanup cancels context and releases resources
+func (s *LocalScanner) Cleanup() {
+	s.cancelFunc()
 }

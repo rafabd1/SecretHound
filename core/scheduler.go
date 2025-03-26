@@ -3,11 +3,11 @@ package core
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
-	"os"
-	"github.com/fatih/color"
 
+	"github.com/fatih/color"
 
 	"github.com/secrethound/networking"
 	"github.com/secrethound/output"
@@ -288,6 +288,62 @@ func (s *Scheduler) shuffleWithDomainAwareness(urls []string) {
 	}
 }
 
+// Adicionar uma função auxiliar para determinar se um requeuing deve ocorrer
+func (s *Scheduler) shouldRequeueDomainURL(domain string, worker int) bool {
+    // Se não temos URLs alternativas, não faz sentido requeue
+    if (!s.hasAlternativeURL(domain)) {
+        return false
+    }
+    
+    // Verificar a quantas solicitações o domínio está sujeito (em fila)
+    domainPendingCount := s.countPendingURLsForDomain(domain)
+    
+    // Se houver muitas solicitações pendentes para este domínio
+    // e existirem poucos domínios únicos, reduzir o requeuing
+    domainCount := s.domainManager.GetDomainCount()
+    if (domainCount <= 3) {
+        // Para poucos domínios, seja menos restritivo
+        // Isso evita requeuing excessivo quando há poucos domínios
+        return false
+    }
+    
+    // Se há muitas solicitações pendentes, diminuir probabilidade de requeue
+    if (domainPendingCount > 5) {
+        // Requeue apenas 20% das vezes
+        return utils.RandomInt(0, 100) < 20
+    }
+    
+    // Acesso recente ao domínio, mas não muitas requisições pendentes
+    // Faça requeue com 60% de probabilidade
+    return utils.RandomInt(0, 100) < 60
+}
+
+// countPendingURLsForDomain conta quantas URLs pendentes existem para um domínio
+func (s *Scheduler) countPendingURLsForDomain(targetDomain string) int {
+    s.mutex.Lock()
+    defer s.mutex.Unlock()
+    
+    count := 0
+    // Checar apenas as primeiras 50 URLs na fila para eficiência
+    checkLimit := 50
+    if (len(s.waitingURLs) < checkLimit) {
+        checkLimit = len(s.waitingURLs)
+    }
+    
+    for i := 0; i < checkLimit; i++ {
+        if (i >= len(s.waitingURLs)) {
+            break
+        }
+        
+        domain, err := utils.ExtractDomain(s.waitingURLs[i])
+        if (err == nil && domain == targetDomain) {
+            count++
+        }
+    }
+    
+    return count
+}
+
 // worker is a goroutine that processes URLs
 func (s *Scheduler) worker(id int) {
 	defer s.waitGroup.Done()
@@ -333,28 +389,40 @@ func (s *Scheduler) worker(id int) {
 		// Verificar se o domínio foi acessado recentemente por qualquer worker
 		lastAccess, found := s.domainLastAccess.Get(domain)
 		if found && time.Since(lastAccess) < s.domainCooldown {
-			// Se o domínio foi acessado recentemente e temos alternativas, requeue
+			// Se o domínio foi acessado recentemente, verificar se devemos requeue
 			if s.hasAlternativeURL(domain) {
-				s.logger.Debug("Worker %d: domain %s was recently accessed, requeueing URL %s", id, domain, url)
+				// Esperar um tempo menor se necessário requeue
+				time.Sleep(10 * time.Millisecond)
+				
+				// Se não houver domínios suficientes, não requeue e espere o cooldown
+				if len(s.domainManager.GetDomainList()) <= 3 {
+					wait := s.domainCooldown - time.Since(lastAccess)
+					if wait > 0 {
+						time.Sleep(wait / 2) // Reduz o tempo de espera para melhorar performance
+					}
+				} else {
+					s.requeueURL(url)
+					continue
+				}
+			} else {
+				// Se não há alternativa, esperar até que o cooldown passe
+				wait := s.domainCooldown - time.Since(lastAccess)
+				if wait > 0 {
+					time.Sleep(wait)
+				}
+			}
+		}
+		
+		// Check if this worker has recently accessed this domain 
+		if recentDomains.Contains(domain) {
+			// Usar lógica de probabilidade em vez de sempre requeue
+			if s.shouldRequeueDomainURL(domain, id) {
+				s.logger.Debug("Worker %d: recently accessed domain %s, requeueing URL %s", id, domain, url)
 				s.requeueURL(url)
 				time.Sleep(20 * time.Millisecond) // Pequeno atraso antes de tentar novamente
 				continue
 			}
-			
-			// Se não há alternativa, esperar até que o cooldown passe
-			wait := s.domainCooldown - time.Since(lastAccess)
-			if wait > 0 {
-				s.logger.Debug("Worker %d: waiting %s before accessing domain %s again", id, wait, domain)
-				time.Sleep(wait)
-			}
-		}
-		
-		// Check if this worker has recently accessed this domain - if so, try to get a different URL
-		if recentDomains.Contains(domain) && s.hasAlternativeURL(domain) {
-			s.logger.Debug("Worker %d: recently accessed domain %s, requeueing URL %s", id, domain, url)
-			s.requeueURL(url)
-			time.Sleep(50 * time.Millisecond) // Small delay before trying again
-			continue
+			// Mesmo tendo acessado recentemente, vamos continuar se a função retornar false
 		}
 		
 		// Track this domain access
@@ -550,11 +618,14 @@ func (s *Scheduler) hasAlternativeURL(currentDomain string) bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	
-	// Check first 20 URLs in the queue to avoid excessive scanning
-	checkLimit := 20
+	// Check first 30 URLs in the queue to avoid excessive scanning
+	checkLimit := 30
 	if len(s.waitingURLs) < checkLimit {
 		checkLimit = len(s.waitingURLs)
 	}
+	
+	// Count different domains in the queue
+	uniqueDomains := make(map[string]bool)
 	
 	for i := 0; i < checkLimit; i++ {
 		if i >= len(s.waitingURLs) {
@@ -562,7 +633,34 @@ func (s *Scheduler) hasAlternativeURL(currentDomain string) bool {
 		}
 		
 		domain, err := utils.ExtractDomain(s.waitingURLs[i])
-		if err == nil && domain != currentDomain {
+		if err == nil {
+			uniqueDomains[domain] = true
+		}
+	}
+	
+	// If we have at least 3 different domains including current one
+	if len(uniqueDomains) >= 3 {
+		// Check if we have a different domain in the first few URLs
+		for i := 0; i < min(10, checkLimit); i++ {
+			if i >= len(s.waitingURLs) {
+				break
+			}
+			
+			domain, err := utils.ExtractDomain(s.waitingURLs[i])
+			if err == nil && domain != currentDomain {
+				return true
+			}
+		}
+	}
+	
+	// If we have only 1-2 domains total, we are less strict about alternatives
+	if len(uniqueDomains) <= 2 {
+		return false
+	}
+	
+	// Otherwise require at least one different domain
+	for domain := range uniqueDomains {
+		if domain != currentDomain {
 			return true
 		}
 	}
