@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/secrethound/output"
-	"github.com/secrethound/utils"
+	"github.com/rafabd1/SecretHound/output"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 // Processor is responsible for processing JS files and extracting secrets

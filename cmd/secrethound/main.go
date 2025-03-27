@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/secrethound/cmd"
+	"github.com/rafabd1/SecretHound/cmd"
 )
 
 func main() {

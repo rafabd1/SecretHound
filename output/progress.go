@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/secrethound/utils"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 // ProgressBar represents a thread-safe progress bar

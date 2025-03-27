@@ -1,0 +1,59 @@
+name: Release SecretHound
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        
+      - name: Build for all platforms
+        run: |
+          # Create build directories
+          mkdir -p dist
+          
+          # Build for Linux
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/secrethound-linux-amd64 ./cmd/secrethound
+          
+          # Build for Windows
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/secrethound-windows-amd64.exe ./cmd/secrethound
+          
+          # Build for macOS
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/secrethound-darwin-amd64 ./cmd/secrethound
+          
+          # Create checksums
+          cd dist
+          sha256sum secrethound-linux-amd64 secrethound-windows-amd64.exe secrethound-darwin-amd64 > checksums.txt
+          cd ..
+          
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/secrethound-linux-amd64
+            dist/secrethound-windows-amd64.exe
+            dist/secrethound-darwin-amd64
+            dist/checksums.txt
+          name: SecretHound ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

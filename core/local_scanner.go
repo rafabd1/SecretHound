@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/secrethound/output"
-	"github.com/secrethound/utils"
+	"github.com/rafabd1/SecretHound/output"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 // LocalScanner handles scanning of local files

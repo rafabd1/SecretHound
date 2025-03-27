@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/secrethound/utils"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 // TerminalController provides centralized control for terminal output

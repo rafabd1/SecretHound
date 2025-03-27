@@ -1,8 +1,19 @@
 # SecretHound
 
-SecretHound is a powerful CLI tool designed to find secrets in JavaScript files, web pages, and other text sources. Built for security professionals, bug bounty hunters, and developers, it helps identify accidentally exposed API keys, tokens, and credentials.
+![Go Version](https://img.shields.io/github/go-mod/go-version/rafabd1/SecretHound)
+![Release](https://img.shields.io/github/v/release/rafabd1/SecretHound?include_prereleases)
+![Build Status](https://github.com/rafabd1/SecretHound/workflows/Release%20SecretHound/badge.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![GitHub stars](https://img.shields.io/github/stars/rafabd1/SecretHound?style=social)
+![Go Report Card](https://goreportcard.com/badge/github.com/rafabd1/SecretHound)
 
-![SecretHound Banner](https://raw.githubusercontent.com/rafabd1/SecretHound/main/docs/banner.png)
+<!-- <p align="center">
+    <img src="https://raw.githubusercontent.com/rafabd1/SecretHound/main/docs/banner.png" alt="SecretHound Banner" width="600">
+</p> -->
+
+<p align="center">
+    <b>A powerful CLI tool designed to find secrets in JavaScript files, web pages, and other text sources.</b>
+</p>
 
 ## Features
 
@@ -28,7 +39,7 @@ cd SecretHound
 go mod download
 
 # Build the binary
-go build -o secrethound
+go build -o secrethound ./cmd/secrethound
 
 # Optional: Move to path (Linux/macOS)
 sudo mv secrethound /usr/local/bin/
@@ -40,8 +51,12 @@ sudo mv secrethound /usr/local/bin/
 ### Using Go Install
 
 ```bash
-go install github.com/rafabd1/SecretHound@latest
+go install github.com/rafabd1/SecretHound/cmd/secrethound@latest
 ```
+
+### Binary Releases
+
+You can download pre-built binaries for your platform from the [releases page](https://github.com/rafabd1/SecretHound/releases).
 
 ## Quick Start
 
@@ -104,12 +119,30 @@ For more detailed information, see the [documentation directory](docs/):
 - [Technical Details](docs/TECHNICAL.md) - Internal architecture and design
 - [Supported Secrets](docs/SUPPORTED_SECRETS.md) - List of secret types detected
 
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgements
 
-- Inspired by various secret scanning tools
 - Built with [Go](https://golang.org/)
 - Uses [Cobra](https://github.com/spf13/cobra) for CLI functionality
+- Special thanks to all [contributors](https://github.com/rafabd1/SecretHound/graphs/contributors)
+
+<p align="center">
+    <sub>Made with 🖤 by Rafael (github.com/rafabd1)</sub>
+</p>
+
+<p align="center">
+    <a href="https://ko-fi.com/rafabd1" target="_blank"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Buy Me A Coffee" style="height: 60px !important;"></a>
+</p>

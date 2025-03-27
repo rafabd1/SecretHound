@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/secrethound/config"
-	"github.com/secrethound/core"
-	"github.com/secrethound/networking"
-	"github.com/secrethound/output"
-	"github.com/secrethound/utils"
+	"github.com/rafabd1/SecretHound/config"
+	"github.com/rafabd1/SecretHound/core"
+	"github.com/rafabd1/SecretHound/networking"
+	"github.com/rafabd1/SecretHound/output"
+	"github.com/rafabd1/SecretHound/utils"
 	"github.com/spf13/cobra"
 )
 

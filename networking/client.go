@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/secrethound/utils"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 // Client implements an HTTP client with advanced features
