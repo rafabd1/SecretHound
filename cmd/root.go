@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	cfgFile     string
+	// cfgFile     string
 	inputFile   string
 	outputFile  string
 	verbose     bool
@@ -21,8 +21,8 @@ var (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "secrethound",
-	Short: "SecretHound - Extract secrets from files and URLs",
+	Use:                   "secrethound [flags] [sources...]",
+	Short:                 "SecretHound - Extract secrets from files and URLs",
 	Long: `SecretHound is a CLI tool for extracting secrets from various sources:
 - Remote URLs (not limited to JavaScript files)
 - Local files (any text-based format)
@@ -31,14 +31,13 @@ var rootCmd = &cobra.Command{
 
 It utilizes multi-threading, regex patterns, and intelligent systems to handle
 rate limiting and WAF blocks for remote resources.`,
-	// Use the scan command implementation by default to ensure consistency
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Just forward to the scan command implementation
-		return runScan(cmd, args)
-	},
+	RunE:                  runScan,
+	DisableFlagsInUseLine: true,
+	Args:                  cobra.ArbitraryArgs,
+	TraverseChildren:      true,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
+// Execute adds all child commands to the root command and sets flags appropriately
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -47,8 +46,9 @@ func Execute() {
 }
 
 func init() {
-	// Set up command line flags
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is ./secrethound.yaml)")
+	// Temporarily disable config file support
+	// rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is ./secrethound.yaml)")
+	
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
 	
 	rootCmd.Flags().StringVarP(&inputFile, "input", "i", "", "input file, directory, or URL list")
@@ -58,4 +58,7 @@ func init() {
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "n", 10, "number of concurrent workers")
 	rootCmd.Flags().IntVarP(&rateLimit, "rate-limit", "l", 0, "requests per second per domain (0 = auto)")
 	rootCmd.Flags().StringVar(&regexFile, "regex-file", "", "file containing regex patterns (optional)")
+	
+	// Adicionar configuração para permitir argumentos após flags
+	rootCmd.Flags().SetInterspersed(true)
 }

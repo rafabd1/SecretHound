@@ -1,98 +1,134 @@
+# SecretHound Documentation
+
+Welcome to the SecretHound documentation. This directory contains detailed information about the tool, its features, and how to use it.
+
+## Documentation Index
+
+- [Technical Documentation](TECHNICAL.md): Detailed information about the technical architecture and design of SecretHound.
+- [Usage Guide](USAGE.md): Comprehensive examples and scenarios for using SecretHound.
+- [Supported Secrets](SUPPORTED_SECRETS.md): List of all secret types that SecretHound can detect.
+
+## Getting Started
+
+If you're new to SecretHound, we recommend starting with the [README.md](../README.md) in the root directory, which provides an overview of the tool and basic usage instructions.
+
+## Additional Resources
+
+- [Examples Directory](../examples/): Contains example files you can use to test SecretHound.
+- [Issue Tracker](https://github.com/rafabd1/SecretHound/issues): Report bugs or request features.
+
 # SecretHound
 
-SecretHound é uma ferramenta CLI desenvolvida em Go para extração de segredos de arquivos.
+SecretHound is a powerful CLI tool designed to find secrets in JavaScript files, web pages, and other text sources. Built for security professionals, bug bounty hunters, and developers, it helps identify accidentally exposed API keys, tokens, and credentials.
 
-## Características
+![SecretHound Banner](https://raw.githubusercontent.com/rafabd1/SecretHound/main/docs/banner.png)
 
-- Extração de segredos via expressões regulares
-- Processamento multi-thread de URLs, arquivos locais e diretórios
-- Sistema inteligente para evitar bloqueios, rate limiting e WAF
-- Cliente HTTP robusto com gerenciamento de retries e timeout
-- Agrupamento de URLs por domínio para otimizar requisições
-- Log colorido e formatado de forma intuitiva
-- Escrita em tempo real dos segredos encontrados
+## Features
 
-## Instalação
+- **Multi-Source Scanning**: Process remote URLs, local files, and entire directories
+- **Intelligent Detection**: 50+ regex patterns to identify different types of secrets
+- **Concurrent Processing**: Fast multi-threaded architecture for efficient scanning
+- **Domain-Aware Scheduling**: Smart distribution of requests to avoid rate limiting
+- **WAF/Rate Limit Evasion**: Automatic detection and handling of security measures
+- **Context Analysis**: Reduces false positives by analyzing surrounding code
+- **Real-Time Progress**: Live updates with progress bar and statistics
+- **Multiple Output Formats**: Output to formatted text
+
+## Installation
+
+### From Source
 
 ```bash
-# Clonando o repositório
-git clone https://github.com/your-username/secrethound.git
-cd secrethound
+# Clone the repository
+git clone https://github.com/rafabd1/SecretHound.git
+cd SecretHound
 
-# Instalando as dependências
+# Install dependencies
 go mod download
 
-# Compilando
+# Build the binary
 go build -o secrethound
+
+# Optional: Move to path (Linux/macOS)
+sudo mv secrethound /usr/local/bin/
+
+# Optional: Add to PATH (Windows - in PowerShell as Admin)
+# Copy-Item .\secrethound.exe C:\Windows\System32\
 ```
 
-## Uso Básico
+### Using Go Install
 
 ```bash
-# Escaneando uma única URL
-./secrethound scan https://example.com/script.js
-
-# Escaneando múltiplas URLs
-./secrethound scan https://example.com/script1.js https://example.com/script2.js
-
-# Escaneando a partir de um arquivo com lista de URLs
-./secrethound scan -i urls.txt -o resultados.json
-
-# Escaneando um arquivo local
-./secrethound scan -i /caminho/para/arquivo.js
-
-# Escaneando um diretório inteiro
-./secrethound scan -i /caminho/para/diretorio
-
-# Escaneando uma mistura de URLs e arquivos locais
-./secrethound scan https://example.com/script.js /caminho/para/arquivo.js
-
-# Ativando modo verbose para logs detalhados
-./secrethound scan -i urls.txt -v
+go install github.com/rafabd1/SecretHound@latest
 ```
 
-## Formatos de Input Suportados
+## Quick Start
 
-SecretHound aceita diferentes formatos de input:
-
-1. **URLs diretas**: Qualquer URL acessível via HTTP/HTTPS, não limitado a JavaScript.
-2. **Arquivos locais**: Qualquer arquivo legível como texto (não apenas JavaScript).
-3. **Diretórios**: Todos os arquivos não-binários em um diretório serão escaneados.
-4. **Listas de URLs/caminhos**: Um arquivo de texto contendo URLs ou caminhos de arquivo (um por linha).
-
-Qualquer combinação desses formatos pode ser usada simultaneamente.
-
-## Configuração
-
-A ferramenta pode ser configurada por meio de flags:
+Scan a single URL:
 
 ```bash
-# Ajuste de timeout (em segundos)
-./secrethound scan -i urls.txt -t 60
-
-# Configuração do número de workers concorrentes
-./secrethound scan -i urls.txt -n 20
-
-# Definição de arquivo de saída
-./secrethound scan -i urls.txt -o resultados.json
-
-# Limitação de taxa de requisições por domínio
-./secrethound scan -i urls.txt -l 5
-
-# Número máximo de retentativas em caso de falha
-./secrethound scan -i urls.txt -r 5
-
-# Uso de arquivo de regexes customizado
-./secrethound scan -i urls.txt --regex-file minhas-regexes.txt
+secrethound https://example.com/script.js
 ```
 
-## Padrões de Regex
+Scan multiple URLs:
 
-Por padrão, o SecretHound usa os padrões de regex embutidos para detectar segredos. 
-Estes padrões estão definidos no código e cobrem mais de 50 tipos diferentes de segredos.
+```bash
+secrethound https://example.com/script1.js https://example.com/script2.js
+```
 
-Se você quiser usar seus próprios padrões, você pode criar um arquivo de texto com o formato a seguir
-e usá-lo com a flag `--regex-file`:
+Scan from a list of URLs:
+
+```bash
+secrethound -i url-list.txt
+```
+
+Scan a local file:
+
+```bash
+secrethound -i /path/to/file.js
+```
+
+Scan an entire directory:
+
+```bash
+secrethound -i /path/to/directory
+```
+
+Save results to a file:
+
+```bash
+secrethound -i url-list.txt -o results.json
+```
+
+## Command Line Options
+
+The scan command supports the following options:
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-i, --input` | Input file, directory, or URL list | - |
+| `-o, --output` | Output file for results | - |
+| `-t, --timeout` | HTTP request timeout in seconds | 30 |
+| `-r, --retries` | Maximum number of retry attempts | 3 |
+| `-n, --concurrency` | Number of concurrent workers | 10 |
+| `-l, --rate-limit` | Requests per second per domain (0 = auto) | 0 |
+| `--regex-file` | File containing custom regex patterns | - |
+| `-v, --verbose` | Enable verbose output | false |
+
+## Input Sources
+
+SecretHound can process various input sources:
+
+1. **Remote URLs**: Any HTTP/HTTPS accessible URL
+2. **Local Files**: Any text-based file format
+3. **Directories**: Recursively scan all text files in a directory
+4. **URL Lists**: Text files containing URLs or file paths (one per line)
+
+Lists can be specified with the `-i` flag or by providing the filepath directly as an argument. URLs can be provided directly as arguments.
+
+## Custom Regex Patterns
+
+By default, SecretHound uses its built-in regex patterns to detect secrets. You can provide your own patterns by creating a file with the following format:
 
 ```
 REGEX_PATTERNS = {
@@ -101,7 +137,7 @@ REGEX_PATTERNS = {
 }
 ```
 
-Exemplo:
+Example:
 
 ```
 REGEX_PATTERNS = {
@@ -110,22 +146,22 @@ REGEX_PATTERNS = {
 }
 ```
 
-Um arquivo de exemplo está disponível em `examples/regex.txt`.
+A sample file is available in `examples/regex.txt`.
 
-## Padrões Suportados
+## Supported Patterns
 
-SecretHound pode detectar dezenas de tipos diferentes de segredos, incluindo:
+SecretHound can detect dozens of different types of secrets, including:
 
-- Chaves de API (Google, AWS, Firebase, etc.)
-- Tokens de acesso (Facebook, Twitter, GitHub, etc.)
-- Credenciais (senhas, tokens Basic e Bearer)
-- Chaves privadas (RSA, SSH, PGP)
-- Tokens JWT
-- URLs sensíveis (Firebase, AWS S3)
-- E muito mais!
+- API keys (Google, AWS, Firebase, etc.)
+- Access tokens (Facebook, Twitter, GitHub, etc.)
+- Credentials (passwords, Basic and Bearer tokens)
+- Private keys (RSA, SSH, PGP)
+- JWT tokens
+- Sensitive URLs (Firebase, AWS S3)
+- And much more!
 
-Para ver a lista completa de regexes suportadas, consulte o arquivo `regex.txt`.
+For a complete list of supported regexes, see the [Supported Secrets](SUPPORTED_SECRETS.md) document.
 
-## Licença
+## License
 
-Este projeto está licenciado sob a licença MIT - consulte o arquivo LICENSE para obter detalhes.
+This project is licensed under the MIT License - see the LICENSE file for details.

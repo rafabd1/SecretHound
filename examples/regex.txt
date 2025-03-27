@@ -1,5 +1,5 @@
 # SecretHound Regex Patterns Example
-# This file contains regex patterns for detecting secrets in JavaScript files
+# This file contains regex patterns for detecting secrets in files
 # You can customize this file and use it with the --regex-file flag
 
 REGEX_PATTERNS = {

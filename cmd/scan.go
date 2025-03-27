@@ -19,17 +19,12 @@ import (
 
 // scanCmd represents the scan command
 var scanCmd = &cobra.Command{
-	Use:   "scan [flags] [urls/files/directories...]",
-	Short: "Scan files for secrets",
-	Long: `Scan files for secrets using regex patterns.
-You can provide URLs, local files, or directories as arguments, or use the -i flag to specify an input source.
-
-The scanner works with:
-- Remote files via URLs (any file type, not just JavaScript)
-- Local files (text-based formats that can be read as plain text)
-- Directories (all readable files in the directory will be scanned)
-- Lists of URLs/files in a text file (one per line)`,
-	RunE: runScan,
+	Hidden:  true, // Hide this command since it's now the default
+	Use:     "scan [flags] [urls/files/directories...]",
+	Short:   "Scan files for secrets",
+	Long:    `Scan files for secrets using regex patterns.`, 
+	RunE:    runScan,
+	Aliases: []string{"s"},
 }
 
 // runScan executes the scan command
@@ -141,7 +136,36 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 
     // First, collect from command line arguments
     if len(args) > 0 {
-        inputs = append(inputs, args...)
+        // Processar cada argumento separadamente
+        for _, arg := range args {
+            // Normalizar caminho do arquivo para o SO atual
+            arg = filepath.FromSlash(arg)
+            
+            // Verificar se o argumento é um arquivo/diretório ou URL
+            if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
+                inputs = append(inputs, arg)
+            } else {
+                // Tratar como arquivo/diretório
+                fileInfo, err := os.Stat(arg)
+                if err != nil {
+                    logger.Warning("Failed to access '%s': %v", arg, err)
+                    continue
+                }
+
+                if fileInfo.IsDir() {
+                    // Se for diretório, coletar arquivos recursivamente
+                    dirFiles, err := collectFilesFromDirectory(arg, logger)
+                    if err != nil {
+                        logger.Warning("Error processing directory '%s': %v", arg, err)
+                        continue
+                    }
+                    inputs = append(inputs, dirFiles...)
+                } else {
+                    // Se for arquivo, adicionar diretamente
+                    inputs = append(inputs, arg)
+                }
+            }
+        }
         logger.Info("Added %d sources from command line arguments", len(args))
     }
 
@@ -558,13 +582,8 @@ func createAndInitRegexManager(logger *output.Logger) *core.RegexManager {
 }
 
 func init() {
+	// We still add it as a subcommand for backward compatibility
 	rootCmd.AddCommand(scanCmd)
 
-	scanCmd.Flags().StringVarP(&inputFile, "input", "i", "", "input file, directory, or URL list")
-	scanCmd.Flags().StringVarP(&outputFile, "output", "o", "", "output file for the results")
-	scanCmd.Flags().IntVarP(&timeout, "timeout", "t", 30, "HTTP request timeout in seconds")
-	scanCmd.Flags().IntVarP(&maxRetries, "retries", "r", 3, "maximum number of retries for HTTP requests")
-	scanCmd.Flags().IntVarP(&concurrency, "concurrency", "n", 10, "number of concurrent workers")
-	scanCmd.Flags().IntVarP(&rateLimit, "rate-limit", "l", 0, "requests per second per domain (0 = auto)")
-	scanCmd.Flags().StringVar(&regexFile, "regex-file", "", "file containing regex patterns (optional)")
+	// No need to add flags here as they are already defined in the root command
 }
