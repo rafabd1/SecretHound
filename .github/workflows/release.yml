@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: write  # Necessário para criar releases
+  contents: write
 
 jobs:
   build:
