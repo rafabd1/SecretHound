@@ -132,8 +132,8 @@ By default, SecretHound uses its built-in regex patterns to detect secrets. You 
 
 ```
 REGEX_PATTERNS = {
-    "nome_do_padrao": "expressao_regular",
-    "outro_padrao": "outra_expressao_regular"
+    "name": "regex",
+    "other": "other_regex"
 }
 ```
 
