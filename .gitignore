@@ -26,4 +26,4 @@ go.work.sum
 
 dev/
 
-output.txt
+output.*
