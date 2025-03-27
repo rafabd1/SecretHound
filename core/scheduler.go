@@ -29,9 +29,7 @@ type Scheduler struct {
 	cancel        context.CancelFunc
 	waitGroup     sync.WaitGroup
 	stats         SchedulerStats
-	// Novo campo para rastrear o último acesso a um domínio
 	domainLastAccess *utils.SafeMap[string, time.Time]
-	// Configuração para evitar requisições muito próximas ao mesmo domínio
 	domainCooldown time.Duration
 }
 
@@ -65,7 +63,7 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 			ctx:           ctx,
 			cancel:        cancel,
 			domainLastAccess: utils.NewSafeMap[string, time.Time](),
-			domainCooldown: 500 * time.Millisecond, // Intervalo entre requisições ao mesmo domínio
+			domainCooldown: 500 * time.Millisecond, // Internal cooldown between requests to the same domain
 			stats: SchedulerStats{
 				DomainRetries: make(map[string]int),
 				StartTime:     time.Now(),
@@ -198,7 +196,7 @@ func (s *Scheduler) buildBalancedWorkQueue(domains []string) {
 	roundRobinCount := 0
 	continueFetching := true
 	
-	// Ordenar domínios pelo número de URLs (decrescente) para priorizar domínios maiores
+	// Sort domains by the number of URLs they have to ensure balanced distribution
 	utils.SimpleSortByDomainCount(domains, func(domain string) int {
 		return len(s.domainManager.GetURLsForDomain(domain))
 	})
@@ -288,60 +286,60 @@ func (s *Scheduler) shuffleWithDomainAwareness(urls []string) {
 	}
 }
 
-// Adicionar uma função auxiliar para determinar se um requeuing deve ocorrer
+// shouldRequeueDomainURL decides if a domain should be requeued based on its status
 func (s *Scheduler) shouldRequeueDomainURL(domain string, worker int) bool {
-    // Se não temos URLs alternativas, não faz sentido requeue
-    if (!s.hasAlternativeURL(domain)) {
-        return false
-    }
-    
-    // Verificar a quantas solicitações o domínio está sujeito (em fila)
-    domainPendingCount := s.countPendingURLsForDomain(domain)
-    
-    // Se houver muitas solicitações pendentes para este domínio
-    // e existirem poucos domínios únicos, reduzir o requeuing
-    domainCount := s.domainManager.GetDomainCount()
-    if (domainCount <= 3) {
-        // Para poucos domínios, seja menos restritivo
-        // Isso evita requeuing excessivo quando há poucos domínios
-        return false
-    }
-    
-    // Se há muitas solicitações pendentes, diminuir probabilidade de requeue
-    if (domainPendingCount > 5) {
-        // Requeue apenas 20% das vezes
-        return utils.RandomInt(0, 100) < 20
-    }
-    
-    // Acesso recente ao domínio, mas não muitas requisições pendentes
-    // Faça requeue com 60% de probabilidade
-    return utils.RandomInt(0, 100) < 60
+	// If we don't have alternative URLs, requeuing doesn't make sense
+	if (!s.hasAlternativeURL(domain)) {
+		return false
+	}
+	
+	// Check how many requests the domain is subject to (in the queue)
+	domainPendingCount := s.countPendingURLsForDomain(domain)
+	
+	// If there are many pending requests for this domain
+	// and there are few unique domains, reduce requeuing
+	domainCount := s.domainManager.GetDomainCount()
+	if (domainCount <= 3) {
+		// For few domains, be less restrictive
+		// This avoids excessive requeuing when there are few domains
+		return false
+	}
+	
+	// If there are many pending requests, decrease the probability of requeue
+	if (domainPendingCount > 5) {
+		// Requeue only 20% of the time
+		return utils.RandomInt(0, 100) < 20
+	}
+	
+	// Recent access to the domain, but not many pending requests
+	// Perform requeue with a 60% probability
+	return utils.RandomInt(0, 100) < 60
 }
 
-// countPendingURLsForDomain conta quantas URLs pendentes existem para um domínio
+// countPendingURLsForDomain counts how many pending URLs exist for a domain
 func (s *Scheduler) countPendingURLsForDomain(targetDomain string) int {
-    s.mutex.Lock()
-    defer s.mutex.Unlock()
-    
-    count := 0
-    // Checar apenas as primeiras 50 URLs na fila para eficiência
-    checkLimit := 50
-    if (len(s.waitingURLs) < checkLimit) {
-        checkLimit = len(s.waitingURLs)
-    }
-    
-    for i := 0; i < checkLimit; i++ {
-        if (i >= len(s.waitingURLs)) {
-            break
-        }
-        
-        domain, err := utils.ExtractDomain(s.waitingURLs[i])
-        if (err == nil && domain == targetDomain) {
-            count++
-        }
-    }
-    
-    return count
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	
+	count := 0
+	// Check only the first 50 URLs in the queue for efficiency
+	checkLimit := 50
+	if (len(s.waitingURLs) < checkLimit) {
+		checkLimit = len(s.waitingURLs)
+	}
+	
+	for i := 0; i < checkLimit; i++ {
+		if (i >= len(s.waitingURLs)) {
+			break
+		}
+		
+		domain, err := utils.ExtractDomain(s.waitingURLs[i])
+		if (err == nil && domain == targetDomain) {
+			count++
+		}
+	}
+	
+	return count
 }
 
 // worker is a goroutine that processes URLs
@@ -386,26 +384,26 @@ func (s *Scheduler) worker(id int) {
 			continue
 		}
 		
-		// Verificar se o domínio foi acessado recentemente por qualquer worker
+		// Check if this domain has a cooldown period
 		lastAccess, found := s.domainLastAccess.Get(domain)
 		if found && time.Since(lastAccess) < s.domainCooldown {
-			// Se o domínio foi acessado recentemente, verificar se devemos requeue
+			// Check if this domain was recently accessed by another worker
 			if s.hasAlternativeURL(domain) {
-				// Esperar um tempo menor se necessário requeue
+				// Wait a shorter time if requeue is necessary
 				time.Sleep(10 * time.Millisecond)
 				
-				// Se não houver domínios suficientes, não requeue e espere o cooldown
+				// If there are not enough domains, do not requeue and wait for the cooldown
 				if len(s.domainManager.GetDomainList()) <= 3 {
 					wait := s.domainCooldown - time.Since(lastAccess)
 					if wait > 0 {
-						time.Sleep(wait / 2) // Reduz o tempo de espera para melhorar performance
+						time.Sleep(wait / 2) // Reduce wait time to improve performance
 					}
 				} else {
 					s.requeueURL(url)
 					continue
 				}
 			} else {
-				// Se não há alternativa, esperar até que o cooldown passe
+				// If there is no alternative, wait until the cooldown passes
 				wait := s.domainCooldown - time.Since(lastAccess)
 				if wait > 0 {
 					time.Sleep(wait)
@@ -415,14 +413,14 @@ func (s *Scheduler) worker(id int) {
 		
 		// Check if this worker has recently accessed this domain 
 		if recentDomains.Contains(domain) {
-			// Usar lógica de probabilidade em vez de sempre requeue
+			// Use probabilistic logic instead of always requeueing
 			if s.shouldRequeueDomainURL(domain, id) {
 				s.logger.Debug("Worker %d: recently accessed domain %s, requeueing URL %s", id, domain, url)
 				s.requeueURL(url)
-				time.Sleep(20 * time.Millisecond) // Pequeno atraso antes de tentar novamente
+				time.Sleep(20 * time.Millisecond) // Small delay before trying again
 				continue
 			}
-			// Mesmo tendo acessado recentemente, vamos continuar se a função retornar false
+			// Even if recently accessed, proceed if the function returns false
 		}
 		
 		// Track this domain access

@@ -15,7 +15,7 @@ type TerminalController struct {
     outputMu        sync.Mutex
     isActive        bool
     isTerminal      bool
-    hasProgressBar  bool  // Novo flag para indicar se a barra de progresso está sendo exibida
+    hasProgressBar  bool 
 }
 
 // Global singleton instance

@@ -116,14 +116,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 		logger.Warning("Processing timed out after 5 minutes, forcing exit")
 	}
 
-	// Garantir que todas as mensagens de log sejam processadas antes de sair
 	logger.Flush()
 	
-	// Esperar que quaisquer goroutines pendentes terminem
 	time.Sleep(500 * time.Millisecond)
 
-	// Forçar encerramento do aplicativo após processamento
-	// Esta é uma solução drástica mas necessária se outros métodos falharem
 	fmt.Fprintln(os.Stderr, "\nScan completed. Exiting.")
 	os.Exit(0)
 
@@ -136,16 +132,12 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 
     // First, collect from command line arguments
     if len(args) > 0 {
-        // Processar cada argumento separadamente
         for _, arg := range args {
-            // Normalizar caminho do arquivo para o SO atual
             arg = filepath.FromSlash(arg)
             
-            // Verificar se o argumento é um arquivo/diretório ou URL
             if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
                 inputs = append(inputs, arg)
             } else {
-                // Tratar como arquivo/diretório
                 fileInfo, err := os.Stat(arg)
                 if err != nil {
                     logger.Warning("Failed to access '%s': %v", arg, err)
@@ -153,7 +145,6 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
                 }
 
                 if fileInfo.IsDir() {
-                    // Se for diretório, coletar arquivos recursivamente
                     dirFiles, err := collectFilesFromDirectory(arg, logger)
                     if err != nil {
                         logger.Warning("Error processing directory '%s': %v", arg, err)
@@ -161,7 +152,6 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
                     }
                     inputs = append(inputs, dirFiles...)
                 } else {
-                    // Se for arquivo, adicionar diretamente
                     inputs = append(inputs, arg)
                 }
             }

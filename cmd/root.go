@@ -59,6 +59,5 @@ func init() {
 	rootCmd.Flags().IntVarP(&rateLimit, "rate-limit", "l", 0, "requests per second per domain (0 = auto)")
 	rootCmd.Flags().StringVar(&regexFile, "regex-file", "", "file containing regex patterns (optional)")
 	
-	// Adicionar configuração para permitir argumentos após flags
 	rootCmd.Flags().SetInterspersed(true)
 }

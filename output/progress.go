@@ -80,7 +80,7 @@ func (pb *ProgressBar) Start() {
         // Start output control manager - this serializes all terminal output
         go pb.outputManager()
 
-        // Forçar uma renderização inicial
+        // Force an initial render to ensure the bar is visible
         pb.requestRender()
 
         // Start auto-refresh goroutine
@@ -126,13 +126,13 @@ func (pb *ProgressBar) outputManager() {
             if shouldRender {
                 pb.actualRender()
             }
-        case <-time.After(1 * time.Second): // Timeout para evitar deadlock
+        case <-time.After(1 * time.Second): // Timeout to prevent blocking
             pb.mu.Lock()
             isActive := pb.isActive
             pb.mu.Unlock()
             
             if !isActive {
-                return // Se não estiver mais ativo, encerra a goroutine
+                return
             }
         }
     }
@@ -164,14 +164,14 @@ func (pb *ProgressBar) Stop() {
         return
     }
     
-    // Forçar a desativação da barra
+    // Stop the auto-refresh goroutine
     pb.isActive = false
     pb.autoRefresh = false
     
-    // Garante que o canal done seja fechado
+    // Close the done channel to signal goroutines to stop
     select {
     case <-pb.done:
-        // Canal já foi fechado, não faz nada
+        // Already closed
     default:
         close(pb.done)
     }
@@ -182,7 +182,7 @@ func (pb *ProgressBar) Stop() {
     tc := GetTerminalController()
     tc.SetProgressBarActive(false)
     
-    // Espere um momento para garantir que goroutines percebam o encerramento
+    // Wait for the output manager to finish
     time.Sleep(20 * time.Millisecond)
     
     // Clear the progress bar
@@ -192,9 +192,9 @@ func (pb *ProgressBar) Stop() {
     }
 }
 
-// Finalize limpa recursos e garante que a barra de progresso seja finalizada
+// Finalize finalizes the progress bar and cleans up resources
 func (pb *ProgressBar) Finalize() {
-    pb.Stop() // Make sure it's stopped first
+    pb.Stop()
     
     pb.mu.Lock()
     if pb.outputControl != nil {

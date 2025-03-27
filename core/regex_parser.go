@@ -10,14 +10,14 @@ import (
 
 // RegexPatternMap is a map of predefined regex patterns
 var RegexPatternMap = map[string]string{
-    // API Keys - melhoradas para serem mais específicas de compatibilidade
+    // API Keys
     "google_api":               `(?:AIza|GOCSPX)[0-9A-Za-z\-_]{35,40}`,
     "firebase":                 `AAAA[A-Za-z0-9_-]{7}:[A-Za-z0-9_-]{140}`,
     "firebase_url":             `.*firebaseio\.com`,
     "google_captcha":           `(?:^|[^0-9A-Za-z])6L[0-9A-Za-z-_]{38}|^6[0-9a-zA-Z_-]{39}$`,
     "google_oauth":             `(?:^|[^0-9A-Za-z])ya29\.[0-9A-Za-z\-_]+`,
 
-    // AWS - padrões ajustados para evitar falsos positivos
+    // AWS
     "amazon_aws_access_key_id": `(?:^|[^0-9A-Za-z])AKIA[0-9A-Z]{16}(?:[^0-9A-Za-z]|$)`,
     "amazon_mws_auth_token":    `amzn\.mws\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`,
     "amazon_aws_url":           `(?:^|[^\w/])(s3\.amazonaws\.com/[a-zA-Z0-9_.-]+|[a-zA-Z0-9_.-]+\.s3\.amazonaws\.com)`,
@@ -57,7 +57,7 @@ var RegexPatternMap = map[string]string{
     "SSH_privKey":              `([-]+BEGIN [^\s]+ PRIVATE KEY[-]+[\s]*[^-]*[-]+END [^\s]+ PRIVATE KEY[-]+)`,
     "Heroku API KEY":           `(?i)(heroku[._-]api[._-]key|HEROKU_API_KEY|heroku[._-]token)["\s:=]+[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`,
     
-    // Credenciais - versão simplificada e compatível
+    // Credentials
     "possible_credentials":     `(?i)(password|passwd|pwd|secret)[ =:]+['"][^'"]{4,30}['"]`,
     
     "cloudinary":               `cloudinary://.*`,
@@ -84,9 +84,7 @@ var RegexPatternMap = map[string]string{
     "twitter_bearer":           `AAAAAAAAAAAAAAAAAAAAAA[0-9A-Za-z%]{37}`,
 }
 
-// ExclusionPatterns contém padrões que devem ser excluídos por serem código, não segredos
 var ExclusionPatterns = []string{
-    // Padrões que devem ser excluídos por serem código, não segredos
     `function\s*\(`,
     `\)\s*{`,
     `\s*var\s+`,
@@ -108,13 +106,13 @@ var ExclusionPatterns = []string{
     `continue;`,
     `default:`,
     
-    // Padrões específicos de código JS minificado
+    // Specific for minified code
     `function\([\w,\s]*\){\s*`,
     `\[native code\]`,
     `window\.`,
     `document\.`,
     
-    // Falsos positivos comuns para Base64
+    // base64
     `base64`,
     `data:image/`,
     `font-face`,
@@ -127,14 +125,14 @@ var ExclusionPatterns = []string{
     `\.[a-zA-Z][a-zA-Z0-9_-]*\s*{`,
     `\[[a-zA-Z][a-zA-Z0-9_-]*\]`,
     
-    // Biblioteca jQuery e outras
+    // jQuery and JavaScript specific patterns
     `jQuery`,
     `\$\(`,
     `\.ready\(`,
     `\.click\(`,
     `\.on\(`,
     
-    // Código minificado
+    // Common JavaScript patterns
     `function\(t,e`,
     `function\(e,t`,
     `return[a-z]&&`,
@@ -142,7 +140,7 @@ var ExclusionPatterns = []string{
     `:[a-z]\.`,
 }
 
-// Conjunto de exclusões específicas para padrões específicos
+// SpecificExclusions is a map of specific exclusions for each regex pattern
 var SpecificExclusions = map[string][]string{
     "amazon_aws_url": {
         `selectors`,
@@ -252,15 +250,13 @@ func (rm *RegexManager) LoadPredefinedPatterns() error {
     rm.mu.Lock()
     defer rm.mu.Unlock()
     
-    // Inicializa o mapa se ainda não existir
     if rm.patterns == nil {
         rm.patterns = make(map[string]*regexp.Regexp)
     }
     
-    // Inicializa o mapa de exclusões específicas por padrão
     rm.patternExclusions = make(map[string][]*regexp.Regexp)
     
-    // Compilar e adicionar padrões principais
+    // Compile predefined regex patterns
     for name, pattern := range RegexPatternMap {
         re, err := regexp.Compile(pattern)
         if err != nil {
@@ -269,7 +265,7 @@ func (rm *RegexManager) LoadPredefinedPatterns() error {
         rm.patterns[name] = re
     }
     
-    // Compilar padrões de exclusão global
+    // Compile exclusion patterns
     rm.exclusionPatterns = make([]*regexp.Regexp, 0, len(ExclusionPatterns))
     for _, pattern := range ExclusionPatterns {
         re, err := regexp.Compile(pattern)
@@ -280,9 +276,8 @@ func (rm *RegexManager) LoadPredefinedPatterns() error {
         rm.exclusionPatterns = append(rm.exclusionPatterns, re)
     }
     
-    // Compilar e adicionar exclusões específicas para cada padrão
+    // Compile specific exclusions for each pattern
     for patternName, exclusions := range SpecificExclusions {
-        // Compilar regex para cada exclusão
         exclusionRegexList := make([]*regexp.Regexp, 0, len(exclusions))
         for _, exclusion := range exclusions {
             re, err := regexp.Compile(exclusion)
@@ -291,7 +286,6 @@ func (rm *RegexManager) LoadPredefinedPatterns() error {
             }
         }
         
-        // Armazenar os patterns de exclusão específicos para este padrão
         if len(exclusionRegexList) > 0 {
             rm.patternExclusions[patternName] = exclusionRegexList
         }
@@ -300,19 +294,17 @@ func (rm *RegexManager) LoadPredefinedPatterns() error {
     return nil
 }
 
-// isValidSecretStrict aplica verificações mais rígidas para conteúdo minificado
+// isValidSecretStrict applies stricter validation for secrets
 func (rm *RegexManager) isValidSecretStrict(value string, patternType string) bool {
-    // Aplicar primeiro as verificações básicas
     if !rm.isValidSecret(value, patternType) {
         return false
     }
     
-    // Aumentar limite mínimo e reduzir limite máximo
     if len(value) < rm.minSecretLength*2 || len(value) > rm.maxSecretLength/2 {
         return false
     }
     
-    // Verificar se contém caracteres típicos de código minificado
+    // Verify if the value contains minified code patterns
     codeChars := []string{"{", "}", ";", "&&", "||", "==", "!=", "=>", "+=", "-="}
     for _, char := range codeChars {
         if strings.Contains(value, char) {
@@ -323,14 +315,13 @@ func (rm *RegexManager) isValidSecretStrict(value string, patternType string) bo
     return true
 }
 
-// isExcludedByContextStrict aplica verificação de contexto mais rígida
+// isExcludedByContextStrict applies stricter exclusion checks based on context
 func (rm *RegexManager) isExcludedByContextStrict(context string, patternName string) bool {
     // Aplicar primeiro verificação básica
     if rm.isExcludedByContext(context) {
         return true
     }
     
-    // Verificar exclusões específicas para este padrão
     if exclusions, exists := rm.patternExclusions[patternName]; exists {
         for _, re := range exclusions {
             if re.MatchString(context) {

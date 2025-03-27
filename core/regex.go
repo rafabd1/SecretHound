@@ -14,11 +14,11 @@ import (
 // RegexManager handles loading and applying regex patterns
 type RegexManager struct {
     patterns           map[string]*regexp.Regexp
-    exclusionPatterns  []*regexp.Regexp       // Padrões para filtrar falsos positivos
-    patternExclusions  map[string][]*regexp.Regexp // Exclusões específicas por padrão
-    excludedExtensions []string               // Extensões de arquivo para ignorar
-    minSecretLength    int                    // Tamanho mínimo para considerar um segredo
-    maxSecretLength    int                    // Tamanho máximo para considerar um segredo
+    exclusionPatterns  []*regexp.Regexp       // Patterns to filter false positives
+    patternExclusions  map[string][]*regexp.Regexp // Specific exclusions per pattern
+    excludedExtensions []string               // File extensions to ignore
+    minSecretLength    int                    // Minimum length to consider a secret
+    maxSecretLength    int                    // Maximum length to consider a secret
     mu                 sync.RWMutex
 }
 
@@ -28,13 +28,13 @@ func NewRegexManager() *RegexManager {
         patterns:           make(map[string]*regexp.Regexp),
         exclusionPatterns:  make([]*regexp.Regexp, 0),
         excludedExtensions: []string{".min.js", ".bundle.js", ".packed.js", ".compressed.js"},
-        minSecretLength:    5,   // Mínimo de 5 caracteres para considerar um segredo
-        maxSecretLength:    200, // Máximo de 200 caracteres para evitar blocos de código inteiros
+        minSecretLength:    5,   // Minimum of 5 characters to consider a secret
+        maxSecretLength:    200, // Maximum of 200 characters to avoid entire code blocks
         mu:                 sync.RWMutex{},
     }
 }
 
-// FindSecrets busca segredos usando as expressões regulares configuradas
+// FindSecrets searches for secrets using the configured regex patterns
 func (rm *RegexManager) FindSecrets(content, url string) ([]Secret, error) {
     rm.mu.RLock()
     defer rm.mu.RUnlock()
@@ -42,7 +42,7 @@ func (rm *RegexManager) FindSecrets(content, url string) ([]Secret, error) {
     return rm.findSecretsWithFiltering(content, url, false)
 }
 
-// FindSecretsWithStrictFiltering é uma versão da FindSecrets que aplica filtros mais rígidos para conteúdo minificado
+// FindSecretsWithStrictFiltering is a version of FindSecrets that applies stricter filters for minified content
 func (rm *RegexManager) FindSecretsWithStrictFiltering(content, url string) ([]Secret, error) {
     rm.mu.RLock()
     defer rm.mu.RUnlock()
@@ -50,13 +50,13 @@ func (rm *RegexManager) FindSecretsWithStrictFiltering(content, url string) ([]S
     return rm.findSecretsWithFiltering(content, url, true)
 }
 
-// findSecretsWithFiltering é a implementação central de busca de segredos com filtragem opcional
+// findSecretsWithFiltering is the core implementation for searching secrets with optional filtering
 func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode bool) ([]Secret, error) {
     if len(rm.patterns) == 0 {
         return nil, fmt.Errorf("no regex patterns loaded")
     }
 
-    // Verificar extensões de arquivo a serem ignoradas
+    // Check file extensions to ignore
     for _, ext := range rm.excludedExtensions {
         if strings.HasSuffix(strings.ToLower(url), ext) {
             return nil, nil
@@ -65,19 +65,19 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
 
     var secrets []Secret
     
-    // Para cada padrão, buscar no conteúdo
+    // For each pattern, search in the content
     for patternName, pattern := range rm.patterns {
         matches := pattern.FindAllStringSubmatch(content, -1)
         
         for _, match := range matches {
             if len(match) > 0 {
-                // Extrair o valor real do segredo (primeiro grupo de captura ou match completo)
+                // Extract the actual secret value (first capture group or full match)
                 value := match[0]
                 if len(match) > 1 && match[1] != "" {
                     value = match[1]
                 }
                 
-                // Aplicar verificações básicas ou estritas dependendo do modo
+                // Apply basic or strict checks depending on the mode
                 isValid := false
                 if strictMode {
                     isValid = rm.isValidSecretStrict(value, patternName)
@@ -86,10 +86,10 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
                 }
                 
                 if isValid {
-                    // Obter contexto ao redor do segredo (opcional)
+                    // Get context around the secret (optional)
                     context := rm.extractContext(content, value)
                     
-                    // Aplicar verificações de contexto
+                    // Apply context-based checks
                     isExcluded := false
                     if strictMode {
                         isExcluded = rm.isExcludedByContextStrict(context, patternName)
@@ -114,14 +114,14 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
     return secrets, nil
 }
 
-// extractContext extrai o contexto ao redor do segredo
+// extractContext extracts the context around the secret
 func (rm *RegexManager) extractContext(content, value string) string {
     idx := strings.Index(content, value)
     if idx == -1 {
         return ""
     }
     
-    // Extrair 50 caracteres antes e depois do segredo
+    // Extract 50 characters before and after the secret
     contextStart := idx - 50
     if contextStart < 0 {
         contextStart = 0
@@ -135,9 +135,9 @@ func (rm *RegexManager) extractContext(content, value string) string {
     return content[contextStart:contextEnd]
 }
 
-// isExcludedByContext verifica se o contexto indica que o match deve ser ignorado
+// isExcludedByContext checks if the context indicates that the match should be ignored
 func (rm *RegexManager) isExcludedByContext(context string) bool {
-    // Verificar padrões de exclusão global
+    // Check global exclusion patterns
     for _, pattern := range rm.exclusionPatterns {
         if pattern.MatchString(context) {
             return true
@@ -147,148 +147,148 @@ func (rm *RegexManager) isExcludedByContext(context string) bool {
     return false
 }
 
-// isValidSecret verifica se o valor encontrado parece ser um segredo válido
+// isValidSecret checks if the found value appears to be a valid secret
 func (rm *RegexManager) isValidSecret(value string, patternType string) bool {
-	// Verificar tamanho mínimo e máximo
-	if len(value) < rm.minSecretLength || len(value) > rm.maxSecretLength {
-		return false
-	}
-	
-	// Verificações específicas por tipo de padrão
-	switch {
-	case strings.Contains(patternType, "twilio_account_sid"):
-		// Verificar se começa com AC e não está em um contexto de CSS ou base64
-		if !strings.HasPrefix(value, "AC") || 
-			strings.Contains(value, "AAA") || 
-			strings.Contains(value, "eJy") {
-			return false
-		}
-		
-		// Verificar se não está em um contexto provável de CSS/estilos
-		styleKeywords := []string{"width", "height", "margin", "padding", "content"}
-		for _, keyword := range styleKeywords {
-			if strings.Contains(value, keyword) {
-				return false
-			}
-		}
-		
-	case strings.Contains(patternType, "twilio_app_sid"):
-		// Verificar se começa com AP e não está em um contexto de CSS ou base64
-		if !strings.HasPrefix(value, "AP") || 
-			strings.Contains(value, "AAA") || 
-			strings.Contains(value, "eJy") {
-			return false
-		}
-		
-		// Verificar se não está em um contexto provável de CSS/estilos
-		styleKeywords := []string{"width", "height", "margin", "padding", "content"}
-		for _, keyword := range styleKeywords {
-			if strings.Contains(value, keyword) {
-				return false
-			}
-		}
-		
-	case strings.Contains(patternType, "Heroku API KEY") || 
-		strings.Contains(patternType, "heroku"):
-		// Verificar se está em um contexto de configuração de interface
-		uiContextKeywords := []string{"id:", "target", "element", "styleBlock", "applies"}
-		for _, keyword := range uiContextKeywords {
-			if strings.Contains(value, keyword) {
-				return false
-			}
-		}
-		
-		// Verificar se tem um prefixo ou contexto que indique que é uma chave Heroku
-		if !strings.Contains(strings.ToLower(value), "heroku") && 
-			!strings.Contains(strings.ToLower(value), "api") && 
-			!strings.Contains(strings.ToLower(value), "key") {
-			// Se não tem nenhuma indicação de ser Heroku no contexto, provavelmente é UUID comum
-			return false
-		}
-		
-	case strings.Contains(patternType, "aws_url") || strings.Contains(patternType, "s3"):
-		// Evitar falsos positivos para URLs do Amazon S3
-		if strings.Contains(value, "TR/css3-selectors") {
-			return false
-		}
-		if strings.Contains(value, "TR/2011/REC-css3-selectors") {
-			return false
-		}
-		
-	case strings.Contains(patternType, "base64") || strings.Contains(patternType, "token"):
-		// Para tokens, verificar se parece com código minificado
-		codeKeywords := []string{"function", "return", "var ", "let ", "const ",
-			"window.", "document.", "if(", "else{", "for(", "while(", "switch"}
-		for _, keyword := range codeKeywords {
-			if strings.Contains(value, keyword) {
-				return false
-			}
-		}
-	}
+    // Check minimum and maximum length
+    if len(value) < rm.minSecretLength || len(value) > rm.maxSecretLength {
+        return false
+    }
+    
+    // Specific checks based on pattern type
+    switch {
+    case strings.Contains(patternType, "twilio_account_sid"):
+        // Check if it starts with AC and is not in a CSS or base64 context
+        if !strings.HasPrefix(value, "AC") || 
+            strings.Contains(value, "AAA") || 
+            strings.Contains(value, "eJy") {
+            return false
+        }
+        
+        // Check if it is not in a likely CSS/style context
+        styleKeywords := []string{"width", "height", "margin", "padding", "content"}
+        for _, keyword := range styleKeywords {
+            if strings.Contains(value, keyword) {
+                return false
+            }
+        }
+        
+    case strings.Contains(patternType, "twilio_app_sid"):
+        // Check if it starts with AP and is not in a CSS or base64 context
+        if !strings.HasPrefix(value, "AP") || 
+            strings.Contains(value, "AAA") || 
+            strings.Contains(value, "eJy") {
+            return false
+        }
+        
+        // Check if it is not in a likely CSS/style context
+        styleKeywords := []string{"width", "height", "margin", "padding", "content"}
+        for _, keyword := range styleKeywords {
+            if strings.Contains(value, keyword) {
+                return false
+            }
+        }
+        
+    case strings.Contains(patternType, "Heroku API KEY") || 
+        strings.Contains(patternType, "heroku"):
+        // Check if it is in a UI configuration context
+        uiContextKeywords := []string{"id:", "target", "element", "styleBlock", "applies"}
+        for _, keyword := range uiContextKeywords {
+            if strings.Contains(value, keyword) {
+                return false
+            }
+        }
+        
+        // Check if it has a prefix or context indicating it is a Heroku key
+        if !strings.Contains(strings.ToLower(value), "heroku") && 
+            !strings.Contains(strings.ToLower(value), "api") && 
+            !strings.Contains(strings.ToLower(value), "key") {
+            // If there is no indication of being Heroku in the context, it is likely a common UUID
+            return false
+        }
+        
+    case strings.Contains(patternType, "aws_url") || strings.Contains(patternType, "s3"):
+        // Avoid false positives for Amazon S3 URLs
+        if strings.Contains(value, "TR/css3-selectors") {
+            return false
+        }
+        if strings.Contains(value, "TR/2011/REC-css3-selectors") {
+            return false
+        }
+        
+    case strings.Contains(patternType, "base64") || strings.Contains(patternType, "token"):
+        // For tokens, check if it looks like minified code
+        codeKeywords := []string{"function", "return", "var ", "let ", "const ",
+            "window.", "document.", "if(", "else{", "for(", "while(", "switch"}
+        for _, keyword := range codeKeywords {
+            if strings.Contains(value, keyword) {
+                return false
+            }
+        }
+    }
 
-	// Additional validations for authorization patterns
-	switch patternType {
-	case "authorization_basic":
-		// For Basic Auth, require Base64-like format 
-		// Basic Auth typically follows the pattern: basic Base64(username:password)
-		if !strings.HasPrefix(strings.ToLower(value), "basic ") {
-			return false
-		}
-		
-		// Extract the potential token part
-		parts := strings.SplitN(value, " ", 2)
-		if len(parts) < 2 || len(parts[1]) < 16 {
-			return false
-		}
-		
-		// Check if it looks like base64 encoding
-		token := parts[1]
-		if !utils.IsLikelyBase64(token) {
-			return false
-		}
-		
-		// Common words that shouldn't be treated as secrets
-		commonWords := []string{"chart", "content", "information", "settings", "features"}
-		for _, word := range commonWords {
-			if strings.Contains(strings.ToLower(token), word) {
-				return false
-			}
-		}
-		
-	case "authorization_api":
-		// API keys usually don't have spaces and are fairly long
-		if strings.Count(value, " ") > 1 || len(value) < 20 {
-			return false
-		}
-		
-		// Try to extract the actual key part
-		parts := strings.FieldsFunc(value, func(r rune) bool {
-			return r == ' ' || r == '=' || r == ':' || r == '"' || r == '\''
-		})
-		
-		// Check if we have something that looks like a key
-		hasValidKey := false
-		for _, part := range parts {
-			if len(part) >= 16 && !utils.IsCommonWord(part) {
-				hasValidKey = true
-				break
-			}
-		}
-		
-		if !hasValidKey {
-			return false
-		}
-		
-		// Check against common false positive patterns
-		falsePatterns := []string{"api_language", "api_location", "api fails", "api error"}
-		for _, pattern := range falsePatterns {
-			if strings.Contains(strings.ToLower(value), pattern) {
-				return false
-			}
-		}
-	}
-	
-	return true
+    // Additional validations for authorization patterns
+    switch patternType {
+    case "authorization_basic":
+        // For Basic Auth, require Base64-like format 
+        // Basic Auth typically follows the pattern: basic Base64(username:password)
+        if !strings.HasPrefix(strings.ToLower(value), "basic ") {
+            return false
+        }
+        
+        // Extract the potential token part
+        parts := strings.SplitN(value, " ", 2)
+        if len(parts) < 2 || len(parts[1]) < 16 {
+            return false
+        }
+        
+        // Check if it looks like base64 encoding
+        token := parts[1]
+        if !utils.IsLikelyBase64(token) {
+            return false
+        }
+        
+        // Common words that shouldn't be treated as secrets
+        commonWords := []string{"chart", "content", "information", "settings", "features"}
+        for _, word := range commonWords {
+            if strings.Contains(strings.ToLower(token), word) {
+                return false
+            }
+        }
+        
+    case "authorization_api":
+        // API keys usually don't have spaces and are fairly long
+        if strings.Count(value, " ") > 1 || len(value) < 20 {
+            return false
+        }
+        
+        // Try to extract the actual key part
+        parts := strings.FieldsFunc(value, func(r rune) bool {
+            return r == ' ' || r == '=' || r == ':' || r == '"' || r == '\''
+        })
+        
+        // Check if we have something that looks like a key
+        hasValidKey := false
+        for _, part := range parts {
+            if len(part) >= 16 && !utils.IsCommonWord(part) {
+                hasValidKey = true
+                break
+            }
+        }
+        
+        if !hasValidKey {
+            return false
+        }
+        
+        // Check against common false positive patterns
+        falsePatterns := []string{"api_language", "api_location", "api fails", "api error"}
+        for _, pattern := range falsePatterns {
+            if strings.Contains(strings.ToLower(value), pattern) {
+                return false
+            }
+        }
+    }
+    
+    return true
 }
 
 // LoadPatternsFromFile loads regex patterns from a file
