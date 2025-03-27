@@ -78,8 +78,11 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 		s.mutex.Unlock()
 
 		// Force log these important messages with direct terminal output to ensure visibility
-		fmt.Fprintf(os.Stderr, "[%s] %s %s\n", 
-			time.Now().Format("15:04:05"),
+		timeColor := color.New(color.FgHiBlack).SprintfFunc()
+		timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+		
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+			timeStr,
 			color.CyanString("[INFO]"), 
 			fmt.Sprintf("Starting to schedule %d URLs for processing", len(urls)))
 
@@ -87,8 +90,9 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 		s.domainManager.GroupURLsByDomain(urls)
 		domains := s.domainManager.GetDomainList()
 		
-		fmt.Fprintf(os.Stderr, "[%s] %s %s\n", 
-			time.Now().Format("15:04:05"),
+		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+			timeStr,
 			color.CyanString("[INFO]"), 
 			fmt.Sprintf("Grouped URLs into %d domains", len(domains)))
 
@@ -96,13 +100,15 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 		s.buildBalancedWorkQueue(domains)
 
 		// Explicitly log important initial statistics to make sure they appear
-		fmt.Fprintf(os.Stderr, "[%s] %s %s\n", 
-			time.Now().Format("15:04:05"),
+		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+			timeStr,
 			color.CyanString("[INFO]"), 
 			fmt.Sprintf("Using %d concurrent workers", s.concurrency))
 		
-		fmt.Fprintf(os.Stderr, "[%s] %s %s\n", 
-			time.Now().Format("15:04:05"),
+		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+			timeStr,
 			color.CyanString("[INFO]"), 
 			fmt.Sprintf("Rate limit set to %d requests per domain", s.client.GetRateLimit()))
 
