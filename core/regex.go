@@ -8,7 +8,7 @@ import (
     "strings"
     "sync"
 
-    "github.com/secrethound/utils"
+    "github.com/rafabd1/SecretHound/utils"
 )
 
 // RegexManager handles loading and applying regex patterns
