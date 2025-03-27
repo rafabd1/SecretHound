@@ -127,19 +127,19 @@ func EnforceJSExtension(urlStr string) string {
 	return urlStr + ".js"
 }
 
-// IsJavaScriptFile verifica se um URL é para um arquivo JavaScript
+// IsJavaScriptFile checks if a URL is likely a JavaScript file
 func IsJavaScriptFile(url string) bool {
-	// Verificar extensão
+	// Check if the URL ends with .js or contains .js in the query string
 	if strings.HasSuffix(strings.ToLower(url), ".js") {
 		return true
 	}
 	
-	// Verificar parâmetros que indicam JavaScript
+	// Check for common query string patterns for JavaScript
 	if strings.Contains(url, ".js?") || strings.Contains(url, ".js&") {
 		return true
 	}
 	
-	// Verificar caminhos comuns para JavaScript
+	// Check for common JavaScript directory patterns
 	jsPatterns := []string{
 		"/js/", "/javascript/", "/scripts/", "/assets/js/", 
 		"/dist/", "/bundle/", "/vendor/", "/lib/",
@@ -154,19 +154,19 @@ func IsJavaScriptFile(url string) bool {
 	return false
 }
 
-// IsMinfiedJavaScript verifica se o conteúdo é JavaScript minificado
+// IsMinfiedJavaScript checks if a JavaScript file is minified
 func IsMinifiedJavaScript(content string) bool {
-	// JavaScript minificado geralmente tem linhas muito longas
+	// JavaScript files are often minified by removing whitespace and comments
 	lines := strings.Split(content, "\n")
 	if len(lines) == 1 && len(content) > 1000 {
 		return true
 	}
 	
-	// Verificar densidade de ponto e vírgula e chaves
+	// Count the number of semicolons and braces
 	semicolons := strings.Count(content, ";")
 	braces := strings.Count(content, "{") + strings.Count(content, "}")
 	
-	// JavaScript minificado tem alta densidade de símbolos
+	// Calculate the density of symbols
 	symbolDensity := float64(semicolons+braces) / float64(len(content))
 	
 	return symbolDensity > 0.02 // 2% threshold

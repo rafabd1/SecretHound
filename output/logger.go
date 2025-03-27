@@ -9,7 +9,6 @@ import (
 	"github.com/fatih/color"
 )
 
-// LogLevel represents the severity level of a log message
 type LogLevel int
 
 const (
@@ -98,20 +97,18 @@ func (l *Logger) writeLog(msg LogMessage) {
         return
     }
 
-    // Acesso ao TerminalController para coordenação da saída
+    // Get the terminal controller for coordinating output
     tc := GetTerminalController()
     
-    // Guarde uma referência ao ProgressBar para evitar lock durante a escrita
     l.progressMu.Lock()
     pb := l.progressBar
     l.progressMu.Unlock()
     
-    // Pausa na renderização se existir uma barra de progresso
+    // Pause the progress bar if it exists
     if pb != nil {
         pb.PauseRender()
     }
     
-    // Usar o controlador de terminal para coordenar a saída
     tc.CoordinateOutput(func() {
         // Format and print the log message
         timestamp := l.timeColor("[%s]", msg.Time.Format("15:04:05"))
@@ -139,9 +136,9 @@ func (l *Logger) writeLog(msg LogMessage) {
         fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
     })
     
-    // Se temos uma barra de progresso, restaure-a após o log
+    // Resume the progress bar if it exists
     if pb != nil {
-        // Pequena pausa para garantir que o log seja visível
+        // Allow some time for the output to be processed
         time.Sleep(1 * time.Millisecond)
         pb.ResumeRender()
     }
@@ -204,27 +201,21 @@ func (l *Logger) SecretFound(secretType, value, url string) {
 	l.Success("Found %s: %s in %s", secretType, truncatedValue, url)
 }
 
-// Melhorar a implementação da função Flush para garantir que todas as mensagens de log sejam processadas
-
+// ProgressBar returns the current progress bar
 func (l *Logger) Flush() {
-    // Implementação mais robusta para drenar a fila de log
     startTime := time.Now()
     maxWaitTime := 500 * time.Millisecond
     
     for len(l.logQueue) > 0 {
-        // Verificar se excedeu o tempo máximo de espera
         if time.Since(startTime) > maxWaitTime {
             break
         }
-        
-        // Pausa breve para dar chance de processar
+    
         time.Sleep(10 * time.Millisecond)
     }
     
-    // Pausa final para garantir processamento de mensagens
     time.Sleep(50 * time.Millisecond)
     
-    // Garantir que a barra de progresso seja finalizada corretamente
     l.progressMu.Lock()
     if l.progressBar != nil {
         l.progressBar.Stop()
@@ -234,15 +225,12 @@ func (l *Logger) Flush() {
     l.progressMu.Unlock()
 }
 
-// Close garante que todas as mensagens de log sejam processadas antes de encerrar
+// Close closes the logger and flushes any remaining log messages
 func (l *Logger) Close() {
-    // Primeiro, drene a fila
     l.Flush()
     
-    // Sinalize que nenhuma nova mensagem deve ser aceita
     close(l.done)
     
-    // Libere recursos associados à barra de progresso
     l.progressMu.Lock()
     if l.progressBar != nil {
         l.progressBar.Stop()
@@ -252,12 +240,10 @@ func (l *Logger) Close() {
     l.progressMu.Unlock()
 }
 
-// IsVerbose returns whether the logger is in verbose mode
 func (l *Logger) IsVerbose() bool {
 	return l.verbose
 }
 
-// SetVerbose sets the verbose mode
 func (l *Logger) SetVerbose(verbose bool) {
 	l.outputMu.Lock()
 	defer l.outputMu.Unlock()

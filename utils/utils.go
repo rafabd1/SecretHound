@@ -184,7 +184,7 @@ func ContainsAny(s string, substrings ...string) bool {
 
 // IsTerminal checks if the given file descriptor is a terminal
 func IsTerminal(fd uintptr) bool {
-	// No Windows, we need to use syscall from the golang.org/x/sys/windows package
+	// On Windows, we need to use syscall from the golang.org/x/sys/windows package
 	// For Unix-like systems, we'd use isatty from golang.org/x/sys/unix
 	// For simplicity, we'll just check for colorable output
 	// If we want exact terminal detection, we'd need to add the sys packages

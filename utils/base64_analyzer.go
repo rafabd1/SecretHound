@@ -83,10 +83,9 @@ func IsLikelyBinaryData(str string) bool {
 	return nonPrintable > threshold
 }
 
-// IsLikelyBase64Fragment verifica se uma string parece ser um fragmento de Base64
-// que provavelmente não contém um segredo
+// IsLikelyBase64Fragment checks if a string is likely a fragment of base64 data
 func IsLikelyBase64Fragment(str string) bool {
-    // Fragmentos de Base64 que geralmente aparecem em CSS ou em dados de estilo
+    // Common prefixes that indicate a fragment of base64 data
     commonPrefixes := []string{
         "AAA", "eJy", "base64", "iVBOR", "PHN2", "PD94", "PCFET", "ZXlK",
         "77u/", "QUJD", "Qk1X", "QkdH", "AoAEA", "d2lkdGg", "aGVpZ2h0",
@@ -98,7 +97,7 @@ func IsLikelyBase64Fragment(str string) bool {
         }
     }
     
-    // Verificar padrões comuns em dados codificados em Base64
+    // Check for common patterns that indicate a fragment of base64 data
     patternIndicators := []string{
         "AAAA", "////", "----", "abcd", "0000", "1111", "2222", "eeee",
         "ffff", "9999",
@@ -111,19 +110,16 @@ func IsLikelyBase64Fragment(str string) bool {
         }
     }
     
-    // Se contém vários padrões repetitivos, provavelmente é um 
-    // fragmento de dados codificados, não um segredo
+    // If more than 2 common patterns are found, it's likely a fragment of base64 data
     return patternCount >= 2
 }
 
-// Atualizar a função IsLikelySecretInBase64
 func IsLikelySecretInBase64(str string) bool {
-    // Se é fragmento comum de Base64, não é segredo
+    // If the string is a likely base64 fragment, return false
     if IsLikelyBase64Fragment(str) {
         return false
     }
     
-    // Resto da função original...
     if !IsBase64Encoded(str) || len(str) < 20 || len(str) > 1000 {
         return false
     }

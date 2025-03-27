@@ -53,7 +53,6 @@ func (p *Processor) ProcessJSContent(content string, url string) ([]Secret, erro
 	p.stats.TotalBytesRead += int64(len(content))
 	p.mu.Unlock()
 	
-	// Verificar se é JavaScript minificado para aplicar filtros mais rígidos
 	isMinified := utils.IsMinifiedJavaScript(content)
 	
 	// Use the regex manager to find secrets in the content
@@ -61,11 +60,9 @@ func (p *Processor) ProcessJSContent(content string, url string) ([]Secret, erro
 	var err error
 	
 	if isMinified {
-		// Para JS minificado, aplicar filtros mais rígidos
 		p.logger.Debug("Content appears to be minified JavaScript, applying strict filters")
 		secrets, err = p.regexManager.FindSecretsWithStrictFiltering(content, url)
 	} else {
-		// Análise normal para código não minificado
 		secrets, err = p.regexManager.FindSecrets(content, url)
 	}
 	
@@ -79,7 +76,7 @@ func (p *Processor) ProcessJSContent(content string, url string) ([]Secret, erro
 	// Apply context filtering
 	secrets = p.filterByContext(secrets)
 	
-	// Pós-processamento para reduzir falsos positivos
+	// Perform additional filtering to remove false positives
 	filteredSecrets := p.filterFalsePositives(secrets)
 	
 	// Log each found secret
@@ -96,11 +93,10 @@ func (p *Processor) ProcessJSContent(content string, url string) ([]Secret, erro
 	return filteredSecrets, nil
 }
 
-// filterFalsePositives aplica filtragem adicional para remover falsos positivos
+// filterFalsePositives applies additional filtering to remove false positives
 func (p *Processor) filterFalsePositives(secrets []Secret) []Secret {
     filtered := make([]Secret, 0, len(secrets))
     
-    // Palavras específicas que indicam alta probabilidade de falso positivo
     falsePositiveIndicators := []string{
         "function", "return", "var ", "let ", "const ", "if ", "else ", "for ", "while ",
         "!0", "!1", "null", "undefined", "NaN", "Infinity",
@@ -113,7 +109,7 @@ func (p *Processor) filterFalsePositives(secrets []Secret) []Secret {
         "eJy", "AAA", "base64",
     }
     
-    // Mapear tipos de segredos a palavras-chave específicas que devem estar presentes no contexto
+    // Map of required context keywords for specific secret types
     requiredContextKeywords := map[string][]string{
         "twilio_account_sid": {"Twilio", "twilio", "account", "sid", "auth", "token"},
         "twilio_app_sid": {"Twilio", "twilio", "app", "application", "sid", "auth"},
@@ -121,17 +117,17 @@ func (p *Processor) filterFalsePositives(secrets []Secret) []Secret {
     }
     
     for _, secret := range secrets {
-        // Verificar se é base64 e provavelmente não é um segredo
+        // Check if it is base64 and likely not a secret
         if utils.IsBase64Encoded(secret.Value) && !utils.IsLikelySecretInBase64(secret.Value) {
             continue
         }
         
-        // Verificar se o conteúdo parece ser um fragmento de Base64
+        // Check if the content appears to be a Base64 fragment
         if utils.IsLikelyBase64Fragment(secret.Value) {
             continue
         }
         
-        // Verificar indicadores de falso positivo no contexto
+        // Check for false positive indicators in the context
         isValid := true
         for _, indicator := range falsePositiveIndicators {
             if strings.Contains(strings.ToLower(secret.Context), indicator) {
@@ -140,7 +136,7 @@ func (p *Processor) filterFalsePositives(secrets []Secret) []Secret {
             }
         }
         
-        // Para certos tipos de segredos, verificar se o contexto contém palavras-chave necessárias
+        // For certain types of secrets, check if the context contains required keywords
         if required, exists := requiredContextKeywords[secret.Type]; exists {
             hasRequiredKeyword := false
             for _, keyword := range required {
@@ -150,15 +146,15 @@ func (p *Processor) filterFalsePositives(secrets []Secret) []Secret {
                 }
             }
             
-            // Se não encontrou nenhuma palavra-chave necessária, é provavelmente falso positivo
+            // If no required keyword is found, it is likely a false positive
             if !hasRequiredKeyword {
                 isValid = false
             }
         }
         
-        // Verificar formato específico para credenciais
+        // Check specific format for credentials
         if strings.Contains(secret.Type, "password") || strings.Contains(secret.Type, "credentials") {
-            // Credenciais falsas comuns como password:true, password:!0, etc.
+            // Common false credentials like password:true, password:!0, etc.
             if strings.Contains(secret.Context, "password:true") ||
                strings.Contains(secret.Context, "password:!0") ||
                strings.Contains(secret.Context, "password:null") {
@@ -166,12 +162,12 @@ func (p *Processor) filterFalsePositives(secrets []Secret) []Secret {
             }
         }
         
-        // Verificar se parece cabeçalho de módulo JavaScript
+        // Check if it looks like a JavaScript module header
         if strings.Contains(secret.Type, "aws") && strings.Contains(secret.Context, "w3.org/TR") {
             isValid = false
         }
         
-        // Regras específicas para UUID em contextos não relacionados a segredos
+        // Specific rules for UUID in contexts unrelated to secrets
         if strings.Contains(secret.Type, "Heroku") || strings.Contains(secret.Type, "UUID") {
             uiContextKeywords := []string{"target", "element", "styleBlock", "id:", "appliesTo"}
             for _, keyword := range uiContextKeywords {
@@ -190,7 +186,7 @@ func (p *Processor) filterFalsePositives(secrets []Secret) []Secret {
     return filtered
 }
 
-// filterByContext verifica se um segredo potencial é válido com base no contexto
+// filterByContext checks if a potential secret is valid based on its context
 func (p *Processor) filterByContext(secrets []Secret) []Secret {
     filtered := make([]Secret, 0, len(secrets))
     

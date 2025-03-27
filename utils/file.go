@@ -114,52 +114,6 @@ func IsTextFile(filePath string) bool {
 	return !IsBinaryFile(filePath)
 }
 
-// Adjust to ensure text files with unusual names are processed
-func isTextFileExtension(ext string) bool {
-    textExtensions := map[string]bool{
-        ".js":     true,
-        ".jsx":    true,
-        ".ts":     true,
-        ".tsx":    true,
-        ".html":   true,
-        ".htm":    true,
-        ".css":    true,
-        ".scss":   true,
-        ".less":   true,
-        ".json":   true,
-        ".xml":    true,
-        ".yaml":   true,
-        ".yml":    true,
-        ".md":     true,
-        ".txt":    true,
-        ".csv":    true,
-        ".tsv":    true,
-        ".log":    true,
-        ".config": true,
-        ".conf":   true,
-        ".ini":    true,
-        ".properties": true,
-        ".gradle": true,
-        ".sh":     true,
-        ".bat":    true,
-        ".cmd":    true,
-        ".ps1":    true,
-        ".py":     true,
-        ".java":   true,
-        ".c":      true,
-        ".cpp":    true,
-        ".h":      true,
-        ".hpp":    true,
-        ".go":     true,
-        ".rb":     true,
-        ".php":    true,
-        ".pl":     true,
-        ".sql":    true,
-    }
-    
-    return textExtensions[ext]
-}
-
 // IsReadableFile checks if a file exists and is readable
 func IsReadableFile(filePath string) bool {
 	// Try to open the file
