@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/secrethound/utils"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 // DomainManager groups URLs by domain and manages blocked domains

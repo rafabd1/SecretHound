@@ -1,4 +1,4 @@
-module github.com/secrethound
+module github.com/rafabd1/SecretHound
 
 go 1.24
 

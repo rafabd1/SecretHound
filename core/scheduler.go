@@ -9,9 +9,9 @@ import (
 
 	"github.com/fatih/color"
 
-	"github.com/secrethound/networking"
-	"github.com/secrethound/output"
-	"github.com/secrethound/utils"
+	"github.com/rafabd1/SecretHound/networking"
+	"github.com/rafabd1/SecretHound/output"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 // Scheduler manages the balancing of requests between threads
