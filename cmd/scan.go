@@ -548,7 +548,51 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 	time.Sleep(100 * time.Millisecond)
 
 	// Start processing
-	return scheduler.Schedule(validURLs)
+	err := scheduler.Schedule(validURLs)
+	
+	// Get the scheduler stats
+	schedulerStats := scheduler.GetStats()
+	
+	// Display final statistics
+	timeColor = color.New(color.FgHiBlack).SprintfFunc()
+	
+	// Calculate processing rate and duration
+	duration := schedulerStats.EndTime.Sub(schedulerStats.StartTime)
+	urlsPerSecond := float64(schedulerStats.ProcessedURLs) / duration.Seconds()
+	
+	// Display final statistics
+	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		fmt.Sprintf("Remote URL processing completed in %.2f seconds", duration.Seconds()))
+	
+	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		fmt.Sprintf("Processed %d URLs (%.2f URLs/second)", schedulerStats.ProcessedURLs, urlsPerSecond))
+	
+	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		fmt.Sprintf("Failed to process %d URLs", schedulerStats.FailedURLs))
+	
+	// Display rate limit and WAF information
+	if schedulerStats.RateLimitHits > 0 || schedulerStats.WAFBlockHits > 0 {
+		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+			timeStr,
+			color.CyanString("[INFO]"), 
+			fmt.Sprintf("Encountered rate limiting %d times, WAF blocks %d times", 
+				schedulerStats.RateLimitHits, schedulerStats.WAFBlockHits))
+	}
+	
+	// Force a pause to ensure all messages are processed
+	time.Sleep(100 * time.Millisecond)
+	
+	return err
 }
 
 // processLocalFiles processes local files using a direct file reading approach
