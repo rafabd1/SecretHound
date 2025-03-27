@@ -78,6 +78,9 @@ func (w *Writer) WriteSecret(secretType, value, url, context string, line int) e
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	// Increment secret count
+	w.count++
+
 	// Create output object based on format
 	var output string
 	if w.jsonMode {
@@ -97,12 +100,18 @@ func (w *Writer) WriteSecret(secretType, value, url, context string, line int) e
 			return fmt.Errorf("failed to marshal JSON: %v", err)
 		}
 
-		output = string(jsonBytes)
+		// Add commas between objects
+		if w.count > 1 {
+			output = ",\n" + string(jsonBytes)
+		} else {
+			output = string(jsonBytes)
+		}
 	} else {
 		// Create text output
 		output = fmt.Sprintf("[%s] %s\nURL: %s\nContext: %s\nTimestamp: %s\n\n",
 			secretType, value, url, context, time.Now().Format(time.RFC3339))
 	}
+	
 	// Write to file
 	_, err := fmt.Fprintln(w.file, output)
 	return err
