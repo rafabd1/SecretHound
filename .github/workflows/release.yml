@@ -28,14 +28,17 @@ jobs:
           # Create build directories
           mkdir -p dist
           
+          # Set build flags
+          BUILD_FLAGS="-s -w -X github.com/rafabd1/SecretHound/cmd.Version=${VERSION} -X github.com/rafabd1/SecretHound/cmd.BuildDate=$(date -u +%Y-%m-%d) -X github.com/rafabd1/SecretHound/cmd.GitCommit=${GITHUB_SHA}"
+          
           # Build for Linux
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/secrethound-linux-amd64 ./cmd/secrethound
+          GOOS=linux GOARCH=amd64 go build -ldflags="${BUILD_FLAGS}" -o dist/secrethound-linux-amd64 ./cmd/secrethound
           
           # Build for Windows
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/secrethound-windows-amd64.exe ./cmd/secrethound
+          GOOS=windows GOARCH=amd64 go build -ldflags="${BUILD_FLAGS}" -o dist/secrethound-windows-amd64.exe ./cmd/secrethound
           
           # Build for macOS
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/secrethound-darwin-amd64 ./cmd/secrethound
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${BUILD_FLAGS}" -o dist/secrethound-darwin-amd64 ./cmd/secrethound
           
           # Create checksums
           cd dist
