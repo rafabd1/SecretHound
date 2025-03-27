@@ -42,9 +42,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// Initialize logger
 	logger := output.NewLogger(verbose)
 
-	// Força exibir a mensagem inicial independente do modo verbose
-	fmt.Fprintf(os.Stderr, "[%s] %s %s\n",
-		time.Now().Format("15:04:05"),
+	timeColor := color.New(color.FgHiBlack).SprintfFunc()
+	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
+		timeStr,
 		color.CyanString("[INFO]"),
 		"Starting SecretHound scan")
 
@@ -77,7 +79,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// Use a WaitGroup to track when processing is actually complete
 	var wg sync.WaitGroup
-    
+	
 	// Process remote URLs
 	if len(remoteURLs) > 0 {
 		wg.Add(1)
@@ -111,16 +113,46 @@ func runScan(cmd *cobra.Command, args []string) error {
 	select {
 	case <-done:
 		// Normal completion
-		logger.Info("All processing completed successfully")
+		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+			timeStr,
+			color.CyanString("[INFO]"), 
+			"All processing completed successfully")
 	case <-time.After(5 * time.Minute): // Maximum runtime - adjust as needed
-		logger.Warning("Processing timed out after 5 minutes, forcing exit")
+		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+			timeStr,
+			color.YellowString("[WARNING]"), 
+			"Processing timed out after 5 minutes, forcing exit")
 	}
 
 	logger.Flush()
 	
 	time.Sleep(500 * time.Millisecond)
 
-	fmt.Fprintln(os.Stderr, "\nScan completed. Exiting.")
+	if writer != nil {
+		secretCount := writer.GetCount()
+		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+			timeStr,
+			color.GreenString("[SUCCESS]"), 
+			fmt.Sprintf("Found a total of %d secrets", secretCount))
+		
+		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+			timeStr,
+			color.CyanString("[INFO]"), 
+			fmt.Sprintf("Results saved to: %s", outputFile))
+	}
+
+	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "\n%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		"Scan completed. Exiting.")
+	
+	time.Sleep(200 * time.Millisecond)
+	
 	os.Exit(0)
 
 	return nil
@@ -131,7 +163,7 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
     var inputs []string
 
     // First, collect from command line arguments
-    if len(args) > 0 {
+    if (len(args) > 0) {
         for _, arg := range args {
             arg = filepath.FromSlash(arg)
             
@@ -433,13 +465,17 @@ func categorizeInputs(inputs []string) ([]string, []string) {
 
 // logInputSummary logs summary information about the inputs
 func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
-	fmt.Fprintf(os.Stderr, "[%s] %s %s\n",
-		time.Now().Format("15:04:05"),
+	timeColor := color.New(color.FgHiBlack).SprintfFunc()
+	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+	
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
+		timeStr,
 		color.CyanString("[INFO]"),
 		fmt.Sprintf("Found %d remote URLs to scan", len(remoteURLs)))
 
-	fmt.Fprintf(os.Stderr, "[%s] %s %s\n",
-		time.Now().Format("15:04:05"),
+	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
+		timeStr,
 		color.CyanString("[INFO]"),
 		fmt.Sprintf("Found %d local files to scan", len(localFiles)))
 }
@@ -461,8 +497,11 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 		return fmt.Errorf("no valid URLs found")
 	}
 
-	fmt.Fprintf(os.Stderr, "[%s] %s %s\n",
-		time.Now().Format("15:04:05"),
+	timeColor := color.New(color.FgHiBlack).SprintfFunc()
+	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
+		timeStr,
 		color.CyanString("[INFO]"),
 		fmt.Sprintf("Processing %d valid remote URLs", len(validURLs)))
 
@@ -480,18 +519,21 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 	patternCount := regexManager.GetPatternCount()
 	domainCount := domainManager.GetDomainCount()
 
-	fmt.Fprintf(os.Stderr, "[%s] %s %s\n",
-		time.Now().Format("15:04:05"),
+	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
+		timeStr,
 		color.CyanString("[INFO]"),
 		fmt.Sprintf("Using %d regex patterns to search for secrets", patternCount))
 
-	fmt.Fprintf(os.Stderr, "[%s] %s %s\n",
-		time.Now().Format("15:04:05"),
+	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
+		timeStr,
 		color.CyanString("[INFO]"),
 		fmt.Sprintf("URLs are distributed across %d domains", domainCount))
 
-	fmt.Fprintf(os.Stderr, "[%s] %s %s\n",
-		time.Now().Format("15:04:05"),
+	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
+		timeStr,
 		color.CyanString("[INFO]"),
 		fmt.Sprintf("Running with %d concurrent workers", concurrency))
 
@@ -551,14 +593,20 @@ func createAndInitRegexManager(logger *output.Logger) *core.RegexManager {
 				logger.Error("Failed to load predefined regex patterns: %v", err)
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "[%s] %s %s\n",
-				time.Now().Format("15:04:05"),
+			// Usar timeColor para garantir que os timestamps estejam na cor dim
+			timeColor := color.New(color.FgHiBlack).SprintfFunc()
+			timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+			fmt.Fprintf(os.Stderr, "%s %s %s\n",
+				timeStr,
 				color.CyanString("[INFO]"),
 				fmt.Sprintf("Loaded regex patterns from file: %s", regexFile))
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "[%s] %s %s\n",
-			time.Now().Format("15:04:05"),
+		// Usar timeColor para garantir que os timestamps estejam na cor dim
+		timeColor := color.New(color.FgHiBlack).SprintfFunc()
+		timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+		fmt.Fprintf(os.Stderr, "%s %s %s\n",
+			timeStr,
 			color.CyanString("[INFO]"),
 			"Using built-in regex patterns")
 

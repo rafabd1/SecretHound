@@ -53,13 +53,13 @@ func NewLogger(verbose bool) *Logger {
 		logQueue: make(chan LogMessage, 100), // Buffer for 100 log messages
 		done:     make(chan struct{}),
 
-		// Initialize color functions
+		 // Ensure all colors use the same function for time
+		timeColor:    color.New(color.FgHiBlack).SprintfFunc(),
 		debugColor:   color.New(color.FgHiBlack).SprintfFunc(),
 		infoColor:    color.New(color.FgCyan).SprintfFunc(),
 		warningColor: color.New(color.FgYellow).SprintfFunc(),
 		errorColor:   color.New(color.FgRed, color.Bold).SprintfFunc(),
 		successColor: color.New(color.FgGreen, color.Bold).SprintfFunc(),
-		timeColor:    color.New(color.FgHiBlack).SprintfFunc(),
 	}
 
 	// Start log processor in background
@@ -110,7 +110,7 @@ func (l *Logger) writeLog(msg LogMessage) {
     }
     
     tc.CoordinateOutput(func() {
-        // Format and print the log message
+        // Format and print the log message with consistent dim timestamp
         timestamp := l.timeColor("[%s]", msg.Time.Format("15:04:05"))
         var prefix string
         var formatted string
@@ -206,6 +206,7 @@ func (l *Logger) Flush() {
     startTime := time.Now()
     maxWaitTime := 500 * time.Millisecond
     
+    // Wait for the log queue to be empty or until the max wait time is reached
     for len(l.logQueue) > 0 {
         if time.Since(startTime) > maxWaitTime {
             break
@@ -214,7 +215,7 @@ func (l *Logger) Flush() {
         time.Sleep(10 * time.Millisecond)
     }
     
-    time.Sleep(50 * time.Millisecond)
+    time.Sleep(100 * time.Millisecond)
     
     l.progressMu.Lock()
     if l.progressBar != nil {
@@ -223,6 +224,11 @@ func (l *Logger) Flush() {
         l.progressBar = nil
     }
     l.progressMu.Unlock()
+    
+    tc := GetTerminalController()
+    if tc.IsTerminal() {
+        tc.ClearLine()
+    }
 }
 
 // Close closes the logger and flushes any remaining log messages

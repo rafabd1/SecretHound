@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/secrethound/output"
 	"github.com/secrethound/utils"
 )
@@ -221,13 +222,29 @@ cleanup:
 	s.stats.TotalSecrets = secretsFound
 	duration := s.stats.EndTime.Sub(s.stats.StartTime)
 	filesPerSecond := float64(s.stats.ProcessedFiles) / duration.Seconds()
+	totalProcessed := s.stats.ProcessedFiles
 	s.mu.Unlock()
+
+	timeColor := color.New(color.FgHiBlack).SprintfFunc()
+	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
 	
-	// Print statistics
-	s.logger.Info("Local file processing completed in %.2f seconds", duration.Seconds())
-	s.logger.Info("Processed %d files (%.2f files/second)", s.stats.ProcessedFiles, filesPerSecond)
-	s.logger.Info("Found %d secrets in local files", secretsFound)
-	s.logger.Info("Failed to process %d files", s.stats.FailedFiles)
+	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		fmt.Sprintf("Local file processing completed in %.2f seconds", duration.Seconds()))
+	
+	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		fmt.Sprintf("Processed %d files (%.2f files/second)", totalProcessed, filesPerSecond))
+	
+	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		fmt.Sprintf("Failed to process %d files", s.stats.FailedFiles))
+	
+	// Force a pause to ensure all messages are processed
+	time.Sleep(100 * time.Millisecond)
 	
 	// Flush logger to ensure all messages are processed
 	s.logger.Flush()
