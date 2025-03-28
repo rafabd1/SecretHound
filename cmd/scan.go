@@ -109,22 +109,15 @@ func runScan(cmd *cobra.Command, args []string) error {
 		close(done)
 	}()
 
-	// Wait with timeout to avoid hanging indefinitely
-	select {
-	case <-done:
-		// Normal completion
-		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-			timeStr,
-			color.CyanString("[INFO]"), 
-			"All processing completed successfully")
-	case <-time.After(5 * time.Minute): // Maximum runtime - adjust as needed
-		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-			timeStr,
-			color.YellowString("[WARNING]"), 
-			"Processing timed out after 5 minutes, forcing exit")
-	}
+	// Wait for processing to complete without a timeout
+	<-done
+	
+	// Normal completion
+	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		"All processing completed successfully")
 
 	logger.Flush()
 	

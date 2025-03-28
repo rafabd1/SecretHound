@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,9 +22,10 @@ const (
 
 // LogMessage represents a log message in the queue
 type LogMessage struct {
-	Level   LogLevel
-	Message string
-	Time    time.Time
+	Level     LogLevel
+	Message   string
+	Time      time.Time
+	Critical  bool    // Flag for critical messages that should be shown regardless of verbose mode
 }
 
 // Logger provides structured logging with queue management
@@ -92,11 +94,23 @@ func (l *Logger) processLogs() {
 
 // writeLog writes a log message to the console
 func (l *Logger) writeLog(msg LogMessage) {
-    // Skip INFO, DEBUG and WARNING messages if not in verbose mode
-    if !l.verbose && (msg.Level == INFO || msg.Level == DEBUG || msg.Level == WARNING) {
+    // Skip DEBUG messages if not in verbose mode
+    if !l.verbose && msg.Level == DEBUG {
         return
     }
-
+    
+    // Skip INFO and WARNING messages if not in verbose mode
+    if !l.verbose && (msg.Level == INFO || msg.Level == WARNING) {
+        return
+    }
+    
+    // Skip ERROR messages if not in verbose mode and not critical
+    if !l.verbose && msg.Level == ERROR && !msg.Critical {
+        return
+    }
+    
+    // Always show SUCCESS messages regardless of verbose mode
+    
     // Get the terminal controller for coordinating output
     tc := GetTerminalController()
     
@@ -151,6 +165,7 @@ func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) 
 		Level:   level,
 		Message: fmt.Sprintf(format, args...),
 		Time:    time.Now(),
+		Critical: isCriticalMessage(level, format),
 	}
 
 	// Non-blocking send to the log queue
@@ -163,6 +178,34 @@ func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) 
 		l.writeLog(msg)
 		l.outputMu.Unlock()
 	}
+}
+
+// isCriticalMessage determines if a message is critical and should be shown regardless of verbose mode
+func isCriticalMessage(level LogLevel, message string) bool {
+	// All success messages are considered critical
+	if level == SUCCESS {
+		return true
+	}
+	
+	// Only check ERROR messages for criticality
+	if level == ERROR {
+		criticalPatterns := []string{
+			"failed to create output file",
+			"no valid input sources found",
+			"failed to access input file",
+			"failed to load regex patterns",
+			"timeout exceeded",
+			"fatal error",
+		}
+		
+		for _, pattern := range criticalPatterns {
+			if strings.Contains(strings.ToLower(message), pattern) {
+				return true
+			}
+		}
+	}
+	
+	return false
 }
 
 // Debug logs a debug message (only shown in verbose mode)
