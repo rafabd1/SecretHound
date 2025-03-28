@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
         
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -24,42 +26,65 @@ jobs:
           
       - name: Get version from tag
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
         
       - name: Build for all platforms
         run: |
-          # Create build directories
-          mkdir -p dist
-          
-          # Set build flags
-          BUILD_FLAGS="-s -w -X github.com/rafabd1/SecretHound/cmd.Version=${VERSION} -X github.com/rafabd1/SecretHound/cmd.BuildDate=$(date -u +%Y-%m-%d) -X github.com/rafabd1/SecretHound/cmd.GitCommit=${GITHUB_SHA}"
-          
-          # Build for Linux
-          GOOS=linux GOARCH=amd64 go build -ldflags="${BUILD_FLAGS}" -o dist/secrethound-linux-amd64 ./cmd/secrethound
+          BUILD_DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          GIT_COMMIT=$(git rev-parse --short HEAD)
           
           # Build for Windows
-          GOOS=windows GOARCH=amd64 go build -ldflags="${BUILD_FLAGS}" -o dist/secrethound-windows-amd64.exe ./cmd/secrethound
+          GOOS=windows GOARCH=amd64 go build -ldflags "-X github.com/rafabd1/SecretHound/cmd.Version=${{ env.VERSION }} -X 'github.com/rafabd1/SecretHound/cmd.BuildDate=${BUILD_DATE}' -X github.com/rafabd1/SecretHound/cmd.GitCommit=${GIT_COMMIT}" -o secrethound-${{ env.VERSION }}-windows-amd64.exe ./cmd/secrethound/
+          
+          # Build for Linux
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/rafabd1/SecretHound/cmd.Version=${{ env.VERSION }} -X 'github.com/rafabd1/SecretHound/cmd.BuildDate=${BUILD_DATE}' -X github.com/rafabd1/SecretHound/cmd.GitCommit=${GIT_COMMIT}" -o secrethound-${{ env.VERSION }}-linux-amd64 ./cmd/secrethound/
           
           # Build for macOS
-          GOOS=darwin GOARCH=amd64 go build -ldflags="${BUILD_FLAGS}" -o dist/secrethound-darwin-amd64 ./cmd/secrethound
-          
-          # Create checksums
-          cd dist
-          sha256sum secrethound-linux-amd64 secrethound-windows-amd64.exe secrethound-darwin-amd64 > checksums.txt
-          cd ..
-          
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/rafabd1/SecretHound/cmd.Version=${{ env.VERSION }} -X 'github.com/rafabd1/SecretHound/cmd.BuildDate=${BUILD_DATE}' -X github.com/rafabd1/SecretHound/cmd.GitCommit=${GIT_COMMIT}" -o secrethound-${{ env.VERSION }}-darwin-amd64 ./cmd/secrethound/
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            dist/secrethound-linux-amd64
-            dist/secrethound-windows-amd64.exe
-            dist/secrethound-darwin-amd64
-            dist/checksums.txt
-          name: SecretHound ${{ env.VERSION }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: SecretHound v${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            secrethound-${{ env.VERSION }}-windows-amd64.exe
+            secrethound-${{ env.VERSION }}-linux-amd64
+            secrethound-${{ env.VERSION }}-darwin-amd64
+          body: |
+            # SecretHound v${{ env.VERSION }}
+            
+            ## Improvements
+            - Removed global execution timeout allowing scans to run without time constraints
+            - Enhanced error logging with better visibility for critical errors
+            - Improved log output reducing redundant messages and clarifying statistics
+            - Fixed build information display in version command
+            - Added proper build date and git commit tracking
+            - Optimized progress display with cleaner output
+            
+            ## Bug Fixes
+            - Fixed issue with timeout prematurely ending large scans
+            - Resolved silent errors in verbose mode
+            
+            ## Installation
+            
+            Download the appropriate binary for your platform and make it executable.
+            
+            For Linux/macOS:
+            ```
+            chmod +x secrethound-${{ env.VERSION }}-linux-amd64
+            ./secrethound-${{ env.VERSION }}-linux-amd64
+            ```
+            
+            For Go users:
+            ```
+            go install github.com/rafabd1/SecretHound/cmd/secrethound@latest
+            ```
+            
+            ## Documentation
+            
+            See the [documentation](https://github.com/rafabd1/SecretHound/tree/main/docs) for details on usage.
