@@ -117,7 +117,6 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	}()
 
 	// Create a custom worker pool with semaphore instead of using a more complex pool
-	// This simplifies the concurrency model and reduces risk of deadlocks
 	var wg sync.WaitGroup
 	resultChan := make(chan int, len(files))
 	errorChan := make(chan error, len(files))
@@ -125,7 +124,7 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	// Semaphore to limit concurrency
 	sem := make(chan struct{}, s.concurrency)
 	
-	// Launch workers for each file - simplified from previous approach
+	// Launch workers for each file
 	for _, file := range files {
 		filePath := file // Create a copy for closure
 		wg.Add(1)
@@ -164,14 +163,11 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		close(done) // Signal ticker to stop
 	}()
 	
-	// Add a timeout for the whole operation
-	timeout := time.After(5 * time.Minute)
-	
-	// Process results until channels are closed
+	// Process results without a timeout
 	secretsFound := 0
 	var errorList []error
 	
-	// Keep reading from channels until either timeout or completion
+	// Keep reading from channels until completion
 	filesProcessed := 0
 	totalFiles := len(files)
 	
@@ -191,14 +187,9 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 			}
 			errorList = append(errorList, err)
 			filesProcessed++
-		case <-timeout:
-			// Timeout occurred
-			s.logger.Warning("Processing timed out after 5 minutes")
-			goto cleanup
 		}
 	}
 	
-cleanup:
 	// Make sure ticker goroutine is stopped
 	if done != nil {
 		select {

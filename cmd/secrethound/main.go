@@ -21,14 +21,6 @@ func main() {
 	// Setup signal handling for graceful exit
 	setupSignalHandling()
 
-	// Set a global timeout to prevent hanging
-	go func() {
-		// Maximum time the program can run (adjust as needed)
-		time.Sleep(10 * time.Minute)
-		fmt.Fprintf(os.Stderr, "\nForced exit after 10 minutes timeout\n")
-		os.Exit(0)
-	}()
-
 	// Execute the root command
 	cmd.Execute()
 }
