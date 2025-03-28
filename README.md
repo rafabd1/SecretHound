@@ -118,6 +118,7 @@ For more detailed information, see the [documentation directory](docs/):
 - [Usage Examples](docs/USAGE.md) - Detailed usage examples
 - [Technical Details](docs/TECHNICAL.md) - Internal architecture and design
 - [Supported Secrets](docs/SUPPORTED_SECRETS.md) - List of secret types detected
+- [Changelog](CHANGELOG.md) - Check the latest updates and version history
 
 ## Contributing
 
