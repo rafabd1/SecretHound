@@ -3,14 +3,35 @@
 # You can customize this file and use it with the --regex-file flag
 
 REGEX_PATTERNS = {
-    "aws_access_key": "AKIA[0-9A-Z]{16}",
-    "aws_secret_key": "[0-9a-zA-Z/+]{40}",
-    "github_token": "github_pat_[0-9a-zA-Z_]{82}",
-    "google_api_key": "AIza[0-9A-Za-z-_]{35}",
-    "firebase_key": "AAAA[A-Za-z0-9_-]{7}:[A-Za-z0-9_-]{140}",
-    "slack_token": "xox[pboa]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-z0-9]{32}",
-    "jwt_token": "eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+",
-    "private_key": "-----BEGIN [A-Z]+ PRIVATE KEY-----",
-    "password_in_code": "(?i)(pass|password|pwd|secret)\\s*[=:]\\s*['\"][^'\"]+['\"]",
-    "api_key_generic": "(?i)(api[-_]?key|apikey)\\s*[=:]\\s*['\"][^'\"]+['\"]"
+    // Custom API keys
+    "custom_api_key": "CustomApi[A-Za-z0-9]{24}",
+    "internal_token": "INT_[A-Za-z0-9_]{20,30}",
+    
+    // Custom credentials
+    "internal_password": "(?i)(internal_password|system_pwd)\\s*[:=]\\s*['\"](\\w{8,})['\"](\\s|$)",
+    "dev_key": "DEV_KEY_[a-zA-Z0-9]{16}",
+    
+    // Project-specific patterns
+    "project_secret": "PRJ_[a-zA-Z0-9]{5}_SECRET_[a-zA-Z0-9]{10}",
+    "config_password": "CONFIG_PWD[\"']\\s*:\\s*[\"']([^\"']{8,})[\"']",
+    
+    // Database connection strings
+    "mongodb_uri": "mongodb(\\+srv)?://[^:]+:[^@]+@[^/]+/[^\\s\"']+",
+    "postgresql_conn": "postgresql://[^:]+:[^@]+@[^/]+/[^\\s\"']+",
+    
+    // Environment-specific
+    "staging_key": "stg_[a-z]{3,5}_[A-Za-z0-9]{12}",
+    "testing_token": "test_token_[a-zA-Z0-9_]{16,24}"
 }
+
+// Example exclusions (optional)
+EXCLUSION_PATTERNS = [
+    // Standard test values that should be excluded
+    "test_token_placeholder",
+    "DEV_KEY_PLACEHOLDER",
+    
+    // Common development patterns
+    "stg_key_0000000000",
+    "PRJ_TEST_SECRET_0000000000"
+]
+
