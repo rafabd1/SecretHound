@@ -77,43 +77,23 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 		s.stats.StartTime = time.Now()
 		s.mutex.Unlock()
 
-		// Force log these important messages with direct terminal output to ensure visibility
-		timeColor := color.New(color.FgHiBlack).SprintfFunc()
-		timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
-		
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-			timeStr,
-			color.CyanString("[INFO]"), 
-			fmt.Sprintf("Starting to schedule %d URLs for processing", len(urls)))
-
 		// Group URLs by domain before scheduling
 		s.domainManager.GroupURLsByDomain(urls)
 		domains := s.domainManager.GetDomainList()
 		
-		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-			timeStr,
-			color.CyanString("[INFO]"), 
-			fmt.Sprintf("Grouped URLs into %d domains", len(domains)))
-
-		// Initialize the URL queue by distributing domains across workers
+		// Build the balanced work queue without redundant logging
 		s.buildBalancedWorkQueue(domains)
 
-		// Explicitly log important initial statistics to make sure they appear
-		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-			timeStr,
-			color.CyanString("[INFO]"), 
-			fmt.Sprintf("Using %d concurrent workers", s.concurrency))
-		
-		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		// Log only the rate limit info as it's not shown elsewhere
+		timeColor := color.New(color.FgHiBlack).SprintfFunc()
+		timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
 		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
 			timeStr,
 			color.CyanString("[INFO]"), 
 			fmt.Sprintf("Rate limit set to %d requests per domain", s.client.GetRateLimit()))
 
 		// Critical pause to ensure all initial stats are displayed
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
 		// Create and start progress bar
 		progressBar := output.NewProgressBar(len(urls), 40)

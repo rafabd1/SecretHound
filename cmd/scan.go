@@ -458,19 +458,15 @@ func categorizeInputs(inputs []string) ([]string, []string) {
 
 // logInputSummary logs summary information about the inputs
 func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
-	timeColor := color.New(color.FgHiBlack).SprintfFunc()
-	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
-	
-	fmt.Fprintf(os.Stderr, "%s %s %s\n",
-		timeStr,
-		color.CyanString("[INFO]"),
-		fmt.Sprintf("Found %d remote URLs to scan", len(remoteURLs)))
-
-	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-	fmt.Fprintf(os.Stderr, "%s %s %s\n",
-		timeStr,
-		color.CyanString("[INFO]"),
-		fmt.Sprintf("Found %d local files to scan", len(localFiles)))
+	if len(localFiles) > 0 {
+		timeColor := color.New(color.FgHiBlack).SprintfFunc()
+		timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+		
+		fmt.Fprintf(os.Stderr, "%s %s %s\n",
+			timeStr,
+			color.CyanString("[INFO]"),
+			fmt.Sprintf("Found %d local files to scan", len(localFiles)))
+	}
 }
 
 // processRemoteURLs processes remote URLs using the existing web scanning logic
@@ -490,14 +486,6 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 		return fmt.Errorf("no valid URLs found")
 	}
 
-	timeColor := color.New(color.FgHiBlack).SprintfFunc()
-	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
-
-	fmt.Fprintf(os.Stderr, "%s %s %s\n",
-		timeStr,
-		color.CyanString("[INFO]"),
-		fmt.Sprintf("Processing %d valid remote URLs", len(validURLs)))
-
 	// Create domain manager
 	domainManager := networking.NewDomainManager()
 	domainManager.GroupURLsByDomain(validURLs)
@@ -508,27 +496,18 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 	// Create regex manager and load patterns
 	regexManager := createAndInitRegexManager(logger)
 
-	// Print initial statistics
-	patternCount := regexManager.GetPatternCount()
-	domainCount := domainManager.GetDomainCount()
+	// Print initial statistics - consolidated to avoid redundancy
+	timeColor := color.New(color.FgHiBlack).SprintfFunc()
+	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
 
-	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
 	fmt.Fprintf(os.Stderr, "%s %s %s\n",
 		timeStr,
 		color.CyanString("[INFO]"),
-		fmt.Sprintf("Using %d regex patterns to search for secrets", patternCount))
-
-	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-	fmt.Fprintf(os.Stderr, "%s %s %s\n",
-		timeStr,
-		color.CyanString("[INFO]"),
-		fmt.Sprintf("URLs are distributed across %d domains", domainCount))
-
-	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-	fmt.Fprintf(os.Stderr, "%s %s %s\n",
-		timeStr,
-		color.CyanString("[INFO]"),
-		fmt.Sprintf("Running with %d concurrent workers", concurrency))
+		fmt.Sprintf("Processing %d URLs across %d domains with %d regex patterns (%d workers)",
+			len(validURLs),
+			domainManager.GetDomainCount(),
+			regexManager.GetPatternCount(),
+			concurrency))
 
 	// Create processor
 	processor := core.NewProcessor(regexManager, logger)
@@ -639,14 +618,7 @@ func createAndInitRegexManager(logger *output.Logger) *core.RegexManager {
 				fmt.Sprintf("Loaded regex patterns from file: %s", regexFile))
 		}
 	} else {
-		// Usar timeColor para garantir que os timestamps estejam na cor dim
-		timeColor := color.New(color.FgHiBlack).SprintfFunc()
-		timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s %s\n",
-			timeStr,
-			color.CyanString("[INFO]"),
-			"Using built-in regex patterns")
-
+			// Carregar padrões sem logar redundantemente
 		err := regexManager.LoadPredefinedPatterns()
 		if err != nil {
 			logger.Error("Failed to load predefined regex patterns: %v", err)
