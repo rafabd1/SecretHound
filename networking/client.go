@@ -87,6 +87,24 @@ func (c *Client) SetRequestHeader(key, value string) {
 	c.requestHeader[key] = value
 }
 
+// SetGlobalRateLimit sets the global rate limit for all domains
+func (c *Client) SetGlobalRateLimit(requestsPerSecond int) {
+	c.rateLimiter.mutex.Lock()
+	defer c.rateLimiter.mutex.Unlock()
+	
+	// Set global rate limit
+	c.rateLimiter.globalLimit = requestsPerSecond
+	
+	// Update all existing domain buckets
+	for _, bucket := range c.rateLimiter.domain {
+		bucket.mutex.Lock()
+		bucket.refillRate = requestsPerSecond
+		bucket.maxTokens = requestsPerSecond
+		bucket.tokens = requestsPerSecond 
+		bucket.mutex.Unlock()
+	}
+}
+
 // SetRateLimit sets the rate limit for requests to a specific domain
 func (c *Client) SetRateLimit(domain string, requestsPerSecond int) {
 	c.rateLimiter.mutex.Lock()
@@ -121,7 +139,7 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 
 	// Parse the URL
 	parsedURL, err := url.Parse(urlStr)
-	if err != nil {
+	if (err != nil) {
 		return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed to parse URL: %s", urlStr), err)
 	}
 
@@ -134,7 +152,7 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 
 	// Prepare the request
 	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
-	if err != nil {
+	if (err != nil) {
 		return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed to create request for URL: %s", urlStr), err)
 	}
 
@@ -160,7 +178,7 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 		}
 
 		resp, err = c.httpClient.Do(req)
-		if err != nil {
+		if (err != nil) {
 			if ctx.Err() == context.DeadlineExceeded {
 				return "", utils.NewError(utils.NetworkError, "request timed out", err)
 			}
@@ -221,7 +239,7 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 	}
 
 	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	if (err != nil) {
 		return "", utils.NewError(utils.NetworkError, "failed to read response body", err)
 	}
 
@@ -285,14 +303,15 @@ func (c *Client) checkRateLimit(domain string) error {
 
 // GetRateLimit returns the default rate limit per domain
 func (c *Client) GetRateLimit() int {
-    if c.rateLimiter == nil || len(c.rateLimiter.domain) == 0 {
-        return 3 // Default rate limit
-    }
-    // Return the first domain's rate limit as the default
-    for _, bucket := range c.rateLimiter.domain {
-        return bucket.refillRate
-    }
-    return 3
+	c.rateLimiter.mutex.Lock()
+	defer c.rateLimiter.mutex.Unlock()
+	
+	if c.rateLimiter.globalLimit > 0 {
+		return c.rateLimiter.globalLimit
+	}
+	
+	// Default rate limit if not set
+	return 3
 }
 
 // shouldRetryStatus determines if a request should be retried based on the status code

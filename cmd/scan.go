@@ -492,6 +492,11 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 
 	// Create HTTP client
 	client := networking.NewClient(timeout, maxRetries)
+	
+	// Apply global rate limit if set
+	if rateLimit > 0 {
+		client.SetGlobalRateLimit(rateLimit)
+	}
 
 	// Create regex manager and load patterns
 	regexManager := createAndInitRegexManager(logger)
@@ -508,6 +513,14 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 			domainManager.GetDomainCount(),
 			regexManager.GetPatternCount(),
 			concurrency))
+			
+	// Display timeout and rate limit info
+	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
+		timeStr,
+		color.CyanString("[INFO]"),
+		fmt.Sprintf("HTTP timeout: %d seconds | Rate limit: %d requests per domain", 
+			timeout, client.GetRateLimit()))
 
 	// Create processor
 	processor := core.NewProcessor(regexManager, logger)
