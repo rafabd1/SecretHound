@@ -241,38 +241,15 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	// Remove the progress bar from the logger
 	s.logger.SetProgressBar(nil)
 	
-	// Record end time and log summary
-	s.mu.Lock()
-	s.stats.EndTime = time.Now()
-	s.stats.TotalSecrets = secretsFound
-	duration := s.stats.EndTime.Sub(s.stats.StartTime)
-	filesPerSecond := float64(s.stats.ProcessedFiles) / duration.Seconds()
-	totalProcessed := s.stats.ProcessedFiles
-	s.mu.Unlock()
-
-	timeColor := color.New(color.FgHiBlack).SprintfFunc()
-	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+	// Importante: Aguardar a conclusão do processamento de todos os logs
+	// antes de mostrar as estatísticas finais
+	if s.logger != nil {
+		s.logger.Flush()
+		time.Sleep(50 * time.Millisecond) // Pequena pausa para garantir que todos os logs foram processados
+	}
 	
-	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-		timeStr,
-		color.CyanString("[INFO]"), 
-		fmt.Sprintf("Local file processing completed in %.2f seconds", duration.Seconds()))
-	
-	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-		timeStr,
-		color.CyanString("[INFO]"), 
-		fmt.Sprintf("Processed %d files (%.2f files/second)", totalProcessed, filesPerSecond))
-	
-	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-		timeStr,
-		color.CyanString("[INFO]"), 
-		fmt.Sprintf("Failed to process %d files", s.stats.FailedFiles))
-	
-	// Force a pause to ensure all messages are processed
-	time.Sleep(100 * time.Millisecond)
-	
-	// Flush logger to ensure all messages are processed
-	s.logger.Flush()
+	// Agora é seguro mostrar as estatísticas finais, depois que todos os segredos foram exibidos
+	s.logFinalStats()
 	
 	// If there were errors, return the first one
 	if len(errorList) > 0 {
@@ -434,4 +411,40 @@ func (s *LocalScanner) GetStats() LocalScannerStats {
 // Cleanup cancels context and releases resources
 func (s *LocalScanner) Cleanup() {
 	s.cancelFunc()
+}
+
+// logFinalStats logs the final statistics in a deterministic order
+func (s *LocalScanner) logFinalStats() {
+    // Record end time and log summary
+    s.mu.Lock()
+    s.stats.EndTime = time.Now()
+    duration := s.stats.EndTime.Sub(s.stats.StartTime)
+    filesPerSecond := float64(s.stats.ProcessedFiles) / duration.Seconds()
+    totalProcessed := s.stats.ProcessedFiles
+    failedFiles := s.stats.FailedFiles
+    s.mu.Unlock()
+
+    timeColor := color.New(color.FgHiBlack).SprintfFunc()
+    timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+
+    // Pequena pausa para garantir que todos os logs anteriores foram processados    
+    time.Sleep(100 * time.Millisecond)
+    
+    fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+        timeStr,
+        color.CyanString("[INFO]"), 
+        fmt.Sprintf("Local file processing completed in %.2f seconds", duration.Seconds()))
+    
+    fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+        timeStr,
+        color.CyanString("[INFO]"), 
+        fmt.Sprintf("Processed %d files (%.2f files/second)", totalProcessed, filesPerSecond))
+    
+    fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+        timeStr,
+        color.CyanString("[INFO]"), 
+        fmt.Sprintf("Failed to process %d files", failedFiles))
+    
+    // Pequena pausa para garantir que as estatísticas foram processadas
+    time.Sleep(100 * time.Millisecond)
 }

@@ -265,7 +265,7 @@ func (l *Logger) SecretFound(secretType string, secretValue string, url string) 
 // ProgressBar returns the current progress bar
 func (l *Logger) Flush() {
     startTime := time.Now()
-    maxWaitTime := 500 * time.Millisecond
+    maxWaitTime := 1000 * time.Millisecond // Aumentado para garantir processamento completo
     
     // Wait for the log queue to be empty or until the max wait time is reached
     for len(l.logQueue) > 0 {
@@ -273,10 +273,11 @@ func (l *Logger) Flush() {
             break
         }
     
-        time.Sleep(10 * time.Millisecond)
+        time.Sleep(20 * time.Millisecond)
     }
     
-    time.Sleep(100 * time.Millisecond)
+    // Additional pause to ensure logger has time to process
+    time.Sleep(200 * time.Millisecond)
     
     l.progressMu.Lock()
     if l.progressBar != nil {

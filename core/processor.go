@@ -103,6 +103,19 @@ func (p *Processor) ProcessJSContent(content string, url string) ([]Secret, erro
     
     fmt.Printf("DEBUG: Encontrados %d segredos brutos em %s\n", len(secrets), url)
     
+    // Detalhado: exibe todos os segredos encontrados para depuração
+    if len(secrets) > 0 {
+        fmt.Println("=== SEGREDOS ENCONTRADOS ===")
+        for i, s := range secrets {
+            valuePreview := s.Value
+            if len(valuePreview) > 20 {
+                valuePreview = valuePreview[:20] + "..."
+            }
+            fmt.Printf("Segredo #%d: Tipo=%s, Valor=%s\n", i+1, s.Type, valuePreview)
+        }
+        fmt.Println("===========================")
+    }
+    
     // DIAGNÓSTICO: Pular todo o filtro adicional para ver o que está acontecendo
     filteredSecrets := secrets
     

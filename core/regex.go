@@ -90,11 +90,13 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
     }
 
     var secrets []Secret
+    var allMatches int = 0
     
     // For each pattern, search in the content
     for patternName, pattern := range rm.patterns {
         // Try to find matches for this pattern
         matches := pattern.FindAllStringSubmatch(content, -1)
+        allMatches += len(matches)
         
         if len(matches) > 0 {
             fmt.Printf("DEBUG: Encontrados %d matches potenciais para padrão %s\n", 
@@ -109,8 +111,15 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
                     value = match[1]
                 }
                 
-                // Skip empty values
+                // Skip empty values and extremely long values
                 if len(value) < 4 || len(value) > 1000 {
+                    continue
+                }
+                
+                // Skip if the value looks like a test or example
+                if strings.Contains(strings.ToLower(value), "example") || 
+                   strings.Contains(strings.ToLower(value), "test") ||
+                   strings.Contains(strings.ToLower(value), "sample") {
                     continue
                 }
                 
@@ -128,8 +137,8 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
         }
     }
     
-    fmt.Printf("DEBUG: Total de %d segredos encontrados para %s\n", 
-              len(secrets), url)
+    fmt.Printf("DEBUG: Total de %d correspondências e %d segredos encontrados para %s\n", 
+              allMatches, len(secrets), url)
     
     return secrets, nil
 }
@@ -318,12 +327,12 @@ func (rm *RegexManager) LoadPatternsFromFile(filePath string) error {
 
 	// Parse patterns from file
 	patterns, excludePatterns, specificExclusions, err := ParsePatternsFromFile(filePath)
-	if err != nil {
+	if (err != nil) {
 		return err
 	}
 
 	// If no patterns were found, return error
-	if len(patterns) == 0 {
+	if (len(patterns) == 0) {
 		return fmt.Errorf("no patterns found in file %s", filePath)
 	}
 
@@ -335,7 +344,7 @@ func (rm *RegexManager) LoadPatternsFromFile(filePath string) error {
 	// Compile and add each pattern
 	for name, pattern := range patterns {
 		re, err := regexp.Compile(pattern)
-		if err != nil {
+		if (err != nil) {
 			return fmt.Errorf("failed to compile regex pattern '%s': %v", name, err)
 		}
 		rm.patterns[name] = re
@@ -346,7 +355,7 @@ func (rm *RegexManager) LoadPatternsFromFile(filePath string) error {
 	// Add default exclude patterns first
 	for _, pattern := range ExclusionPatterns {
 		re, err := regexp.Compile(pattern)
-		if err != nil {
+		if (err != nil) {
 			return fmt.Errorf("failed to compile exclude pattern '%s': %v", pattern, err)
 		}
 		rm.exclusionPatterns = append(rm.exclusionPatterns, re)
@@ -355,7 +364,7 @@ func (rm *RegexManager) LoadPatternsFromFile(filePath string) error {
 	// Add custom exclude patterns
 	for _, pattern := range excludePatterns {
 		re, err := regexp.Compile(pattern)
-		if err != nil {
+		if (err != nil) {
 			return fmt.Errorf("failed to compile exclude pattern '%s': %v", pattern, err)
 		}
 		rm.exclusionPatterns = append(rm.exclusionPatterns, re)
@@ -366,7 +375,7 @@ func (rm *RegexManager) LoadPatternsFromFile(filePath string) error {
 		var compiledExclusions []*regexp.Regexp
 		for _, exclusion := range exclusions {
 			re, err := regexp.Compile(exclusion)
-			if err != nil {
+			if (err != nil) {
 				return fmt.Errorf("failed to compile specific exclusion for '%s': %v", patternName, err)
 			}
 			compiledExclusions = append(compiledExclusions, re)
