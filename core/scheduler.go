@@ -3,11 +3,8 @@ package core
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"time"
-
-	"github.com/fatih/color"
 
 	"github.com/rafabd1/SecretHound/networking"
 	"github.com/rafabd1/SecretHound/output"
@@ -84,13 +81,7 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 		// Build the balanced work queue without redundant logging
 		s.buildBalancedWorkQueue(domains)
 
-		// Log only the rate limit info as it's not shown elsewhere
-		timeColor := color.New(color.FgHiBlack).SprintfFunc()
-		timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-			timeStr,
-			color.CyanString("[INFO]"), 
-			fmt.Sprintf("Rate limit set to %d requests per domain", s.client.GetRateLimit()))
+		// Removendo o log redundante do rate limit, já que agora ele é mostrado nas estatísticas iniciais
 
 		// Critical pause to ensure all initial stats are displayed
 		time.Sleep(200 * time.Millisecond)
@@ -274,7 +265,6 @@ func (s *Scheduler) shuffleWithDomainAwareness(urls []string) {
 
 // shouldRequeueDomainURL decides if a domain should be requeued based on its status
 func (s *Scheduler) shouldRequeueDomainURL(domain string, worker int) bool {
-	// If we don't have alternative URLs, requeuing doesn't make sense
 	if (!s.hasAlternativeURL(domain)) {
 		return false
 	}
