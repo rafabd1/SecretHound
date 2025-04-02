@@ -514,13 +514,13 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 			regexManager.GetPatternCount(),
 			concurrency))
 			
-	// Display timeout and rate limit info
+	// Display timeout, retries, and rate limit info
 	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
 	fmt.Fprintf(os.Stderr, "%s %s %s\n",
 		timeStr,
 		color.CyanString("[INFO]"),
-		fmt.Sprintf("HTTP timeout: %d seconds | Rate limit: %d requests per domain", 
-			timeout, client.GetRateLimit()))
+		fmt.Sprintf("HTTP config: %d second timeout | %d max retries | %d requests per domain", 
+			timeout, maxRetries, client.GetRateLimit()))
 
 	// Create processor
 	processor := core.NewProcessor(regexManager, logger)
