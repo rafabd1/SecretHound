@@ -18,7 +18,7 @@
 ## Features
 
 - **Multi-Source Scanning**: Process remote URLs, local files, and entire directories
-- **Intelligent Detection**: 50+ regex patterns to identify different types of secrets
+- **Intelligent Detection**: 100+ regex patterns to identify different types of secrets
 - **Concurrent Processing**: Fast multi-threaded architecture for efficient scanning
 - **Domain-Aware Scheduling**: Smart distribution of requests to avoid rate limiting
 - **WAF/Rate Limit Evasion**: Automatic detection and handling of security measures
