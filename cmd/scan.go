@@ -148,6 +148,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 	
 	os.Exit(0)
 
+	// Ao final do processamento, garantir que todos os logs foram concluídos
+	if logger != nil {
+		logger.Flush()
+		// Pausa adicional para garantir ordem dos logs
+		time.Sleep(200 * time.Millisecond)
+	}
+
 	return nil
 }
 
