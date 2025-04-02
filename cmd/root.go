@@ -9,14 +9,15 @@ import (
 
 var (
 	// cfgFile     string
-	inputFile   string
-	outputFile  string
-	verbose     bool
-	timeout     int
-	maxRetries  int
-	concurrency int
-	rateLimit   int
-	regexFile   string
+	inputFile    string
+	outputFile   string
+	verbose      bool
+	timeout      int
+	maxRetries   int
+	concurrency  int
+	rateLimit    int
+	regexFile    string
+	customHeader []string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -58,6 +59,7 @@ func init() {
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "n", 10, "number of concurrent workers")
 	rootCmd.Flags().IntVarP(&rateLimit, "rate-limit", "l", 0, "requests per second per domain (0 = auto)")
 	rootCmd.Flags().StringVar(&regexFile, "regex-file", "", "file containing regex patterns (optional)")
+	rootCmd.Flags().StringArrayVarP(&customHeader, "header", "H", []string{}, "custom HTTP header (format: 'Name: Value') - can be used multiple times")
 	
 	rootCmd.Flags().SetInterspersed(true)
 }
