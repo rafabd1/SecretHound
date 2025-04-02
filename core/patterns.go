@@ -91,7 +91,7 @@ var RegexPatterns = map[string]string{
 	"nexmo_api_key":       `(?i)nexmo[._-]?(?:api)?[._-]?(?:key|token|secret|id)[\s]*[=:][\s]*["']([a-zA-Z0-9]{8})["']`,
 	"nexmo_api_secret":    `(?i)nexmo[._-]?(?:api)?[._-]?(?:key|token|secret|id)[\s]*[=:][\s]*["']([a-zA-Z0-9]{16})["']`,
 	"vonage_api_key":      `(?i)vonage[._-]?(?:api)?[._-]?(?:key|token|secret|id)[\s]*[=:][\s]*["']([a-zA-Z0-9]{8})["']`,
-	"messagebird_api_key": `(?:(?:production|live)_)?[a-zA-Z0-9]{25}`,
+	"messagebird_api_key": `(?:(?:production|live)_)?[a-zA-Z0-9]{25}(?![a-zA-Z0-9_])`,
 	"infobip_api_key":     `(?i)infobip[._-]?(?:api)?[._-]?(?:key|token|secret|id)[\s]*[=:][\s]*["']([a-zA-Z0-9]{32,50})["']`,
 	"sinch_api_key":       `(?i)sinch[._-]?(?:api)?[._-]?(?:key|token|secret|id)[\s]*[=:][\s]*["']([a-zA-Z0-9]{32,64})["']`,
 
@@ -420,5 +420,28 @@ var SpecificExclusions = map[string][]string{
 		`github_pat_[a-zA-Z0-9_]{60,90}`,     // GitHub personal access tokens
 		`ghp_[a-zA-Z0-9]{36}`,                // GitHub personal access tokens
 		`gho_[a-zA-Z0-9]{36}`,                // GitHub OAuth tokens
+	},
+	"messagebird_api_key": {
+		`pickers`,
+		`Pickers`,
+		`Utility`,
+		`Class`,
+		`getPickersInput`,
+		`function`,
+		`return`,
+		`getPickersOutlined`,
+		`Outlined`,
+		`getPickersFilled`,
+		`_default`,
+		`"function"`,
+		`import`,
+		`export`,
+		`require`,
+		`unstable`,
+		`Unstable_`,
+		`section`,
+		`Section`,
+		`InputBase`,
+		`Classes`,
 	},
 }

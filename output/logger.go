@@ -248,37 +248,25 @@ func (l *Logger) SecretFound(secretType string, secretValue string, url string) 
     key := fmt.Sprintf("%s:%s:%s", url, secretType, secretValue)
     
     l.secretsMutex.Lock()
-    defer l.secretsMutex.Unlock()
     
     // Check if this secret has already been logged
     if _, exists := l.loggedSecrets[key]; exists {
+        l.secretsMutex.Unlock()
         return // Already logged, do nothing
     }
     
     // Mark this secret as logged
     l.loggedSecrets[key] = true
+    l.secretsMutex.Unlock()
     
     // Proceed with normal logging without any extra blank lines
     secretPart := utils.TruncateString(secretValue, 35)
     
-    // Create log message without any additional newlines
-    msg := LogMessage{
-        Level:    SUCCESS,
-        Message:  fmt.Sprintf("Found %s: %s... in %s", secretType, secretPart, url),
-        Time:     time.Now(),
-        Critical: true,
-    }
+    // Ensure this is a message that's always displayed
+    l.Success("Found %s: %s... in %s", secretType, secretPart, url)
     
-    // Enqueue the log message
-    select {
-    case l.logQueue <- msg:
-        // Message sent successfully
-    default:
-        // Queue is full, write directly to avoid blocking
-        l.outputMu.Lock()
-        l.writeLog(msg)
-        l.outputMu.Unlock()
-    }
+    // Adiciona uma pequena pausa para garantir que o log seja processado
+    time.Sleep(5 * time.Millisecond)
 }
 
 // ProgressBar returns the current progress bar

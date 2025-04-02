@@ -346,14 +346,13 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
         return 0, err
     }
     
-    // Log the secrets found for this specific file
+    // Log the secrets found for this specific file in real time
     for _, secret := range secrets {
+        // Log each secret to terminal as soon as it's found
         s.logger.SecretFound(secret.Type, secret.Value, localURL)
-    }
-    
-    // Write secrets to output file if configured
-    if s.writer != nil && len(secrets) > 0 {
-        for _, secret := range secrets {
+        
+        // Write to output file if configured
+        if s.writer != nil {
             err := s.writer.WriteSecret(secret.Type, secret.Value, localURL, secret.Context, secret.Line)
             if err != nil {
                 s.logger.Error("Failed to write secret from file %s to output: %v", filePath, err)
