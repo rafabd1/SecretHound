@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"runtime"
 	"sync"
 	"time"
@@ -38,11 +37,7 @@ func ForceCompleteRefresh() {
     systemLock.Lock()
     defer systemLock.Unlock()
     
-    // Debug para verificar registros
-    fmt.Printf("DEBUG: Refreshing system state with %d managers and %d processors\n", 
-               len(regexManagerRegistry), len(processorRegistry))
-    
-    // 1. Collect all registered components
+    // Collect all registered components
     regexManagerLock.RLock()
     managers := make([]*RegexManager, 0, len(regexManagerRegistry))
     for rm := range regexManagerRegistry {
@@ -57,13 +52,12 @@ func ForceCompleteRefresh() {
     }
     processorLock.RUnlock()
     
-    // 2. DON'T Reset managers and processors - isso pode estar causando problemas
-    // Apenas mantenha o registro
+    // Don't reset components explicitly - this was causing issues
     
-    // 3. Force garbage collection to clean up memory
+    // Force garbage collection to clean up memory
     runtime.GC()
     
-    // 4. Wait for system to stabilize
+    // Wait for system to stabilize
     time.Sleep(50 * time.Millisecond)
 }
 

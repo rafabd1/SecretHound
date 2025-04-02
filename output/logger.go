@@ -155,6 +155,7 @@ func (l *Logger) writeLog(msg LogMessage) {
             formatted = l.successColor("%s", msg.Message)
         }
 
+        // Print without any extra newlines
         fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
     })
     
@@ -257,9 +258,27 @@ func (l *Logger) SecretFound(secretType string, secretValue string, url string) 
     // Mark this secret as logged
     l.loggedSecrets[key] = true
     
-    // Proceed with normal logging
+    // Proceed with normal logging without any extra blank lines
     secretPart := utils.TruncateString(secretValue, 35)
-    l.Success("Found %s: %s... in %s", secretType, secretPart, url)
+    
+    // Create log message without any additional newlines
+    msg := LogMessage{
+        Level:    SUCCESS,
+        Message:  fmt.Sprintf("Found %s: %s... in %s", secretType, secretPart, url),
+        Time:     time.Now(),
+        Critical: true,
+    }
+    
+    // Enqueue the log message
+    select {
+    case l.logQueue <- msg:
+        // Message sent successfully
+    default:
+        // Queue is full, write directly to avoid blocking
+        l.outputMu.Lock()
+        l.writeLog(msg)
+        l.outputMu.Unlock()
+    }
 }
 
 // ProgressBar returns the current progress bar

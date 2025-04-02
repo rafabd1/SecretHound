@@ -17,10 +17,7 @@ var globalProcessorInstance *core.Processor
 
 // resetGlobalState completely resets all global state in the application
 func resetGlobalState() {
-    // Não fazer nada por enquanto para diagnóstico
-    fmt.Println("DEBUG: resetGlobalState foi chamado mas está desativado para diagnóstico")
-    
-    // Vamos apenas garantir que haja memória suficiente
+    // Ensure sufficient memory with garbage collection
     runtime.GC()
 }
 
