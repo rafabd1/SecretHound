@@ -37,23 +37,6 @@ func ForceCompleteRefresh() {
     systemLock.Lock()
     defer systemLock.Unlock()
     
-    // Collect all registered components
-    regexManagerLock.RLock()
-    managers := make([]*RegexManager, 0, len(regexManagerRegistry))
-    for rm := range regexManagerRegistry {
-        managers = append(managers, rm)
-    }
-    regexManagerLock.RUnlock()
-    
-    processorLock.RLock()
-    processors := make([]*Processor, 0, len(processorRegistry))
-    for p := range processorRegistry {
-        processors = append(processors, p)
-    }
-    processorLock.RUnlock()
-    
-    // Don't reset components explicitly - this was causing issues
-    
     // Force garbage collection to clean up memory
     runtime.GC()
     

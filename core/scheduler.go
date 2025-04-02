@@ -427,6 +427,12 @@ func (s *Scheduler) worker(id int) {
 			continue
 		}
 		
+		// Log each found secret immediately in real-time
+		for _, secret := range secrets {
+			// This ensures real-time display of found secrets
+			s.logger.SecretFound(secret.Type, secret.Value, url)
+		}
+		
 		// Write secrets to output file if configured
 		if s.writer != nil && len(secrets) > 0 {
 			for _, secret := range secrets {
@@ -443,7 +449,12 @@ func (s *Scheduler) worker(id int) {
 		s.stats.TotalSecrets += len(secrets)
 		s.mutex.Unlock()
 		
-		s.logger.Info("Worker %d: processed URL %s, found %d secrets", id, url, len(secrets))
+		// Only log a summary after logging individual secrets
+		if len(secrets) > 0 {
+			s.logger.Success("Worker %d: processed URL %s, found %d secrets", id, url, len(secrets))
+		} else {
+			s.logger.Debug("Worker %d: processed URL %s, found no secrets", id, url)
+		}
 	}
 }
 

@@ -106,15 +106,18 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
                     continue
                 }
                 
-                // Skip if the value looks like a test or example
-                if strings.Contains(strings.ToLower(value), "example") || 
-                   strings.Contains(strings.ToLower(value), "test") ||
-                   strings.Contains(strings.ToLower(value), "sample") {
+                // Create a secret with context
+                context := rm.extractContext(content, value)
+                
+                // Apply validation checks
+                if rm.isExcludedByContext(context) {
                     continue
                 }
                 
-                // Create a secret with context
-                context := rm.extractContext(content, value)
+                if !rm.isValidSecret(value, patternName) {
+                    continue
+                }
+                
                 secret := Secret{
                     Type:    patternName,
                     Value:   value,
