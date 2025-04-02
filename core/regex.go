@@ -76,11 +76,8 @@ func (rm *RegexManager) FindSecretsWithStrictFiltering(content, url string) ([]S
 // findSecretsWithFiltering is the core implementation for searching secrets with optional filtering
 func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode bool) ([]Secret, error) {
     if len(rm.patterns) == 0 {
-        fmt.Println("ERRO CRÍTICO: Nenhum padrão regex carregado!")
         return nil, fmt.Errorf("no regex patterns loaded")
     }
-
-    fmt.Printf("DEBUG: Processando com %d padrões regex\n", len(rm.patterns))
 
     // Check file extensions to ignore
     for _, ext := range rm.excludedExtensions {
@@ -90,18 +87,11 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
     }
 
     var secrets []Secret
-    var allMatches int = 0
     
     // For each pattern, search in the content
     for patternName, pattern := range rm.patterns {
         // Try to find matches for this pattern
         matches := pattern.FindAllStringSubmatch(content, -1)
-        allMatches += len(matches)
-        
-        if len(matches) > 0 {
-            fmt.Printf("DEBUG: Encontrados %d matches potenciais para padrão %s\n", 
-                      len(matches), patternName)
-        }
         
         for _, match := range matches {
             if len(match) > 0 {
@@ -123,8 +113,7 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
                     continue
                 }
                 
-                // IMPORTANTE: Desabilitar temporariamente TODAS as validações
-                // para descobrir a origem do problema
+                // Create a secret with context
                 context := rm.extractContext(content, value)
                 secret := Secret{
                     Type:    patternName,
@@ -136,9 +125,6 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
             }
         }
     }
-    
-    fmt.Printf("DEBUG: Total de %d correspondências e %d segredos encontrados para %s\n", 
-              allMatches, len(secrets), url)
     
     return secrets, nil
 }

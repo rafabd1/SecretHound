@@ -58,80 +58,44 @@ func (p *Processor) InitializeRegexManager() error {
     // Always create a fresh instance
     p.regexManager = NewRegexManager()
     
-    // Para diagnóstico, injetar os padrões diretamente
+    // Load patterns directly
     p.regexManager.InjectDefaultPatternsDirectly()
-    fmt.Printf("DEBUG: Injetados padrões diretamente. RegexManager tem %d padrões.\n",
-              p.regexManager.GetPatternCount())
     
-    /*
-    // O método normal de carregamento pode estar causando problemas
-    err := p.regexManager.LoadPredefinedPatterns()
-    if err != nil {
-        return fmt.Errorf("failed to load predefined patterns: %w", err)
-    }
-    */
-    
+    p.logger.Debug("Successfully initialized RegexManager with %d patterns", p.regexManager.GetPatternCount())
     return nil
 }
 
 // ProcessJSContent processes JavaScript content and extracts secrets
 func (p *Processor) ProcessJSContent(content string, url string) ([]Secret, error) {
-    // Forçar inicialização do RegexManager a cada execução para diagnóstico
-    fmt.Println("DEBUG: Forçando inicialização do RegexManager")
-    err := p.InitializeRegexManager()
-    if err != nil {
-        fmt.Println("ERRO FATAL: Falha ao inicializar RegexManager:", err)
-        return nil, fmt.Errorf("falha na inicialização: %w", err)
+    // Initialize RegexManager if needed
+    if p.regexManager == nil || p.regexManager.GetPatternCount() == 0 {
+        err := p.InitializeRegexManager()
+        if err != nil {
+            p.logger.Error("Failed to initialize RegexManager: %v", err)
+            return nil, utils.NewError(utils.ConfigError, "RegexManager initialization failed", err)
+        }
     }
-    
-    patternCount := p.regexManager.GetPatternCount()
-    fmt.Printf("DEBUG: RegexManager inicializado com %d padrões\n", patternCount)
-    
-    // Desabilitar qualquer cache para diagnóstico
+
     startTime := time.Now()
+    p.logger.Debug("Processing content from URL: %s", url)
 
     // Use the regex manager to find secrets in the content
     var secrets []Secret
-    
-    // Usar versão não-estrita para diagnóstico
+    var err error
     secrets, err = p.regexManager.FindSecrets(content, url)
     
     if err != nil {
-        fmt.Println("ERRO: Falha ao encontrar segredos:", err)
-        return nil, err
+        p.mu.Lock()
+        p.stats.FailedFiles++
+        p.mu.Unlock()
+        return nil, utils.NewError(utils.ProcessingError, fmt.Sprintf("failed to process content from %s", url), err)
     }
     
-    fmt.Printf("DEBUG: Encontrados %d segredos brutos em %s\n", len(secrets), url)
-    
-    // Detalhado: exibe todos os segredos encontrados para depuração
-    if len(secrets) > 0 {
-        fmt.Println("=== SEGREDOS ENCONTRADOS ===")
-        for i, s := range secrets {
-            valuePreview := s.Value
-            if len(valuePreview) > 20 {
-                valuePreview = valuePreview[:20] + "..."
-            }
-            fmt.Printf("Segredo #%d: Tipo=%s, Valor=%s\n", i+1, s.Type, valuePreview)
-        }
-        fmt.Println("===========================")
-    }
-    
-    // DIAGNÓSTICO: Pular todo o filtro adicional para ver o que está acontecendo
+    // DIAGNÓSTICO: Pular todo o filtro adicional
     filteredSecrets := secrets
     
-    // Para diagnóstico, imprimir os primeiros 5 segredos encontrados
-    count := 0
-    for _, s := range filteredSecrets {
-        if count < 5 {
-            valuePreview := s.Value
-            if len(valuePreview) > 20 {
-                valuePreview = valuePreview[:20] + "..."
-            }
-            fmt.Printf("DEBUG: Segredo #%d: Tipo=%s, Valor=%s\n", 
-                      count+1, s.Type, valuePreview)
-            count++
-        }
-    }
+    // Store in cache for future use
+    p.cacheService.StoreSecrets(content, filteredSecrets)
 
     // Update stats
     p.mu.Lock()

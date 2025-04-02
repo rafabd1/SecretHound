@@ -287,101 +287,92 @@ func (s *LocalScanner) getUniqueAndSortedFiles(files []string) []string {
 
 // processFile scans a single file for secrets
 func (s *LocalScanner) processFile(filePath string) (int, error) {
-	// Check if context is canceled
-	select {
-	case <-s.ctx.Done():
-		return 0, fmt.Errorf("processing interrupted")
-	default:
-		// Continue processing
-	}
-	
-	// Adicione depuração
-	fmt.Printf("DEBUG: Processing file %s\n", filePath)
-	
-	// Check if the file exists and is readable
-	fi, err := os.Stat(filePath)
-	if err != nil {
-		s.incrementFailedFiles()
-		return 0, fmt.Errorf("cannot access file %s: %v", filePath, err)
-	}
-	
-	// Skip directories (should be filtered earlier, but just to be safe)
-	if fi.IsDir() {
-		s.incrementFailedFiles()
-		return 0, fmt.Errorf("%s is a directory, not a file", filePath)
-	}
-	
-	// Skip files that are too large (> 10MB)
-	if fi.Size() > 10*1024*1024 {
-		s.incrementFailedFiles()
-		return 0, fmt.Errorf("file %s is too large (> 10MB)", filePath)
-	}
-	
-	// Read file content
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		s.incrementFailedFiles()
-		return 0, fmt.Errorf("failed to read file %s: %v", filePath, err)
-	}
-	
-	// Skip if file appears to be binary
-	if utils.IsBinaryContent(content) {
-		s.incrementProcessedFiles()
-		s.logger.Debug("Skipping binary content in file: %s", filePath)
-		return 0, nil
-	}
-	
-	// Convert to string and process
-	fileContent := string(content)
-	
-	// Create a custom URL for local files using absolute path
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		absPath = filePath // Fall back to the provided path
-	}
-	localURL := "file://" + filepath.ToSlash(absPath)
-	
-	// Adicione mais logs de depuração
-	fmt.Printf("DEBUG: Processing content with length %d bytes\n", len(fileContent))
-	
-	// Process the content
-	secrets, err := s.processor.ProcessJSContent(fileContent, localURL)
-	if err != nil {
-		s.incrementFailedFiles()
-		s.logger.Error("Failed to process file %s: %v", filePath, err)
-		return 0, err
-	}
-	
-	// Depuração
-	fmt.Printf("DEBUG: Found %d secrets in file %s\n", len(secrets), filePath)
-	
-	// Log the secrets found for this specific file
-	for _, secret := range secrets {
-		s.logger.SecretFound(secret.Type, secret.Value, localURL)
-	}
-	
-	// Write secrets to output file if configured
-	if s.writer != nil && len(secrets) > 0 {
-		for _, secret := range secrets {
-			err := s.writer.WriteSecret(secret.Type, secret.Value, localURL, secret.Context, secret.Line)
-			if err != nil {
-				s.logger.Error("Failed to write secret from file %s to output: %v", filePath, err)
-			}
-		}
-	}
-	
-	// Log summarizing how many secrets were found in this file
-	if len(secrets) > 0 {
-		s.logger.Success("Found %d secrets in %s", len(secrets), filePath)
-	}
-	
-	// Update stats
-	s.mu.Lock()
-	s.stats.TotalSecrets += len(secrets)
-	s.stats.TotalBytes += fi.Size()
-	s.mu.Unlock()
-	
-	return len(secrets), nil
+    // Check if context is canceled
+    select {
+    case <-s.ctx.Done():
+        return 0, fmt.Errorf("processing interrupted")
+    default:
+        // Continue processing
+    }
+    
+    // Check if the file exists and is readable
+    fi, err := os.Stat(filePath)
+    if (err != nil) {
+        s.incrementFailedFiles()
+        return 0, fmt.Errorf("cannot access file %s: %v", filePath, err)
+    }
+    
+    // Skip directories (should be filtered earlier, but just to be safe)
+    if fi.IsDir() {
+        s.incrementFailedFiles()
+        return 0, fmt.Errorf("%s is a directory, not a file", filePath)
+    }
+    
+    // Skip files that are too large (> 10MB)
+    if fi.Size() > 10*1024*1024 {
+        s.incrementFailedFiles()
+        return 0, fmt.Errorf("file %s is too large (> 10MB)", filePath)
+    }
+    
+    // Read file content
+    content, err := os.ReadFile(filePath)
+    if err != nil {
+        s.incrementFailedFiles()
+        return 0, fmt.Errorf("failed to read file %s: %v", filePath, err)
+    }
+    
+    // Skip if file appears to be binary
+    if utils.IsBinaryContent(content) {
+        s.incrementProcessedFiles()
+        s.logger.Debug("Skipping binary content in file: %s", filePath)
+        return 0, nil
+    }
+    
+    // Convert to string and process
+    fileContent := string(content)
+    
+    // Create a custom URL for local files using absolute path
+    absPath, err := filepath.Abs(filePath)
+    if err != nil {
+        absPath = filePath // Fall back to the provided path
+    }
+    localURL := "file://" + filepath.ToSlash(absPath)
+    
+    // Process the content
+    secrets, err := s.processor.ProcessJSContent(fileContent, localURL)
+    if err != nil {
+        s.incrementFailedFiles()
+        s.logger.Error("Failed to process file %s: %v", filePath, err)
+        return 0, err
+    }
+    
+    // Log the secrets found for this specific file
+    for _, secret := range secrets {
+        s.logger.SecretFound(secret.Type, secret.Value, localURL)
+    }
+    
+    // Write secrets to output file if configured
+    if s.writer != nil && len(secrets) > 0 {
+        for _, secret := range secrets {
+            err := s.writer.WriteSecret(secret.Type, secret.Value, localURL, secret.Context, secret.Line)
+            if err != nil {
+                s.logger.Error("Failed to write secret from file %s to output: %v", filePath, err)
+            }
+        }
+    }
+    
+    // Log summarizing how many secrets were found in this file
+    if len(secrets) > 0 {
+        s.logger.Success("Found %d secrets in %s", len(secrets), filePath)
+    }
+    
+    // Update stats
+    s.mu.Lock()
+    s.stats.TotalSecrets += len(secrets)
+    s.stats.TotalBytes += fi.Size()
+    s.mu.Unlock()
+    
+    return len(secrets), nil
 }
 
 // incrementProcessedFiles increments the count of processed files
