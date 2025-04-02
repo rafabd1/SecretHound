@@ -74,8 +74,25 @@ Save results to a text file:
 secrethound -i urls.txt -o results.txt
 ```
 
-Advanced Options
-Controlling Concurrency
+## Command Line Options
+
+The scan command supports the following options:
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-i, --input` | Input file, directory, or URL list | - |
+| `-o, --output` | Output file for results | - |
+| `-t, --timeout` | HTTP request timeout in seconds | 30 |
+| `-r, --retries` | Maximum number of retry attempts | 3 |
+| `-n, --concurrency` | Number of concurrent workers | 10 |
+| `-l, --rate-limit` | Requests per second per domain (0 = auto) | 0 |
+| `-H, --header` | Custom HTTP header (format: 'Name: Value') | - |
+| `--regex-file` | File containing custom regex patterns | - |
+| `-v, --verbose` | Enable verbose output | false |
+
+## Advanced Options
+
+### Controlling Concurrency
 Adjust number of concurrent workers:
 
 ```bash
@@ -84,7 +101,7 @@ secrethound -i urls.txt -n 20
 
 Higher values = faster scanning but more resource usage.
 
-Setting Timeouts
+### Setting Timeouts
 Modify HTTP request timeout:
 
 ```bash
@@ -92,7 +109,7 @@ secrethound -i urls.txt -t 60
 ```
 Default is 30 seconds.
 
-Rate Limiting
+### Rate Limiting
 Control requests per domain:
 
 ```bash
@@ -100,7 +117,7 @@ secrethound -i urls.txt -l 5
 ```
 Use 0 for automatic adjustment (default).
 
-Retries
+### Retries
 Configure retry attempts:
     
 ```bash
@@ -108,14 +125,14 @@ secrethound -i urls.txt -r 5
 ```
 Default is 3 retries.
 
-Verbose Output
+### Verbose Output
 Enable detailed logging:
     
 ```bash
 secrethound -i urls.txt -v
 ```
 
-Custom Regex Patterns
+### Custom Regex Patterns
 Use custom patterns file:
 
 ```bash
@@ -130,6 +147,16 @@ REGEX_PATTERNS = {
     "internal_token": "INT_TOKEN_[a-zA-Z0-9]{16}"
 }
 ```
+
+### Custom HTTP Headers
+
+You can specify custom HTTP headers for requests using the `-H` flag. This is useful for authentication, setting cookies, or customizing the user agent:
+
+```bash
+secrethound -i urls.txt -H "User-Agent: Mozilla/5.0 Firefox" -H "Authorization: Bearer token123"
+```
+
+If you specify a User-Agent header, it will override the default user agent.
 
 ### Combined Examples
 Complete Scan
@@ -148,7 +175,7 @@ This command:
 - Limits to 3 requests/second per domain
 - Enables verbose output
 
-Bug Bounty Workflow
+### Bug Bounty Workflow
 Download and scan JS files:
 
 ```bash
@@ -162,7 +189,7 @@ find ./example.com -name "*.js" > js-files.txt
 secrethound -i js-files.txt -o bounty-results.json -v
 ```
 
-Security Audit
+### Security Audit
 Scan entire project:
 
 ```bash

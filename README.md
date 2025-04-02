@@ -108,6 +108,7 @@ SecretHound supports the following options:
 | `-r, --retries` | Maximum number of retry attempts | 3 |
 | `-n, --concurrency` | Number of concurrent workers | 10 |
 | `-l, --rate-limit` | Requests per second per domain (0 = auto) | 0 |
+| `-H, --header` | Custom HTTP header (format: 'Name: Value') | - |
 | `--regex-file` | File containing custom regex patterns | - |
 | `-v, --verbose` | Enable verbose output | false |
 

@@ -204,14 +204,12 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
             inputs = append(inputs, dirFiles...)
             logger.Info("Added %d files from directory: %s", len(dirFiles), inputPath)
         } else {
-            // Determine if this is a file to scan or a list of URLs
             isURLList, contents, err := isFileURLList(inputPath)
             if err != nil {
                 return nil, err
             }
             
             if isURLList {
-                // It's a file containing URLs or paths
                 urlCount := 0
                 for _, line := range contents {
                     if line != "" && !strings.HasPrefix(line, "#") {
@@ -493,6 +491,21 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 	// Create HTTP client
 	client := networking.NewClient(timeout, maxRetries)
 	
+	// Apply custom headers if provided
+	if len(customHeader) > 0 {
+		for _, header := range customHeader {
+			parts := strings.SplitN(header, ":", 2)
+			if len(parts) == 2 {
+				name := strings.TrimSpace(parts[0])
+				value := strings.TrimSpace(parts[1])
+				client.SetRequestHeader(name, value)
+				logger.Debug("Set custom header: %s: %s", name, value)
+			} else {
+				logger.Warning("Invalid header format (should be 'Name: Value'): %s", header)
+			}
+		}
+	}
+	
 	// Apply global rate limit if set
 	if rateLimit > 0 {
 		client.SetGlobalRateLimit(rateLimit)
@@ -522,6 +535,25 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 		fmt.Sprintf("HTTP config: %d second timeout | %d max retries | %d requests per domain", 
 			timeout, maxRetries, client.GetRateLimit()))
 
+	// Display custom headers info if provided (without showing values for security)
+	if len(customHeader) > 0 {
+		headerNames := make([]string, 0, len(customHeader))
+		for _, header := range customHeader {
+			parts := strings.SplitN(header, ":", 2)
+			if len(parts) == 2 {
+				headerNames = append(headerNames, strings.TrimSpace(parts[0]))
+			}
+		}
+		
+		if len(headerNames) > 0 {
+			timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+			fmt.Fprintf(os.Stderr, "%s %s %s\n",
+				timeStr,
+				color.CyanString("[INFO]"),
+				fmt.Sprintf("Using custom headers: %s", strings.Join(headerNames, ", ")))
+		}
+	}
+
 	// Create processor
 	processor := core.NewProcessor(regexManager, logger)
 
@@ -529,16 +561,12 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 	scheduler := core.NewScheduler(domainManager, client, processor, writer, logger)
 	scheduler.SetConcurrency(concurrency)
 
-	// Inserir pequena pausa para garantir que as estatísticas sejam exibidas
 	time.Sleep(100 * time.Millisecond)
 
-	// Start processing
 	err := scheduler.Schedule(validURLs)
 	
-	// Get the scheduler stats
 	schedulerStats := scheduler.GetStats()
 	
-	// Display final statistics
 	timeColor = color.New(color.FgHiBlack).SprintfFunc()
 	
 	// Calculate processing rate and duration
