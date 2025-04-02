@@ -1,6 +1,7 @@
 package networking
 
 import (
+	"net"
 	"net/http"
 	"strings"
 )
@@ -150,6 +151,38 @@ func (rf *ResponseFilter) IsWAFBlocked(resp *http.Response) bool {
 	wafStatusCodes := []int{418, 419, 420}
 	for _, code := range wafStatusCodes {
 		if resp.StatusCode == code {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// IsTimeout checks if an error represents a timeout
+func (f *ResponseFilter) IsTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	// Check common timeout error patterns
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		return true
+	}
+	
+	// Check error string for timeout indicators
+	errStr := err.Error()
+	timeoutPatterns := []string{
+		"timeout",
+		"timed out",
+		"deadline exceeded",
+		"context deadline exceeded",
+		"i/o timeout",
+		"TLS handshake timeout",
+		"operation timed out",
+	}
+	
+	for _, pattern := range timeoutPatterns {
+		if strings.Contains(strings.ToLower(errStr), pattern) {
 			return true
 		}
 	}
