@@ -1,14 +1,12 @@
 package core
 
 import (
-    "bufio"
-    "fmt"
-    "os"
-    "regexp"
-    "strings"
-    "sync"
+	"fmt"
+	"regexp"
+	"strings"
+	"sync"
 
-    "github.com/rafabd1/SecretHound/utils"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 // RegexManager handles loading and applying regex patterns
@@ -291,82 +289,70 @@ func (rm *RegexManager) isValidSecret(value string, patternType string) bool {
     return true
 }
 
-// LoadPatternsFromFile loads regex patterns from a file
+// LoadPatternsFromFile carrega padrões de um arquivo para o RegexManager
 func (rm *RegexManager) LoadPatternsFromFile(filePath string) error {
-    // First check if the file exists
-    if !utils.FileExists(filePath) {
-        return fmt.Errorf("regex file not found: %s", filePath)
-    }
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
 
-    file, err := os.Open(filePath)
-    if err != nil {
-        return fmt.Errorf("failed to open regex file: %v", err)
-    }
-    defer file.Close()
+	// Parse patterns from file
+	patterns, excludePatterns, specificExclusions, err := ParsePatternsFromFile(filePath)
+	if err != nil {
+		return err
+	}
 
-    scanner := bufio.NewScanner(file)
-    var inPatternSection bool
+	// If no patterns were found, return error
+	if len(patterns) == 0 {
+		return fmt.Errorf("no patterns found in file %s", filePath)
+	}
 
-    // Create a temporary map to avoid partial updates in case of errors
-    tempPatterns := make(map[string]*regexp.Regexp)
+	// Clear existing patterns
+	rm.patterns = make(map[string]*regexp.Regexp)
+	rm.exclusionPatterns = make([]*regexp.Regexp, 0)
+	rm.patternExclusions = make(map[string][]*regexp.Regexp)
 
-    for scanner.Scan() {
-        line := strings.TrimSpace(scanner.Text())
+	// Compile and add each pattern
+	for name, pattern := range patterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Errorf("failed to compile regex pattern '%s': %v", name, err)
+		}
+		rm.patterns[name] = re
+	}
 
-        // Skip empty lines and comments
-        if line == "" || strings.HasPrefix(line, "#") {
-            continue
-        }
+	// Compile and add exclude patterns
+	
+	// Add default exclude patterns first
+	for _, pattern := range ExclusionPatterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Errorf("failed to compile exclude pattern '%s': %v", pattern, err)
+		}
+		rm.exclusionPatterns = append(rm.exclusionPatterns, re)
+	}
+	
+	// Add custom exclude patterns
+	for _, pattern := range excludePatterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Errorf("failed to compile exclude pattern '%s': %v", pattern, err)
+		}
+		rm.exclusionPatterns = append(rm.exclusionPatterns, re)
+	}
 
-        // Check for the start of the pattern section
-        if strings.HasPrefix(line, "REGEX_PATTERNS = {") {
-            inPatternSection = true
-            continue
-        }
+	// Compile and add specific exclusions
+	for patternName, exclusions := range specificExclusions {
+		var compiledExclusions []*regexp.Regexp
+		for _, exclusion := range exclusions {
+			re, err := regexp.Compile(exclusion)
+			if err != nil {
+				return fmt.Errorf("failed to compile specific exclusion for '%s': %v", patternName, err)
+			}
+			compiledExclusions = append(compiledExclusions, re)
+		}
+		rm.patternExclusions[patternName] = compiledExclusions
+	}
 
-        // Check for the end of the pattern section
-        if line == "}" {
-            break
-        }
-
-        // Process pattern lines
-        if inPatternSection {
-            parts := strings.SplitN(line, ":", 2)
-            if len(parts) != 2 {
-                continue
-            }
-
-            // Extract pattern name and regex
-            patternName := strings.Trim(parts[0], " '\",")
-            patternRegex := strings.Trim(parts[1], " '\",")
-
-            // Remove trailing comma if present
-            patternRegex = strings.TrimSuffix(patternRegex, ",")
-
-            // Compile regex
-            re, err := regexp.Compile(patternRegex)
-            if err != nil {
-                return fmt.Errorf("failed to compile regex '%s': %v", patternName, err)
-            }
-
-            tempPatterns[patternName] = re
-        }
-    }
-
-    if err := scanner.Err(); err != nil {
-        return fmt.Errorf("error reading regex file: %v", err)
-    }
-
-    if len(tempPatterns) == 0 {
-        return fmt.Errorf("no regex patterns found in file")
-    }
-
-    // Update the patterns map atomically
-    rm.mu.Lock()
-    rm.patterns = tempPatterns
-    rm.mu.Unlock()
-
-    return nil
+	return nil
 }
 
 // AddPattern adds a single regex pattern to the manager
@@ -427,4 +413,68 @@ func (rm *RegexManager) HasPattern(name string) bool {
     
     _, exists := rm.patterns[name]
     return exists
+}
+
+// IsExcluded verifica se um match deve ser excluído
+func (rm *RegexManager) IsExcluded(match string, patternName string) bool {
+    rm.mu.RLock()
+    defer rm.mu.RUnlock()
+    
+    // Verificar o comprimento do match
+    if len(match) < rm.minSecretLength || len(match) > rm.maxSecretLength {
+        return true
+    }
+    
+    // Verificar nas exclusões específicas para este padrão primeiro
+    if specificExclusions, exists := rm.patternExclusions[patternName]; exists {
+        for _, re := range specificExclusions {
+            if re.MatchString(match) {
+                return true
+            }
+        }
+    }
+    
+    // Verificar padrões de exclusão gerais
+    for _, re := range rm.exclusionPatterns {
+        if re.MatchString(match) {
+            return true
+        }
+    }
+    
+    return false
+}
+
+// FindMatches finds all regex matches in content
+func (rm *RegexManager) FindMatches(content, url string) map[string][]string {
+    rm.mu.RLock()
+    defer rm.mu.RUnlock()
+
+    matches := make(map[string][]string)
+
+    // Find matches for each pattern
+    for name, re := range rm.patterns {
+        found := re.FindAllString(content, -1)
+        if len(found) > 0 {
+            // Filter out duplicates
+            unique := make(map[string]bool)
+            for _, match := range found {
+                // Skip excluded patterns
+                if !rm.IsExcluded(match, name) {
+                    unique[match] = true
+                }
+            }
+
+            // Convert map keys to slice
+            var uniqueMatches []string
+            for match := range unique {
+                uniqueMatches = append(uniqueMatches, match)
+            }
+
+            if len(uniqueMatches) > 0 {
+                matches[name] = uniqueMatches
+            }
+        }
+    }
+
+    return matches
 }

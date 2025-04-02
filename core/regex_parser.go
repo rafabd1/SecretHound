@@ -1,394 +1,417 @@
 package core
 
 import (
-    "bufio"
-    "fmt"
-    "os"
-    "regexp"
-    "strings"
+	"bufio"
+	"fmt"
+	"os"
+	"regexp"
+	"strings"
 )
 
-// RegexPatternMap is a map of predefined regex patterns
-var RegexPatternMap = map[string]string{
-    // API Keys
-    "google_api":               `(?:AIza|GOCSPX)[0-9A-Za-z\-_]{35,40}`,
-    "firebase":                 `AAAA[A-Za-z0-9_-]{7}:[A-Za-z0-9_-]{140}`,
-    "firebase_url":             `.*firebaseio\.com`,
-    "google_captcha":           `(?:^|[^0-9A-Za-z])6L[0-9A-Za-z-_]{38}|^6[0-9a-zA-Z_-]{39}$`,
-    "google_oauth":             `(?:^|[^0-9A-Za-z])ya29\.[0-9A-Za-z\-_]+`,
-
-    // AWS
-    "amazon_aws_access_key_id": `(?:^|[^0-9A-Za-z])AKIA[0-9A-Z]{16}(?:[^0-9A-Za-z]|$)`,
-    "amazon_mws_auth_token":    `amzn\.mws\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`,
-    "amazon_aws_url":           `(?:^|[^\w/])(s3\.amazonaws\.com/[a-zA-Z0-9_.-]+|[a-zA-Z0-9_.-]+\.s3\.amazonaws\.com)`,
-    "amazon_aws_url2":          `(?:^|[^\w/])([a-zA-Z0-9-\._]+\.s3\.amazonaws\.com|s3://[a-zA-Z0-9-\._]+|s3-[a-zA-Z0-9-\._/]+|s3\.amazonaws\.com/[a-zA-Z0-9-\._]+|s3\.console\.aws\.amazon\.com/s3/buckets/[a-zA-Z0-9-\._]+)`,
-    "facebook_access_token":    `EAACEdEose0cBA[0-9A-Za-z]+`,
-    "facebook_oauth":           `[f|F][a|A][c|C][e|E][b|B][o|O][o|O][k|K].*['|\"][0-9a-f]{32}['|\"]`,
-    "authorization_basic": 		`(?i)basic\s+[a-zA-Z0-9+/=:_\+\/-]{16,}`,
-    "authorization_bearer":     `bearer [a-zA-Z0-9_\-\.=:_\+\/]{5,100}`,
-    "authorization_api": 		`(?i)api[_]?key[=:"\s]+[a-zA-Z0-9_\-\.]{16,}`,
-    
-    // Service keys
-    "mailgun_api_key":          `key-[0-9a-zA-Z]{32}`,
-    "mailchimp_api_key":        `[0-9a-f]{32}-us[0-9]{1,2}`,
-    "twilio_api_key":           `SK[0-9a-fA-F]{32}`,
-    "twilio_account_sid": `(^|[^-_a-zA-Z0-9])AC[a-zA-Z0-9_\-]{32}($|[^-_a-zA-Z0-9])`,
-	"twilio_app_sid":     `(^|[^-_a-zA-Z0-9])AP[a-zA-Z0-9_\-]{32}($|[^-_a-zA-Z0-9])`,
-    "paypal_braintree_access_token": `access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}`,
-    "square_oauth_secret":      `sq0csp-[ 0-9A-Za-z\-_]{43}|sq0[a-z]{3}-[0-9A-Za-z\-_]{22,43}`,
-    "square_access_token":      `sqOatp-[0-9A-Za-z\-_]{22}|EAAA[a-zA-Z0-9]{60}|sq0atp-[0-9A-Za-z\-_]{22}`,
-    "stripe_standard_api":      `sk_live_[0-9a-zA-Z]{24}`,
-    "stripe_restricted_api":    `rk_live_[0-9a-zA-Z]{24}`,
-    
-    // Git
-    "github_access_token":      `[a-zA-Z0-9_-]*:[a-zA-Z0-9_\-]+@github\.com*`,
-    "github":                   `[g|G][i|I][t|T][h|H][u|U][b|B].*['|\"][0-9a-zA-Z]{35,40}['|\"]`,
-    
-    // Keys & certificates
-    "rsa_private_key":          `-----BEGIN RSA PRIVATE KEY-----`,
-    "ssh_dsa_private_key":      `-----BEGIN DSA PRIVATE KEY-----`,
-    "ssh_ec_private_key":       `-----BEGIN EC PRIVATE KEY-----`,
-    "pgp_private_block":        `-----BEGIN PGP PRIVATE KEY BLOCK-----`,
-    
-    // Tokens
-    "json_web_token":           `eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$`,
-    "slack_token":              `xox[pboa]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-z0-9]{32}`,
-    "slack_webhook":            `https://hooks.slack.com/services/T[a-zA-Z0-9_]{8}/B[a-zA-Z0-9_]{8}/[a-zA-Z0-9_]{24}`,
-    "SSH_privKey":              `([-]+BEGIN [^\s]+ PRIVATE KEY[-]+[\s]*[^-]*[-]+END [^\s]+ PRIVATE KEY[-]+)`,
-    "Heroku API KEY":           `(?i)(heroku[._-]api[._-]key|HEROKU_API_KEY|heroku[._-]token)["\s:=]+[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`,
-    
-    // Credentials
-    "possible_credentials":     `(?i)(password|passwd|pwd|secret)[ =:]+['"][^'"]{4,30}['"]`,
-    
-    "cloudinary":               `cloudinary://.*`,
-    "aws_api_key":              `AKIA[0-9A-Z]{16}`,
-    "password_in_url":          `[a-zA-Z]{3,10}://[^/\s:@]{3,20}:[^/\s:@]{3,20}@.{1,100}["\'\\s]`,
-    "picatic_api_key":          `sk_live_[0-9a-z]{32}`,
-    "generic_api_key":          `[a|A][p|P][i|I][_]?[k|K][e|E][y|Y].*[\'|\"][0-9a-zA-Z]{32,45}[\'|\"]`,
-    "generic_secret":           `[s|S][e|E][c|C][r|R][e|E][t|T].*[\'|\"][0-9a-zA-Z]{32,45}[\'|\"]`,
-    
-    // Google services
-    "google_cloud_platform_api_key": `AIza[0-9A-Za-z\-_]{35}`,
-    "google_cloud_platform_oauth": `[0-9]+-[0-9A-Za-z_]{32}\.apps\.googleusercontent\.com`,
-    "google_drive_api_key":     `AIza[0-9A-Za-z\-_]{35}`,
-    "google_drive_oauth":       `[0-9]+-[0-9A-Za-z_]{32}\.apps\.googleusercontent\.com`,
-    "google_gcp_service_account": `"type": "service_account"`,
-    "google_gmail_api_key":     `AIza[0-9A-Za-z\-_]{35}`,
-    "google_gmail_oauth":       `[0-9]+-[0-9A-Za-z_]{32}\.apps\.googleusercontent\.com`,
-    "google_youtube_api_key":   `AIza[0-9A-Za-z\-_]{35}`,
-    "google_youtube_oauth":     `[0-9]+-[0-9A-Za-z_]{32}\.apps\.googleusercontent\.com`,
-    
-    // Twitter
-    "twitter_access_token":     `[t|T][w|W][i|I][t|T][t|T][e|E][r|R].*[1-9][0-9]+-[0-9a-zA-Z]{40}`,
-    "twitter_oauth":            `[t|T][w|W][i|I][t|T][t|T][e|E][r|R].*[\'|\"][0-9a-zA-Z]{35,44}[\'|\"]`,
-    "twitter_bearer":           `AAAAAAAAAAAAAAAAAAAAAA[0-9A-Za-z%]{37}`,
-}
-
-var ExclusionPatterns = []string{
-    `function\s*\(`,
-    `\)\s*{`,
-    `\s*var\s+`,
-    `\s*const\s+`,
-    `\s*let\s+`,
-    `console\.log`,
-    `module\.exports`,
-    `require\(`,
-    `import\s+`,
-    `export\s+`,
-    `return\s+`,
-    `if\s*\(`,
-    `else\s*{`,
-    `for\s*\(`,
-    `while\s*\(`,
-    `switch\s*\(`,
-    `case\s+`,
-    `break;`,
-    `continue;`,
-    `default:`,
-    
-    // Specific for minified code
-    `function\([\w,\s]*\){\s*`,
-    `\[native code\]`,
-    `window\.`,
-    `document\.`,
-    
-    // base64
-    `base64`,
-    `data:image/`,
-    `font-face`,
-    `@charset`,
-    `\*\s*/\s*{`,
-    
-    // CSS Selectors
-    `\.css`,
-    `#[a-zA-Z][a-zA-Z0-9_-]*\s*{`,
-    `\.[a-zA-Z][a-zA-Z0-9_-]*\s*{`,
-    `\[[a-zA-Z][a-zA-Z0-9_-]*\]`,
-    
-    // jQuery and JavaScript specific patterns
-    `jQuery`,
-    `\$\(`,
-    `\.ready\(`,
-    `\.click\(`,
-    `\.on\(`,
-    
-    // Common JavaScript patterns
-    `function\(t,e`,
-    `function\(e,t`,
-    `return[a-z]&&`,
-    `\?[a-z]\.`,
-    `:[a-z]\.`,
-}
-
-// SpecificExclusions is a map of specific exclusions for each regex pattern
-var SpecificExclusions = map[string][]string{
-    "amazon_aws_url": {
-        `selectors`,
-        `css3-selectors`,
-        `REC-css3-selectors`,
-        `w3.org/TR`,
-    },
-    "amazon_aws_url2": {
-        `selectors`,
-        `css3-selectors`,
-        `REC-css3-selectors`,
-        `w3.org/TR`,
-    },
-    "possible_credentials": {
-        `function\s*\(`,
-        `\)\s*{`,
-        `return`,
-        `var\s+`,
-        `if\s*\(`,
-        `else\s*{`,
-        `password:true`,
-        `password:!0`,
-        `password:null`,
-        `password:\s*true`,
-        `password:\s*!0`,
-        `password:\s*null`,
-    },
-    "generic_secret": {
-        `SECRET_INTERNALS_DO_NOT_USE`,
-        `UNSAFE_`,
-        `DEPRECATED_`,
-        `getSecret`,
-        `setSecret`,
-        `createSecret`,
-        `isSecret`,
-        `_secret_`,
-    },
-    "twilio_account_sid": {
-        `base64`,
-        `charset`,
-        `styles`,
-        `background`,
-        `data:`,
-        `font-face`,
-        `@font-face`,
-        `eJy`,
-        `AAA`,
-        `content:`,
-        `width:`,
-        `height:`,
-        `margin:`,
-        `padding:`,
-    },
-    "twilio_app_sid": {
-        `base64`,
-        `charset`,
-        `styles`,
-        `background`,
-        `data:`,
-        `font-face`,
-        `@font-face`,
-        `eJy`,
-        `AAA`,
-        `content:`,
-        `width:`,
-        `height:`,
-        `margin:`,
-        `padding:`,
-    },
-    "Heroku API KEY": {
-        `target`,
-        `id:`,
-        `element`,
-        `appliesTo`,
-        `styleBlockIds`,
-        `targets:`,
-        `selector`,
-        `transformers`,
-        `uuid`,
-        `guid`,
-    },
-	"authorization_basic": {
-        `chart`,
-        `content`,
-        `settings`,
-        `information`,
-        `features`,
-        `basic\s+[a-z]+$`,  
-        `basic\s+\w+\s+\w+`,
-    },
-    "authorization_api": {
-        `api_language`,
-        `api_location`,
-        `api\s+fails`,
-        `api\s+error`,
-        `api\s+request`,
-        `location\s+api`,
-        `using\s+api`,
-        `rest\s+api`,
-        `graphql\s+api`,
-        `webhook\s+api`,
-    },
-}
-
-// LoadPredefinedPatterns loads the predefined regex patterns into the RegexManager
+// LoadPredefinedPatterns carrega padrões predefinidos para o RegexManager
 func (rm *RegexManager) LoadPredefinedPatterns() error {
-    rm.mu.Lock()
-    defer rm.mu.Unlock()
-    
-    if rm.patterns == nil {
-        rm.patterns = make(map[string]*regexp.Regexp)
-    }
-    
-    rm.patternExclusions = make(map[string][]*regexp.Regexp)
-    
-    // Compile predefined regex patterns
-    for name, pattern := range RegexPatternMap {
-        re, err := regexp.Compile(pattern)
-        if err != nil {
-            return fmt.Errorf("failed to compile predefined regex '%s': %v", name, err)
-        }
-        rm.patterns[name] = re
-    }
-    
-    // Compile exclusion patterns
-    rm.exclusionPatterns = make([]*regexp.Regexp, 0, len(ExclusionPatterns))
-    for _, pattern := range ExclusionPatterns {
-        re, err := regexp.Compile(pattern)
-        if err != nil {
-            // Log erro mas continue, exclusões são opcionais
-            continue
-        }
-        rm.exclusionPatterns = append(rm.exclusionPatterns, re)
-    }
-    
-    // Compile specific exclusions for each pattern
-    for patternName, exclusions := range SpecificExclusions {
-        exclusionRegexList := make([]*regexp.Regexp, 0, len(exclusions))
-        for _, exclusion := range exclusions {
-            re, err := regexp.Compile(exclusion)
-            if err == nil {
-                exclusionRegexList = append(exclusionRegexList, re)
-            }
-        }
-        
-        if len(exclusionRegexList) > 0 {
-            rm.patternExclusions[patternName] = exclusionRegexList
-        }
-    }
-    
-    return nil
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	// Limpa padrões existentes
+	rm.patterns = make(map[string]*regexp.Regexp)
+	rm.exclusionPatterns = make([]*regexp.Regexp, 0)
+	rm.patternExclusions = make(map[string][]*regexp.Regexp)
+
+	// Compila e adiciona cada padrão predefinido de RegexPatterns
+	for name, pattern := range RegexPatterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Errorf("failed to compile regex pattern '%s': %v", name, err)
+		}
+		rm.patterns[name] = re
+	}
+
+	// Compila e adiciona padrões de exclusão de ExclusionPatterns
+	for _, pattern := range ExclusionPatterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Errorf("failed to compile exclude pattern: %v", err)
+		}
+		rm.exclusionPatterns = append(rm.exclusionPatterns, re)
+	}
+
+	// Compila e adiciona exclusões específicas por padrão
+	for patternName, exclusions := range SpecificExclusions {
+		var compiledExclusions []*regexp.Regexp
+		for _, exclusion := range exclusions {
+			re, err := regexp.Compile(exclusion)
+			if err != nil {
+				return fmt.Errorf("failed to compile specific exclusion pattern for '%s': %v", patternName, err)
+			}
+			compiledExclusions = append(compiledExclusions, re)
+		}
+		rm.patternExclusions[patternName] = compiledExclusions
+	}
+
+	return nil
 }
 
 // isValidSecretStrict applies stricter validation for secrets
 func (rm *RegexManager) isValidSecretStrict(value string, patternType string) bool {
-    if !rm.isValidSecret(value, patternType) {
-        return false
-    }
-    
-    if len(value) < rm.minSecretLength*2 || len(value) > rm.maxSecretLength/2 {
-        return false
-    }
-    
-    // Verify if the value contains minified code patterns
-    codeChars := []string{"{", "}", ";", "&&", "||", "==", "!=", "=>", "+=", "-="}
-    for _, char := range codeChars {
-        if strings.Contains(value, char) {
-            return false
-        }
-    }
-    
-    return true
+	if !rm.isValidSecret(value, patternType) {
+		return false
+	}
+
+	if len(value) < rm.minSecretLength*2 || len(value) > rm.maxSecretLength/2 {
+		return false
+	}
+
+	// Verify if the value contains minified code patterns
+	codeChars := []string{"{", "}", ";", "&&", "||", "==", "!=", "=>", "+=", "-="}
+	for _, char := range codeChars {
+		if strings.Contains(value, char) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // isExcludedByContextStrict applies stricter exclusion checks based on context
 func (rm *RegexManager) isExcludedByContextStrict(context string, patternName string) bool {
-    // Aplicar primeiro verificação básica
-    if rm.isExcludedByContext(context) {
-        return true
-    }
-    
-    if exclusions, exists := rm.patternExclusions[patternName]; exists {
-        for _, re := range exclusions {
-            if re.MatchString(context) {
-                return true
-            }
-        }
-    }
-    
-    return false
+	// Aplicar primeiro verificação básica
+	if rm.isExcludedByContext(context) {
+		return true
+	}
+
+	if exclusions, exists := rm.patternExclusions[patternName]; exists {
+		for _, re := range exclusions {
+			if re.MatchString(context) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
-// ParseRegexFile parses a regex file with a specific format
-func ParseRegexFile(filePath string) (map[string]string, error) {
-    file, err := os.Open(filePath)
-    if err != nil {
-        return nil, fmt.Errorf("failed to open regex file: %v", err)
-    }
-    defer file.Close()
-    
-    patterns := make(map[string]string)
-    scanner := bufio.NewScanner(file)
-    var inPatternSection bool
-    
-    for scanner.Scan() {
-        line := strings.TrimSpace(scanner.Text())
-        
-        // Skip empty lines and comments
-        if line == "" || strings.HasPrefix(line, "#") {
-            continue
-        }
-        
-        // Check for the start of the pattern section
-        if strings.HasPrefix(line, "REGEX_PATTERNS = {") {
-            inPatternSection = true
-            continue
-        }
-        
-        // Check for the end of the pattern section
-        if line == "}" {
-            break
-        }
-        
-        // Process pattern lines
-        if inPatternSection {
-            parts := strings.SplitN(line, ":", 2)
-            if len(parts) != 2 {
-                continue
-            }
-            
-            // Extract pattern name and regex
-            patternName := strings.Trim(parts[0], " '\",")
-            patternRegex := strings.Trim(parts[1], " '\",")
-            
-            // Remove trailing comma if present
-            patternRegex = strings.TrimSuffix(patternRegex, ",")
-            
-            patterns[patternName] = patternRegex
-        }
-    }
-    
-    if err := scanner.Err(); err != nil {
-        return nil, fmt.Errorf("error reading regex file: %v", err)
-    }
-    
-    if len(patterns) == 0 {
-        return nil, fmt.Errorf("no regex patterns found in file")
-    }
-    
-    return patterns, nil
+// ParsePatternsFromFile parses regex patterns from a file
+func ParsePatternsFromFile(filePath string) (map[string]string, []string, map[string][]string, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to open regex file: %w", err)
+	}
+	defer f.Close()
+
+	patterns := make(map[string]string)
+	var excludePatterns []string
+	specificExclusions := make(map[string][]string)
+	
+	scanner := bufio.NewScanner(f)
+
+	// Read line by line
+	inRegexBlock := false
+	inExcludeBlock := false
+	inSpecificExclusionsBlock := false
+	var patternBlock strings.Builder
+	var excludeBlock strings.Builder
+	var specificExclusionsBlock strings.Builder
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		
+		// Check for the start of regex patterns
+		if strings.Contains(line, "REGEX_PATTERNS") && strings.Contains(line, "{") {
+			inRegexBlock = true
+			patternBlock.WriteString(line)
+			continue
+		}
+
+		// Check for the start of exclude patterns
+		if strings.Contains(line, "EXCLUSION_PATTERNS") && strings.Contains(line, "[") {
+			inExcludeBlock = true
+			excludeBlock.WriteString(line)
+			continue
+		}
+
+		// Check for the start of specific exclusions
+		if strings.Contains(line, "SPECIFIC_EXCLUSIONS") && strings.Contains(line, "{") {
+			inSpecificExclusionsBlock = true
+			specificExclusionsBlock.WriteString(line)
+			continue
+		}
+
+		// Collect regex pattern lines
+		if inRegexBlock {
+			patternBlock.WriteString(line)
+
+			// Check for the end of the regex block
+			if strings.Contains(line, "}") && !strings.Contains(line, "{") {
+				inRegexBlock = false
+				regexStr := patternBlock.String()
+				parsePatterns, err := parsePatternBlock(regexStr)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				for k, v := range parsePatterns {
+					patterns[k] = v
+				}
+			}
+		}
+
+		// Collect exclude pattern lines
+		if inExcludeBlock {
+			excludeBlock.WriteString(line)
+
+			// Check for the end of the exclude block
+			if strings.Contains(line, "]") && !strings.Contains(line, "[") {
+				inExcludeBlock = false
+				excludeStr := excludeBlock.String()
+				excludes, err := parseExcludeBlock(excludeStr)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				excludePatterns = append(excludePatterns, excludes...)
+			}
+		}
+
+		// Collect specific exclusions lines
+		if inSpecificExclusionsBlock {
+			specificExclusionsBlock.WriteString(line)
+
+			// Check for the end of the block
+			if strings.Contains(line, "}") && 
+			   strings.Count(specificExclusionsBlock.String(), "{") == strings.Count(specificExclusionsBlock.String(), "}") {
+				inSpecificExclusionsBlock = false
+				specificExclusionsStr := specificExclusionsBlock.String()
+				parsedSpecificExclusions, err := parseSpecificExclusionsBlock(specificExclusionsStr)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				for k, v := range parsedSpecificExclusions {
+					specificExclusions[k] = v
+				}
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, nil, nil, fmt.Errorf("error reading regex file: %w", err)
+	}
+
+	// If no patterns were found, try a simpler parsing approach
+	if len(patterns) == 0 {
+		// Reset scanner to beginning of file
+		_, err := f.Seek(0, 0)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to reset file position: %w", err)
+		}
+		scanner = bufio.NewScanner(f)
+		patterns, excludePatterns, specificExclusions = parseSimpleFormat(scanner)
+	}
+
+	return patterns, excludePatterns, specificExclusions, nil
 }
+
+// parsePatternBlock parses a regex pattern block
+func parsePatternBlock(block string) (map[string]string, error) {
+	patterns := make(map[string]string)
+	
+	// Extract the contents of the REGEX_PATTERNS = { ... } block
+	regex := regexp.MustCompile(`REGEX_PATTERNS[^{]*{([^}]*)}`)
+	match := regex.FindStringSubmatch(block)
+	if len(match) < 2 {
+		return nil, fmt.Errorf("invalid regex pattern format")
+	}
+	
+	// Extract key-value pairs
+	pairRegex := regexp.MustCompile(`"([^"]+)"\s*:\s*"([^"]+)",?`)
+	pairs := pairRegex.FindAllStringSubmatch(match[1], -1)
+	
+	// If no patterns found with double quotes, try with single quotes
+	if len(pairs) == 0 {
+		pairRegex = regexp.MustCompile(`'([^']+)'\s*:\s*'([^']+)',?`)
+		pairs = pairRegex.FindAllStringSubmatch(match[1], -1)
+	}
+	
+	// If still no patterns found, try with a more lenient regex
+	if len(pairs) == 0 {
+		pairRegex = regexp.MustCompile(`["']?([^"':,]+)["']?\s*:\s*["']([^"']+)["'],?`)
+		pairs = pairRegex.FindAllStringSubmatch(match[1], -1)
+	}
+	
+	// If still no patterns found, try with backtick quotes for regex patterns
+	if len(pairs) == 0 {
+		pairRegex = regexp.MustCompile(`["']([^"':,]+)["']\s*:\s*` + "`([^`]+)`" + `,?`)
+		pairs = pairRegex.FindAllStringSubmatch(match[1], -1)
+	}
+	
+	// Process each pattern
+	for _, pair := range pairs {
+		if len(pair) >= 3 {
+			patterns[pair[1]] = pair[2]
+		}
+	}
+	
+	return patterns, nil
+}
+
+// parseExcludeBlock parses an exclude pattern block
+func parseExcludeBlock(block string) ([]string, error) {
+	var excludePatterns []string
+	
+	// Extract the contents of the EXCLUSION_PATTERNS = [ ... ] block
+	regex := regexp.MustCompile(`EXCLUSION_PATTERNS[^[]*\[(.*?)\]`)
+	match := regex.FindStringSubmatch(block)
+	if len(match) < 2 {
+		return nil, fmt.Errorf("invalid exclusion pattern format")
+	}
+	
+	// Extract patterns
+	patternRegex := regexp.MustCompile(`"([^"]+)",?`)
+	patterns := patternRegex.FindAllStringSubmatch(match[1], -1)
+	
+	// If no patterns found with double quotes, try with single quotes
+	if len(patterns) == 0 {
+		patternRegex = regexp.MustCompile(`'([^']+)',?`)
+		patterns = patternRegex.FindAllStringSubmatch(match[1], -1)
+	}
+	
+	// If still no patterns found, try with a more lenient regex
+	if len(patterns) == 0 {
+		patternRegex = regexp.MustCompile(`["']([^"']+)["'],?`)
+		patterns = patternRegex.FindAllStringSubmatch(match[1], -1)
+	}
+	
+	// If still no patterns found, try with backtick quotes
+	if len(patterns) == 0 {
+		patternRegex = regexp.MustCompile("`([^`]+)`" + `,?`)
+		patterns = patternRegex.FindAllStringSubmatch(match[1], -1)
+	}
+	
+	// Process each pattern
+	for _, pattern := range patterns {
+		if len(pattern) >= 2 {
+			excludePatterns = append(excludePatterns, pattern[1])
+		}
+	}
+	
+	return excludePatterns, nil
+}
+
+// parseSpecificExclusionsBlock parses the specific exclusions block
+func parseSpecificExclusionsBlock(block string) (map[string][]string, error) {
+	specificExclusions := make(map[string][]string)
+	
+	// Extract the contents between braces
+	regex := regexp.MustCompile(`SPECIFIC_EXCLUSIONS[^{]*{(.*)}`)
+	match := regex.FindStringSubmatch(block)
+	if len(match) < 2 {
+		return nil, fmt.Errorf("invalid specific exclusions format")
+	}
+	
+	// Extract each pattern-exclusions pair
+	content := match[1]
+	
+	// Split by pattern names (looking for "pattern_name": [...], pattern)
+	patternBlockRegex := regexp.MustCompile(`["']([^"']+)["']\s*:\s*\[(.*?)\],?`)
+	patternBlocks := patternBlockRegex.FindAllStringSubmatch(content, -1)
+	
+	for _, patternBlock := range patternBlocks {
+		if len(patternBlock) >= 3 {
+			patternName := patternBlock[1]
+			exclusionsContent := patternBlock[2]
+			
+			// Extract exclusions from the block
+			exclusionRegex := regexp.MustCompile(`["']([^"']+)["'],?`)
+			exclusions := exclusionRegex.FindAllStringSubmatch(exclusionsContent, -1)
+			
+			var patternExclusions []string
+			for _, exclusion := range exclusions {
+				if len(exclusion) >= 2 {
+					patternExclusions = append(patternExclusions, exclusion[1])
+				}
+			}
+			
+			specificExclusions[patternName] = patternExclusions
+		}
+	}
+	
+	return specificExclusions, nil
+}
+
+// parseSimpleFormat parses a simple name=pattern format
+func parseSimpleFormat(scanner *bufio.Scanner) (map[string]string, []string, map[string][]string) {
+	patterns := make(map[string]string)
+	var excludePatterns []string
+	specificExclusions := make(map[string][]string)
+	
+	inExcludeSection := false
+	inSpecificExclusionSection := false
+	currentPattern := ""
+	
+	for scanner.Scan() {
+		line := scanner.Text()
+		
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
+			continue
+		}
+		
+		// Check for section markers
+		if strings.Contains(line, "[EXCLUDE]") {
+			inExcludeSection = true
+			inSpecificExclusionSection = false
+			continue
+		}
+		
+		if strings.Contains(line, "[PATTERNS]") {
+			inExcludeSection = false
+			inSpecificExclusionSection = false
+			continue
+		}
+		
+		if strings.Contains(line, "[SPECIFIC_EXCLUSIONS]") {
+			inExcludeSection = false
+			inSpecificExclusionSection = true
+			continue
+		}
+		
+		// Process line based on section
+		if inExcludeSection {
+			// This is an exclude pattern
+			pattern := strings.TrimSpace(line)
+			if pattern != "" {
+				excludePatterns = append(excludePatterns, pattern)
+			}
+		} else if inSpecificExclusionSection {
+			// Format should be "pattern_name: exclusion_pattern"
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				patternName := strings.TrimSpace(parts[0])
+				exclusion := strings.TrimSpace(parts[1])
+				
+				if exclusion != "" {
+					if currentPattern != patternName {
+						currentPattern = patternName
+					}
+					
+					if _, exists := specificExclusions[currentPattern]; !exists {
+						specificExclusions[currentPattern] = []string{}
+					}
+					
+					specificExclusions[currentPattern] = append(specificExclusions[currentPattern], exclusion)
+				}
+			}
+		} else {
+			// This is a regular pattern
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				name := strings.TrimSpace(parts[0])
+				pattern := strings.TrimSpace(parts[1])
+				if name != "" && pattern != "" {
+					patterns[name] = pattern
+				}
+			}
+		}
+	}
+	
+	return patterns, excludePatterns, specificExclusions
+}
+

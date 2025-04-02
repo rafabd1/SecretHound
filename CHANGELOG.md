@@ -1,5 +1,16 @@
 # SecretHound Changelog
 
+## v0.1.2 (Unreleased)
+
+### Improvements
+- Added 50+ new regex patterns for detecting additional types of secrets
+- Added support for Machine Learning service API keys (OpenAI, HuggingFace, Anthropic, etc.)
+- Added patterns for CI/CD and DevOps tools (Jenkins, CircleCI, Docker Hub, etc.)
+- Enhanced detection of database connection strings
+- Added exclusion patterns to reduce false positives
+- Organized patterns into logical categories
+- Updated documentation with comprehensive list of supported secrets
+
 ## v0.1.1 (2024-07-05)
 
 ### Improvements
