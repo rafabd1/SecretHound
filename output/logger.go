@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 type LogLevel int
@@ -46,6 +47,10 @@ type Logger struct {
 	// Progress bar integration
 	progressBar  *ProgressBar
 	progressMu   sync.Mutex
+
+	// Adicionar um mecanismo para verificar segredos já logados
+	loggedSecrets map[string]bool
+	secretsMutex  sync.Mutex
 }
 
 // NewLogger creates a new logger
@@ -62,6 +67,9 @@ func NewLogger(verbose bool) *Logger {
 		warningColor: color.New(color.FgYellow).SprintfFunc(),
 		errorColor:   color.New(color.FgRed, color.Bold).SprintfFunc(),
 		successColor: color.New(color.FgGreen, color.Bold).SprintfFunc(),
+
+		// No construtor do logger, inicializar o mapa
+		loggedSecrets: make(map[string]bool),
 	}
 
 	// Start log processor in background
@@ -234,14 +242,24 @@ func (l *Logger) Success(format string, args ...interface{}) {
 }
 
 // SecretFound logs a discovered secret
-func (l *Logger) SecretFound(secretType, value, url string) {
-	// Truncate value if it's too long
-	truncatedValue := value
-	if len(value) > 50 {
-		truncatedValue = value[:47] + "..."
-	}
-
-	l.Success("Found %s: %s in %s", secretType, truncatedValue, url)
+func (l *Logger) SecretFound(secretType string, secretValue string, url string) {
+    // Create a deterministic key for this secret to avoid duplicates
+    key := fmt.Sprintf("%s:%s:%s", url, secretType, secretValue)
+    
+    l.secretsMutex.Lock()
+    defer l.secretsMutex.Unlock()
+    
+    // Check if this secret has already been logged
+    if _, exists := l.loggedSecrets[key]; exists {
+        return // Already logged, do nothing
+    }
+    
+    // Mark this secret as logged
+    l.loggedSecrets[key] = true
+    
+    // Proceed with normal logging
+    secretPart := utils.TruncateString(secretValue, 35)
+    l.Success("Found %s: %s... in %s", secretType, secretPart, url)
 }
 
 // ProgressBar returns the current progress bar
@@ -286,6 +304,34 @@ func (l *Logger) Close() {
         l.progressBar.Finalize()
         l.progressBar = nil
     }
+    l.progressMu.Unlock()
+}
+
+// ResetState completely resets the logger's state
+func (l *Logger) ResetState() {
+    // Acquire all locks to ensure thread safety
+    l.outputMu.Lock()
+    defer l.outputMu.Unlock()
+    
+    l.secretsMutex.Lock()
+    defer l.secretsMutex.Unlock()
+    
+    // Create a brand new map for logged secrets
+    l.loggedSecrets = make(map[string]bool)
+    
+    // Drain log queue
+    for len(l.logQueue) > 0 {
+        select {
+        case <-l.logQueue:
+            // Discard message
+        default:
+            break
+        }
+    }
+    
+    // Reset progress bar if present
+    l.progressMu.Lock()
+    l.progressBar = nil
     l.progressMu.Unlock()
 }
 

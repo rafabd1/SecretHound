@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -60,12 +61,39 @@ func (s *LocalScanner) SetConcurrency(concurrency int) {
 
 // ScanFiles processes a list of local files
 func (s *LocalScanner) ScanFiles(files []string) error {
+    // Get a unique ID for this execution to ensure determinism
+    executionID := GetUniqueExecutionID()
+    s.logger.Debug("Started scan execution #%d with %d files", executionID, len(files))
+    
+    // Reset components to ensure clean state
+    s.processor.CompleteReset()
+    s.logger.ResetState()
+    
+    // Initialize RegexManager with fresh patterns
+    err := s.processor.InitializeRegexManager()
+    if err != nil {
+        return fmt.Errorf("failed to initialize RegexManager: %w", err)
+    }
+    s.logger.Debug("Initialized RegexManager with %d patterns", s.processor.GetRegexPatternCount())
+    
+    // Reset scanner stats
+    s.mu.Lock()
+    s.stats = LocalScannerStats{
+        TotalFiles: len(files),
+        StartTime: time.Now(),
+    }
+    s.mu.Unlock()
+	
+	// Remove duplicates from input files and sort for deterministic processing
+	uniqueFiles := s.getUniqueAndSortedFiles(files)
+	files = uniqueFiles
+	
 	s.mu.Lock()
 	s.stats.TotalFiles = len(files)
 	s.stats.StartTime = time.Now()
 	s.mu.Unlock()
 
-	s.logger.Info("Starting to scan %d local files", len(files))
+	s.logger.Info("Found %d local files to scan", len(files))
 
 	// Create a progress bar
 	progressBar := output.NewProgressBar(len(files), 40)
@@ -90,6 +118,7 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 
 	// Start ticker goroutine to update progress bar
 	done := make(chan struct{})
+	tickerDone := false
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -160,7 +189,14 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		wg.Wait()
 		close(resultChan)
 		close(errorChan)
-		close(done) // Signal ticker to stop
+		
+		// Ensure we only close done channel once
+		s.mu.Lock()
+		if !tickerDone {
+			tickerDone = true
+			close(done) // Signal ticker to stop
+		}
+		s.mu.Unlock()
 	}()
 	
 	// Process results without a timeout
@@ -174,14 +210,14 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	for filesProcessed < totalFiles {
 		select {
 		case res, ok := <-resultChan:
-			if !ok {
+			if (!ok) {
 				// Channel closed
 				continue
 			}
 			secretsFound += res
 			filesProcessed++
 		case err, ok := <-errorChan:
-			if !ok {
+			if (!ok) {
 				// Channel closed
 				continue
 			}
@@ -191,14 +227,12 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	}
 	
 	// Make sure ticker goroutine is stopped
-	if done != nil {
-		select {
-		case <-done:
-			// Already closed
-		default:
-			close(done)
-		}
+	s.mu.Lock()
+	if !tickerDone {
+		tickerDone = true
+		close(done)
 	}
+	s.mu.Unlock()
 	
 	// Stop and finalize the progress bar
 	progressBar.Stop()
@@ -249,6 +283,31 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	return nil
 }
 
+// getUniqueAndSortedFiles removes duplicates and sorts files for deterministic processing
+func (s *LocalScanner) getUniqueAndSortedFiles(files []string) []string {
+	// Remove duplicates
+	uniqueFilesMap := make(map[string]bool)
+	for _, file := range files {
+		absPath, err := filepath.Abs(file)
+		if err == nil {
+			uniqueFilesMap[absPath] = true
+		} else {
+			uniqueFilesMap[file] = true
+		}
+	}
+	
+	// Convert to slice
+	uniqueFiles := make([]string, 0, len(uniqueFilesMap))
+	for file := range uniqueFilesMap {
+		uniqueFiles = append(uniqueFiles, file)
+	}
+	
+	// Sort for deterministic processing order
+	sort.Strings(uniqueFiles)
+	
+	return uniqueFiles
+}
+
 // processFile scans a single file for secrets
 func (s *LocalScanner) processFile(filePath string) (int, error) {
 	// Check if context is canceled
@@ -258,6 +317,9 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 	default:
 		// Continue processing
 	}
+	
+	// Adicione depuração
+	fmt.Printf("DEBUG: Processing file %s\n", filePath)
 	
 	// Check if the file exists and is readable
 	fi, err := os.Stat(filePath)
@@ -302,12 +364,23 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 	}
 	localURL := "file://" + filepath.ToSlash(absPath)
 	
+	// Adicione mais logs de depuração
+	fmt.Printf("DEBUG: Processing content with length %d bytes\n", len(fileContent))
+	
 	// Process the content
 	secrets, err := s.processor.ProcessJSContent(fileContent, localURL)
 	if err != nil {
 		s.incrementFailedFiles()
 		s.logger.Error("Failed to process file %s: %v", filePath, err)
 		return 0, err
+	}
+	
+	// Depuração
+	fmt.Printf("DEBUG: Found %d secrets in file %s\n", len(secrets), filePath)
+	
+	// Log the secrets found for this specific file
+	for _, secret := range secrets {
+		s.logger.SecretFound(secret.Type, secret.Value, localURL)
 	}
 	
 	// Write secrets to output file if configured
@@ -320,14 +393,13 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 		}
 	}
 	
-	// Log the secrets found
+	// Log summarizing how many secrets were found in this file
 	if len(secrets) > 0 {
 		s.logger.Success("Found %d secrets in %s", len(secrets), filePath)
 	}
 	
 	// Update stats
 	s.mu.Lock()
-	s.stats.ProcessedFiles++
 	s.stats.TotalSecrets += len(secrets)
 	s.stats.TotalBytes += fi.Size()
 	s.mu.Unlock()
