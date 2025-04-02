@@ -22,7 +22,7 @@ type RegexManager struct {
 
 // NewRegexManager creates a new regex manager
 func NewRegexManager() *RegexManager {
-    return &RegexManager{
+    manager := &RegexManager{
         patterns:           make(map[string]*regexp.Regexp),
         exclusionPatterns:  make([]*regexp.Regexp, 0),
         excludedExtensions: []string{".min.js", ".bundle.js", ".packed.js", ".compressed.js"},
@@ -30,10 +30,35 @@ func NewRegexManager() *RegexManager {
         maxSecretLength:    200, // Maximum of 200 characters to avoid entire code blocks
         mu:                 sync.RWMutex{},
     }
+    
+    // Register this manager globally so it can be reset if needed
+    RegisterRegexManager(manager)
+    
+    return manager
 }
 
 // FindSecrets searches for secrets using the configured regex patterns
 func (rm *RegexManager) FindSecrets(content, url string) ([]Secret, error) {
+    rm.mu.RLock()
+    patternCount := len(rm.patterns)
+    rm.mu.RUnlock()
+    
+    if (patternCount == 0) {
+        // Load predefined patterns once at the beginning
+        rm.mu.Lock()
+        err := rm.LoadPredefinedPatterns()
+        patternCount = len(rm.patterns)
+        rm.mu.Unlock()
+        
+        if err != nil {
+            return nil, fmt.Errorf("failed to load predefined patterns: %w", err)
+        }
+        
+        if patternCount == 0 {
+            return nil, fmt.Errorf("no patterns loaded")
+        }
+    }
+    
     rm.mu.RLock()
     defer rm.mu.RUnlock()
     
@@ -51,8 +76,11 @@ func (rm *RegexManager) FindSecretsWithStrictFiltering(content, url string) ([]S
 // findSecretsWithFiltering is the core implementation for searching secrets with optional filtering
 func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode bool) ([]Secret, error) {
     if len(rm.patterns) == 0 {
+        fmt.Println("ERRO CRÍTICO: Nenhum padrão regex carregado!")
         return nil, fmt.Errorf("no regex patterns loaded")
     }
+
+    fmt.Printf("DEBUG: Processando com %d padrões regex\n", len(rm.patterns))
 
     // Check file extensions to ignore
     for _, ext := range rm.excludedExtensions {
@@ -65,7 +93,13 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
     
     // For each pattern, search in the content
     for patternName, pattern := range rm.patterns {
+        // Try to find matches for this pattern
         matches := pattern.FindAllStringSubmatch(content, -1)
+        
+        if len(matches) > 0 {
+            fmt.Printf("DEBUG: Encontrados %d matches potenciais para padrão %s\n", 
+                      len(matches), patternName)
+        }
         
         for _, match := range matches {
             if len(match) > 0 {
@@ -75,39 +109,27 @@ func (rm *RegexManager) findSecretsWithFiltering(content, url string, strictMode
                     value = match[1]
                 }
                 
-                // Apply basic or strict checks depending on the mode
-                isValid := false
-                if strictMode {
-                    isValid = rm.isValidSecretStrict(value, patternName)
-                } else {
-                    isValid = rm.isValidSecret(value, patternName)
+                // Skip empty values
+                if len(value) < 4 || len(value) > 1000 {
+                    continue
                 }
                 
-                if isValid {
-                    // Get context around the secret (optional)
-                    context := rm.extractContext(content, value)
-                    
-                    // Apply context-based checks
-                    isExcluded := false
-                    if strictMode {
-                        isExcluded = rm.isExcludedByContextStrict(context, patternName)
-                    } else {
-                        isExcluded = rm.isExcludedByContext(context)
-                    }
-                    
-                    if !isExcluded {
-                        secret := Secret{
-                            Type:    patternName,
-                            Value:   value,
-                            Context: context,
-                            URL:     url,
-                        }
-                        secrets = append(secrets, secret)
-                    }
+                // IMPORTANTE: Desabilitar temporariamente TODAS as validações
+                // para descobrir a origem do problema
+                context := rm.extractContext(content, value)
+                secret := Secret{
+                    Type:    patternName,
+                    Value:   value,
+                    Context: context,
+                    URL:     url,
                 }
+                secrets = append(secrets, secret)
             }
         }
     }
+    
+    fmt.Printf("DEBUG: Total de %d segredos encontrados para %s\n", 
+              len(secrets), url)
     
     return secrets, nil
 }
@@ -477,4 +499,42 @@ func (rm *RegexManager) FindMatches(content, url string) map[string][]string {
     }
 
     return matches
+}
+
+// Reset resets the RegexManager to its initial state
+func (rm *RegexManager) Reset() {
+    rm.mu.Lock()
+    defer rm.mu.Unlock()
+    
+    // Only clear patterns if explicitly requested
+    // This ensures we don't lose loaded patterns between runs
+    if len(rm.patterns) == 0 {
+        // We're already in a clean state
+        return
+    }
+    
+    // Don't fully reset - clear existing collections but don't destroy them
+    for k := range rm.patterns {
+        delete(rm.patterns, k)
+    }
+    
+    rm.exclusionPatterns = make([]*regexp.Regexp, 0)
+    rm.patternExclusions = make(map[string][]*regexp.Regexp)
+    rm.excludedExtensions = []string{".min.js", ".bundle.js", ".packed.js", ".compressed.js"}
+}
+
+// CompleteReset performs a complete reset of the RegexManager to initial state
+func (rm *RegexManager) CompleteReset() {
+    rm.mu.Lock()
+    defer rm.mu.Unlock()
+    
+    // Create fresh collections
+    rm.patterns = make(map[string]*regexp.Regexp)
+    rm.exclusionPatterns = make([]*regexp.Regexp, 0)
+    rm.patternExclusions = make(map[string][]*regexp.Regexp)
+    
+    // Reset to default configuration
+    rm.excludedExtensions = []string{".min.js", ".bundle.js", ".packed.js", ".compressed.js"}
+    rm.minSecretLength = 5
+    rm.maxSecretLength = 200
 }

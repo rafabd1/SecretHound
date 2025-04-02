@@ -194,7 +194,7 @@ var RegexPatterns = map[string]string{
 	// Generic Secrets
 	"generic_api_key":     `(?i)(?:api[_-]?(?:key)|token|secret)[\s]*[=:]+[\s]*['"][a-zA-Z0-9_\-+=,./:]{8,100}['"]`,
 	"generic_secret":      `(?i)(?:secret|private[_-]?key|password)[\s]*[=:]+[\s]*['"][a-zA-Z0-9_\-+=,./:]{8,100}['"]`,
-	"high_entropy_string": `[a-zA-Z0-9_-]{32,100}`,
+	"high_entropy_string": `(?i)(?:[^a-z0-9_.-]|^)([a-zA-Z0-9_\-]{32,100})(?:[^a-z0-9_.-]|$)`,
 }
 
 // ExclusionPatterns contains regex patterns to exclude (common false positives)
@@ -393,11 +393,32 @@ var SpecificExclusions = map[string][]string{
 		`(?i)api_key["']?\s*[:,]\s*["']DEMO_KEY["']`,
 	},
 	"high_entropy_string": {
+		// Arquivo e recursos
 		`[a-f0-9]{32}\.png`,
 		`[a-f0-9]{32}\.jpe?g`,
 		`[a-f0-9]{32}\.gif`,
 		`[a-f0-9]{32}\.svg`,
 		`[a-f0-9]{32}\.webp`,
 		`[a-f0-9]{32,40}\.min\.(js|css)`,
+		// Padrões já cobertos por outros detectores específicos
+		`pk_live_[0-9a-zA-Z]{24}`,            // stripe_publishable_key
+		`sk_live_[0-9a-zA-Z]{24}`,            // stripe_api_key
+		`sk_test_[0-9a-zA-Z]{24}`,            // stripe_test_key
+		`pk_test_[0-9a-zA-Z]{24}`,            // stripe test key
+		`AIza[0-9A-Za-z\-_]{35}`,             // google_api
+		`eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}`,  // JWT tokens
+		`GOCSPX-[a-zA-Z0-9_-]{20,30}`,        // Google OAuth client secret
+		`api_key_[a-zA-Z0-9]{20,40}`,         // Named API keys
+		`admin_api_[a-zA-Z0-9]{20,40}`,       // Admin API keys
+		`tr_sec_[a-zA-Z0-9]{20,40}`,          // Transaction secrets
+		`[a-zA-Z]{10,20}(Token|Secret|Key)[a-zA-Z0-9]{5,30}`,  // Common naming patterns
+		`npm_[a-zA-Z0-9_]{10,60}`,            // NPM tokens
+		`node_[a-zA-Z0-9_]{10,60}`,           // Node related tokens
+		`react_[a-zA-Z0-9_]{10,60}`,          // React related tokens
+		`angular_[a-zA-Z0-9_]{10,60}`,        // Angular related tokens
+		`vue_[a-zA-Z0-9_]{10,60}`,            // Vue related tokens
+		`github_pat_[a-zA-Z0-9_]{60,90}`,     // GitHub personal access tokens
+		`ghp_[a-zA-Z0-9]{36}`,                // GitHub personal access tokens
+		`gho_[a-zA-Z0-9]{36}`,                // GitHub OAuth tokens
 	},
 }

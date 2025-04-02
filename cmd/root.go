@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"runtime"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -38,12 +40,35 @@ rate limiting and WAF blocks for remote resources.`,
 	TraverseChildren:      true,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately
+// beforeCommand executes before any command runs
+func beforeCommand(cmd *cobra.Command, args []string) {
+    // Desabilite a limpeza completa de estado para diagnóstico
+    fmt.Println("DEBUG: beforeCommand chamado, limpeza de estado global desativada para diagnóstico")
+    
+    // Apenas force GC para garantir memória suficiente
+    runtime.GC()
+    
+    // Small delay to ensure system is stabilized
+    time.Sleep(100 * time.Millisecond)
+}
+
+// Execute adds all child commands to the root command
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+    // Add pre-run hook to all commands
+    for _, cmd := range rootCmd.Commands() {
+        originalPreRun := cmd.PreRun
+        cmd.PreRun = func(cmd *cobra.Command, args []string) {
+            beforeCommand(cmd, args)
+            if originalPreRun != nil {
+                originalPreRun(cmd, args)
+            }
+        }
+    }
+    
+    if err := rootCmd.Execute(); err != nil {
+        fmt.Println(err)
+        os.Exit(1)
+    }
 }
 
 func init() {

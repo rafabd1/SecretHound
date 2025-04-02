@@ -9,9 +9,25 @@ import (
 	"time"
 
 	"github.com/rafabd1/SecretHound/cmd"
+	"github.com/rafabd1/SecretHound/core"
 )
 
+// globalProcessorInstance is a pointer to any processor that might be created globally
+var globalProcessorInstance *core.Processor
+
+// resetGlobalState completely resets all global state in the application
+func resetGlobalState() {
+    // Não fazer nada por enquanto para diagnóstico
+    fmt.Println("DEBUG: resetGlobalState foi chamado mas está desativado para diagnóstico")
+    
+    // Vamos apenas garantir que haja memória suficiente
+    runtime.GC()
+}
+
 func main() {
+    // Reset global state at the beginning of execution
+    resetGlobalState()
+
 	// Set GOMAXPROCS to use all available cores
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
