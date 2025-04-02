@@ -146,21 +146,6 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 	// Extract the domain
 	domain := parsedURL.Hostname()
 
-	// Create a context with a timeout
-	ctx, cancel := context.WithTimeout(context.Background(), c.httpClient.Timeout)
-	defer cancel()
-
-	// Prepare the request
-	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
-	if (err != nil) {
-		return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed to create request for URL: %s", urlStr), err)
-	}
-
-	// Add headers
-	for key, value := range c.requestHeader {
-		req.Header.Set(key, value)
-	}
-
 	// Implement retry logic
 	var (
 		resp        *http.Response
@@ -177,47 +162,90 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 			continue
 		}
 
-		resp, err = c.httpClient.Do(req)
-		if (err != nil) {
-			if ctx.Err() == context.DeadlineExceeded {
-				return "", utils.NewError(utils.NetworkError, "request timed out", err)
+		// Create a context with the configured timeout for each attempt
+		ctx, cancel := context.WithTimeout(context.Background(), c.httpClient.Timeout)
+
+		// Prepare the request with this context
+		req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+		if err != nil {
+			cancel() // Important: cancel the context to prevent leaks
+			return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed to create request for URL: %s", urlStr), err)
+		}
+
+		// Add headers
+		for key, value := range c.requestHeader {
+			req.Header.Set(key, value)
+		}
+
+		// Execute the request with proper timeout handling
+		requestDone := make(chan struct{})
+		var requestErr error
+
+		go func() {
+			resp, requestErr = c.httpClient.Do(req)
+			close(requestDone)
+		}()
+
+		// Wait for either the request to complete or the context to timeout
+		select {
+		case <-ctx.Done():
+			// Context timed out
+			cancel()
+			
+			// Check if this was the last retry
+			if retryCount >= c.maxRetries {
+				return "", utils.NewError(utils.NetworkError, fmt.Sprintf("request to %s timed out after %d retries", urlStr, retryCount+1), ctx.Err())
 			}
 			
-			// Check if we should retry for network errors
-			if retryCount < c.maxRetries {
-				retryDelay = c.calculateBackoff(retryCount, domain)
-				time.Sleep(retryDelay)
-				continue
+			// Log and retry
+			retryDelay = c.calculateBackoff(retryCount, domain)
+			time.Sleep(retryDelay)
+			continue
+
+		case <-requestDone:
+			// Request completed (with success or error)
+			if requestErr != nil {
+				cancel() // Important: cancel the context to prevent leaks
+				
+				// Check if we should retry for network errors
+				if retryCount < c.maxRetries {
+					retryDelay = c.calculateBackoff(retryCount, domain)
+					time.Sleep(retryDelay)
+					continue
+				}
+				
+				return "", utils.NewError(utils.NetworkError, fmt.Sprintf("network error after %d retries", retryCount), requestErr)
 			}
 			
-			return "", utils.NewError(utils.NetworkError, fmt.Sprintf("network error after %d retries", retryCount), err)
+			// Process the response
+			defer cancel() // Important: cancel the context to prevent leaks
+			
+			// Check the response
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				// Success
+				break
+			}
+
+			// Close the response body to avoid resource leaks
+			resp.Body.Close()
+
+			// Check if the response indicates rate limiting or WAF
+			if c.filter.IsRateLimited(resp) {
+				return "", utils.NewError(utils.RateLimitError, "rate limited by server", nil)
+			}
+
+			if c.filter.IsWAFBlocked(resp) {
+				return "", utils.NewError(utils.WAFError, "blocked by WAF", nil)
+			}
+
+			// Check if we should retry based on status code
+			shouldRetry, retryDelay = c.shouldRetryStatus(resp.StatusCode, retryCount, domain)
+			if !shouldRetry || retryCount >= c.maxRetries {
+				return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed with status code: %d", resp.StatusCode), nil)
+			}
+
+			time.Sleep(retryDelay)
 		}
-
-		// Check the response
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			// Success
-			break
-		}
-
-		// Close the response body to avoid resource leaks
-		resp.Body.Close()
-
-		// Check if the response indicates rate limiting or WAF
-		if c.filter.IsRateLimited(resp) {
-			return "", utils.NewError(utils.RateLimitError, "rate limited by server", nil)
-		}
-
-		if c.filter.IsWAFBlocked(resp) {
-			return "", utils.NewError(utils.WAFError, "blocked by WAF", nil)
-		}
-
-		// Check if we should retry based on status code
-		shouldRetry, retryDelay = c.shouldRetryStatus(resp.StatusCode, retryCount, domain)
-		if !shouldRetry || retryCount >= c.maxRetries {
-			return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed with status code: %d", resp.StatusCode), nil)
-		}
-
-		time.Sleep(retryDelay)
 	}
 
 	// Track retry statistics
@@ -227,30 +255,48 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 		c.mutex.Unlock()
 	}
 
-	// Read the response body
+	// Read the response body with a separate timeout to avoid hanging
 	if resp == nil {
 		return "", utils.NewError(utils.NetworkError, "no response after retries", nil)
 	}
-	defer resp.Body.Close()
-
-	// Check if the response should be processed
-	if !c.filter.ShouldProcess(resp) {
-		return "", utils.NewError(utils.NetworkError, fmt.Sprintf("response filtered out (status code: %d)", resp.StatusCode), nil)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if (err != nil) {
-		return "", utils.NewError(utils.NetworkError, "failed to read response body", err)
+	
+	// Use a separate context for reading the body
+	bodyCtx, bodyCancel := context.WithTimeout(context.Background(), c.httpClient.Timeout)
+	defer bodyCancel()
+	
+	// Create a channel to signal when body reading is complete
+	bodyReadComplete := make(chan struct{})
+	
+	var bodyBytes []byte
+	var bodyErr error
+	
+	go func() {
+		// Read response body
+		bodyBytes, bodyErr = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		close(bodyReadComplete)
+	}()
+	
+	// Wait for body reading or timeout
+	select {
+	case <-bodyCtx.Done():
+		// Reading the body timed out
+		return "", utils.NewError(utils.NetworkError, "timed out while reading response body", bodyCtx.Err())
+	case <-bodyReadComplete:
+		// Body reading completed
+		if bodyErr != nil {
+			return "", utils.NewError(utils.NetworkError, "failed to read response body", bodyErr)
+		}
 	}
 
 	// Update statistics
 	c.mutex.Lock()
 	c.stats.RequestsSucceeded++
-	c.stats.TotalBytes += int64(len(body))
+	c.stats.TotalBytes += int64(len(bodyBytes))
 	c.stats.TotalTime += time.Since(startTime)
 	c.mutex.Unlock()
 
-	return string(body), nil
+	return string(bodyBytes), nil
 }
 
 // checkRateLimit checks if a request can be made to a domain

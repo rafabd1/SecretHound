@@ -449,6 +449,13 @@ func (s *Scheduler) worker(id int) {
 
 // handleRequestError handles errors during content fetching
 func (s *Scheduler) handleRequestError(err error, domain, url string) bool {
+	// Check if error is caused by timeout
+	if utils.IsTimeoutError(err) {
+		s.logger.Warning("Request to %s timed out, marking as failed", url)
+		s.incrementFailedURLs()
+		return true
+	}
+
 	// Check if error is caused by rate limiting
 	if utils.IsRateLimitError(err) {
 		s.mutex.Lock()

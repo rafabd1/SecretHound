@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"net"
 )
 
 // ErrorType represents the type of error
@@ -139,4 +140,39 @@ func IsTemporaryError(err error) bool {
 	}
 	
 	return false
+}
+
+func IsTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	// Check for net.Error with Timeout() method
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		return true
+	}
+	
+	// Check wrapped errors
+	var wrapErr *AppError
+	if errors.As(err, &wrapErr) && wrapErr.Type == NetworkError {
+		// Check the message for timeout indicators
+		timeoutIndicators := []string{
+			"timeout",
+			"timed out",
+			"deadline exceeded",
+			"context deadline exceeded",
+		}
+		
+		for _, indicator := range timeoutIndicators {
+			if strings.Contains(strings.ToLower(wrapErr.Error()), indicator) {
+				return true
+			}
+		}
+	}
+	
+	// Last resort: check error string
+	errStr := err.Error()
+	return strings.Contains(strings.ToLower(errStr), "timeout") ||
+		strings.Contains(strings.ToLower(errStr), "timed out") ||
+		strings.Contains(strings.ToLower(errStr), "deadline exceeded")
 }
