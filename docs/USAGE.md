@@ -19,13 +19,13 @@ You can provide input directly as arguments or use the `-i` flag to specify an i
 Scan a single URL:
 
 ```bash
-secrethound -i https://example.com/script.js
+secrethound https://example.com/script.js
 ```
 
 Scan multiple URLs:
 
 ```bash
-secrethound -i https://example.com/script1.js https://example.com/script2.js
+secrethound https://example.com/script1.js https://example.com/script2.js
 ```
 
 ### 2. Scanning Local Files
@@ -67,7 +67,8 @@ https://example.com/script1.js
 https://example.com/script2.js
 ```
 
-5. Saving Results
+### 5. Saving Results
+
 Save results to a text file:
 
 ```bash
@@ -76,7 +77,7 @@ secrethound -i urls.txt -o results.txt
 
 ## Command Line Options
 
-The scan command supports the following options:
+SecretHound supports the following options:
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -87,7 +88,7 @@ The scan command supports the following options:
 | `-n, --concurrency` | Number of concurrent workers | 10 |
 | `-l, --rate-limit` | Requests per second per domain (0 = auto) | 0 |
 | `-H, --header` | Custom HTTP header (format: 'Name: Value') | - |
-| `--regex-file` | File containing custom regex patterns | - |
+| `--insecure` | Disable SSL/TLS certificate verification | false |
 | `-v, --verbose` | Enable verbose output | false |
 
 ## Advanced Options
@@ -98,7 +99,6 @@ Adjust number of concurrent workers:
 ```bash
 secrethound -i urls.txt -n 20
 ```
-
 Higher values = faster scanning but more resource usage.
 
 ### Setting Timeouts
@@ -132,22 +132,6 @@ Enable detailed logging:
 secrethound -i urls.txt -v
 ```
 
-### Custom Regex Patterns
-Use custom patterns file:
-
-```bash
-secrethound -i urls.txt --regex-file custom_patterns.txt
-```
-
-Format of custom_patterns.txt:
-
-```plaintext
-REGEX_PATTERNS = {
-    "custom_api_key": "ApiKey_[0-9a-zA-Z]{32}",
-    "internal_token": "INT_TOKEN_[a-zA-Z0-9]{16}"
-}
-```
-
 ### Custom HTTP Headers
 
 You can specify custom HTTP headers for requests using the `-H` flag. This is useful for authentication, setting cookies, or customizing the user agent:
@@ -158,22 +142,34 @@ secrethound -i urls.txt -H "User-Agent: Mozilla/5.0 Firefox" -H "Authorization: 
 
 If you specify a User-Agent header, it will override the default user agent.
 
+### Bypassing SSL Certificate Verification
+
+For sites with invalid or self-signed certificates, you can disable certificate verification:
+
+```bash
+secrethound -i urls.txt --insecure
+```
+
+**Note**: This reduces security as it doesn't validate the identity of the remote server.
+
 ### Combined Examples
 Complete Scan
 
 ```bash
-secrethound -i urls.txt -o results.json -n 15 -t 45 -r 4 -l 3 -v
+secrethound -i urls.txt -o results.txt -n 15 -t 45 -r 4 -l 3 -v --insecure -H "User-Agent: Custom-Agent"
 ```
 
 This command:
 
 - Reads URLs from urls.txt
-- Saves results to results.json
+- Saves results to results.txt
 - Uses 15 concurrent workers
 - Sets 45-second timeout
 - Retries up to 4 times
 - Limits to 3 requests/second per domain
 - Enables verbose output
+- Disables SSL certificate verification
+- Uses a custom User-Agent
 
 ### Bug Bounty Workflow
 Download and scan JS files:
@@ -186,7 +182,7 @@ wget -r -l 2 -A .js https://example.com
 find ./example.com -name "*.js" > js-files.txt
 
 # Scan files
-secrethound -i js-files.txt -o bounty-results.json -v
+secrethound -i js-files.txt -o bounty-results.txt -v
 ```
 
 ### Security Audit
@@ -233,7 +229,17 @@ secrethound completion powershell > secrethound.ps1
     - Local files: Set to CPU core count
     - Web requests: Consider target server capacity
     - Respect Rate Limits: Adjust -l flag based on target websites.
-3. Review Results: Always verify detected secrets.
-4. Custom Patterns: Add patterns specific to your needs.
-5. Monitor Resources: Watch memory and CPU usage with large scans.
-6. Backup Results: Save important findings securely.
+    
+3. Custom Headers:
+    - Use custom headers for sites requiring authentication
+    - Set appropriate User-Agent to avoid being blocked
+    
+4. SSL Certificate Issues:
+    - If websites report certificate errors, use `--insecure` option
+    - Be aware that disabling certificate verification reduces security
+    
+5. Review Results: Always verify detected secrets.
+
+6. Monitor Resources: Watch memory and CPU usage with large scans.
+
+7. Backup Results: Save important findings securely.

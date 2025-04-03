@@ -10,9 +10,7 @@ import (
 
 // Build information
 var (
-	Version   = "0.1.1"
-	BuildDate = "undefined"
-	GitCommit = "undefined"
+	Version = "0.2.0"
 )
 
 // versionCmd represents the version command
@@ -26,8 +24,6 @@ var versionCmd = &cobra.Command{
 		
 		fmt.Println(cyan("SecretHound Version Information"))
 		fmt.Printf("%s: %s\n", cyan("Version"), green(Version))
-		fmt.Printf("%s: %s\n", cyan("Build Date"), green(BuildDate))
-		fmt.Printf("%s: %s\n", cyan("Git Commit"), green(GitCommit))
 		fmt.Printf("%s: %s\n", cyan("Go Version"), green(runtime.Version()))
 		fmt.Printf("%s: %s/%s\n", cyan("Platform"), green(runtime.GOOS), green(runtime.GOARCH))
 	},

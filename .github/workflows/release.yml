@@ -30,17 +30,14 @@ jobs:
         
       - name: Build for all platforms
         run: |
-          BUILD_DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          GIT_COMMIT=$(git rev-parse --short HEAD)
-          
           # Build for Windows
-          GOOS=windows GOARCH=amd64 go build -ldflags "-X github.com/rafabd1/SecretHound/cmd.Version=${{ env.VERSION }} -X 'github.com/rafabd1/SecretHound/cmd.BuildDate=${BUILD_DATE}' -X github.com/rafabd1/SecretHound/cmd.GitCommit=${GIT_COMMIT}" -o secrethound-${{ env.VERSION }}-windows-amd64.exe ./cmd/secrethound/
+          GOOS=windows GOARCH=amd64 go build -ldflags "-X github.com/rafabd1/SecretHound/cmd.Version=${{ env.VERSION }}" -o secrethound-${{ env.VERSION }}-windows-amd64.exe ./cmd/secrethound/
           
           # Build for Linux
-          GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/rafabd1/SecretHound/cmd.Version=${{ env.VERSION }} -X 'github.com/rafabd1/SecretHound/cmd.BuildDate=${BUILD_DATE}' -X github.com/rafabd1/SecretHound/cmd.GitCommit=${GIT_COMMIT}" -o secrethound-${{ env.VERSION }}-linux-amd64 ./cmd/secrethound/
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/rafabd1/SecretHound/cmd.Version=${{ env.VERSION }}" -o secrethound-${{ env.VERSION }}-linux-amd64 ./cmd/secrethound/
           
           # Build for macOS
-          GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/rafabd1/SecretHound/cmd.Version=${{ env.VERSION }} -X 'github.com/rafabd1/SecretHound/cmd.BuildDate=${BUILD_DATE}' -X github.com/rafabd1/SecretHound/cmd.GitCommit=${GIT_COMMIT}" -o secrethound-${{ env.VERSION }}-darwin-amd64 ./cmd/secrethound/
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/rafabd1/SecretHound/cmd.Version=${{ env.VERSION }}" -o secrethound-${{ env.VERSION }}-darwin-amd64 ./cmd/secrethound/
 
       - name: Create Release
         id: create_release
@@ -56,35 +53,41 @@ jobs:
             secrethound-${{ env.VERSION }}-linux-amd64
             secrethound-${{ env.VERSION }}-darwin-amd64
           body: |
-            # SecretHound v${{ env.VERSION }}
-            
-            ## Improvements
-            - Removed global execution timeout allowing scans to run without time constraints
-            - Enhanced error logging with better visibility for critical errors
-            - Improved log output reducing redundant messages and clarifying statistics
-            - Fixed build information display in version command
-            - Added proper build date and git commit tracking
-            - Optimized progress display with cleaner output
-            
-            ## Bug Fixes
-            - Fixed issue with timeout prematurely ending large scans
-            - Resolved silent errors in verbose mode
-            
-            ## Installation
-            
-            Download the appropriate binary for your platform and make it executable.
-            
-            For Linux/macOS:
-            ```
-            chmod +x secrethound-${{ env.VERSION }}-linux-amd64
-            ./secrethound-${{ env.VERSION }}-linux-amd64
-            ```
-            
-            For Go users:
-            ```
-            go install github.com/rafabd1/SecretHound/cmd/secrethound@latest
-            ```
-            
-            ## Documentation
-            
-            See the [documentation](https://github.com/rafabd1/SecretHound/tree/main/docs) for details on usage.
+                # SecretHound v${{ env.VERSION }}
+                
+                ## Improvements
+                
+                - Added support for ignoring SSL/TLS certificate verification with `--insecure`
+                - Complete overhaul of the regex pattern system
+                - Added support for custom HTTP headers with `-H/--header`
+                - Fixed timeout and concurrency issues
+                - Fixed `-r/--retries` parameter that wasn't being applied
+                - Reorganized patterns package for better maintenance
+                - Redesigned error handling system
+                - Temporarily disabled `--regex-file` option
+                
+                ## Bug Fixes
+                
+                - Fixed issue with URLs having invalid certificates
+                - Resolved timeout problems in large scans
+                - Improved synchronization between threads to prevent resource leaks
+                - Fixed false positive issues in certain regex patterns
+                
+                ## Installation
+                
+                Download the appropriate binary for your platform and make it executable.
+                
+                For Linux/macOS:
+                ```
+                chmod +x secrethound-${{ env.VERSION }}-linux-amd64
+                ./secrethound-${{ env.VERSION }}-linux-amd64
+                ```
+                
+                For Go users:
+                ```
+                go install github.com/rafabd1/SecretHound/cmd/secrethound@latest
+                ```
+                
+                ## Documentation
+                
+                See the [documentation](https://github.com/rafabd1/SecretHound/tree/main/docs) for usage details.

@@ -97,12 +97,12 @@ secrethound -i /path/to/directory
 Save results to a file:
 
 ```bash
-secrethound -i url-list.txt -o results.json
+secrethound -i url-list.txt -o results.txt
 ```
 
 ## Command Line Options
 
-The scan command supports the following options:
+SecretHound supports the following options:
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -112,7 +112,8 @@ The scan command supports the following options:
 | `-r, --retries` | Maximum number of retry attempts | 3 |
 | `-n, --concurrency` | Number of concurrent workers | 10 |
 | `-l, --rate-limit` | Requests per second per domain (0 = auto) | 0 |
-| `--regex-file` | File containing custom regex patterns | - |
+| `-H, --header` | Custom HTTP header (format: 'Name: Value') | - |
+| `--insecure` | Disable SSL/TLS certificate verification | false |
 | `-v, --verbose` | Enable verbose output | false |
 
 ## Input Sources
@@ -126,31 +127,9 @@ SecretHound can process various input sources:
 
 Lists can be specified with the `-i` flag or by providing the filepath directly as an argument. URLs can be provided directly as arguments.
 
-## Custom Regex Patterns
-
-By default, SecretHound uses its built-in regex patterns to detect secrets. You can provide your own patterns by creating a file with the following format:
-
-```
-REGEX_PATTERNS = {
-    "name": "regex",
-    "other": "other_regex"
-}
-```
-
-Example:
-
-```
-REGEX_PATTERNS = {
-    "aws_key": "AKIA[0-9A-Z]{16}",
-    "password": "(?i)password['\"]?\\s*[:=]\\s*['\"]([^'\"]+)['\"]"
-}
-```
-
-A sample file is available in `examples/regex.txt`.
-
 ## Supported Patterns
 
-SecretHound can detect dozens of different types of secrets, including:
+SecretHound can detect over 100 different types of secrets, including:
 
 - API keys (Google, AWS, Firebase, etc.)
 - Access tokens (Facebook, Twitter, GitHub, etc.)
@@ -158,6 +137,7 @@ SecretHound can detect dozens of different types of secrets, including:
 - Private keys (RSA, SSH, PGP)
 - JWT tokens
 - Sensitive URLs (Firebase, AWS S3)
+- Database connection strings
 - And much more!
 
 For a complete list of supported regexes, see the [Supported Secrets](SUPPORTED_SECRETS.md) document.
