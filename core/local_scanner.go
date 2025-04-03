@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -328,6 +329,9 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
         return 0, nil
     }
     
+    // Log which file we're processing in debug mode
+    s.logger.Debug("Processing local file: %s (size: %d bytes)", filePath, len(content))
+    
     // Convert to string and process
     fileContent := string(content)
     
@@ -338,7 +342,13 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
     }
     localURL := "file://" + filepath.ToSlash(absPath)
     
-    // Process the content
+    // Add more diagnostic info in verbose mode
+    if s.logger.IsVerbose() {
+        ext := utils.GetFileExtension(filePath)
+        s.logger.Debug("File details: %s, extension: %s, size: %d bytes", filepath.Base(filePath), ext, len(content))
+    }
+    
+    // Process the content with extra diagnostic info
     secrets, err := s.processor.ProcessJSContent(fileContent, localURL)
     if err != nil {
         s.incrementFailedFiles()
@@ -346,14 +356,43 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
         return 0, err
     }
     
+    // Add line numbers if missing and enhance context
+    enhancedSecrets := make([]Secret, 0, len(secrets))
+    for _, secret := range secrets {
+        if secret.Line == 0 {
+            secret.Line = utils.FindLineNumber(fileContent, secret.Value)
+        }
+        
+        // Enhance context if needed to show more surrounding code
+        if len(secret.Context) < 60 && secret.Line > 0 {
+            lines := strings.Split(fileContent, "\n")
+            if secret.Line <= len(lines) {
+                startLine := max(0, secret.Line-2)
+                endLine := min(len(lines), secret.Line+2)
+                enhancedContext := strings.Join(lines[startLine:endLine], "\n")
+                if len(enhancedContext) > len(secret.Context) {
+                    secret.Context = enhancedContext
+                }
+            }
+        }
+        
+        enhancedSecrets = append(enhancedSecrets, secret)
+    }
+    
+    // Replace original secrets with enhanced ones
+    secrets = enhancedSecrets
+    
     // Log the secrets found for this specific file in real time
     for _, secret := range secrets {
+        // Add the line number to the URL for better locating
+        locationURL := fmt.Sprintf("%s#L%d", localURL, secret.Line)
+        
         // Log each secret to terminal as soon as it's found
-        s.logger.SecretFound(secret.Type, secret.Value, localURL)
+        s.logger.SecretFound(secret.Type, secret.Value, locationURL)
         
         // Write to output file if configured
         if s.writer != nil {
-            err := s.writer.WriteSecret(secret.Type, secret.Value, localURL, secret.Context, secret.Line)
+            err := s.writer.WriteSecret(secret.Type, secret.Value, locationURL, secret.Context, secret.Line)
             if err != nil {
                 s.logger.Error("Failed to write secret from file %s to output: %v", filePath, err)
             }
@@ -363,6 +402,8 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
     // Log summarizing how many secrets were found in this file
     if len(secrets) > 0 {
         s.logger.Success("Found %d secrets in %s", len(secrets), filePath)
+    } else {
+        s.logger.Debug("No secrets found in %s", filePath)
     }
     
     // Update stats
@@ -372,6 +413,22 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
     s.mu.Unlock()
     
     return len(secrets), nil
+}
+
+// max returns the larger of a and b
+func max(a, b int) int {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+// min returns the smaller of a and b
+func min(a, b int) int {
+    if a < b {
+        return a
+    }
+    return b
 }
 
 // incrementProcessedFiles increments the count of processed files

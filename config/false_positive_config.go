@@ -22,6 +22,9 @@ func GetDefaultFalsePositiveConfig() FalsePositiveConfig {
             "const", "class", "module", "default", "static",
             "setState", "useState", "component", "render", "effect",
             "getters", "setters", "utils", "helper", "utility",
+            "i18n", "localization", "translation", "locale", "chart", 
+            "_msg", "_flash", "_trend", "_enabled", "_disabled", 
+            "message", "notification", "validation",
         },
         
         PatternSpecificExclusions: map[string][]string{
@@ -36,6 +39,11 @@ func GetDefaultFalsePositiveConfig() FalsePositiveConfig {
             "high_entropy_string": {
                 "function", "return", "export", "import", "require",
                 "component", "props", "state", "redux", "context",
+            },
+            "generic_password": {
+                "does_not_match", "validation", "password_match",
+                "password_valid", "password_rule", "password_hint",
+                "error_msg", "help_text", "info_text", "placeholder",
             },
         },
         

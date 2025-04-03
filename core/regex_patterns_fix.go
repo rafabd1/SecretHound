@@ -11,9 +11,17 @@ func (rm *RegexManager) InjectDefaultPatternsDirectly() {
     // Ensure we have a clean patterns map
     rm.patterns = make(map[string]*regexp.Regexp)
     
-    // Expanded pattern set based on the test files content
-    expandedPatterns := map[string]string{
-        // API Keys
+    // Injetar todos os padrões do mapa RegexPatterns global
+    for name, pattern := range RegexPatterns {
+        re, err := regexp.Compile(pattern)
+        if (err == nil) {
+            rm.patterns[name] = re
+        }
+    }
+    
+    // Adicionar padrões especiais que possam estar faltando
+    additionalPatterns := map[string]string{
+        // API Keys (caso não existam no RegexPatterns)
         "aws_key":                 `AKIA[0-9A-Z]{16}`,
         "aws_secret":              `(?i)aws[_-]?(?:secret[_-]?)?(?:access[_-]?)?key(?:[_-]?id)?['\"]?\s*[:=]\s*['"][0-9a-zA-Z/+]{40}['"]`,
         "google_api":              `AIza[0-9A-Za-z\-_]{35}`,
@@ -24,41 +32,66 @@ func (rm *RegexManager) InjectDefaultPatternsDirectly() {
         "stripe_secret_key":       `sk_live_[0-9a-zA-Z]{24,34}`,
         "stripe_publishable_key":  `pk_live_[0-9a-zA-Z]{24,34}`,
         "stripe_test_key":         `sk_test_[0-9a-zA-Z]{24,34}`,
-        "stripe_webhook_secret":   `whsec_[a-zA-Z0-9]{32,48}`,
         
         // Authentication
         "jwt_token":               `eyJ[a-zA-Z0-9_\-\.=]{10,500}`,
-        "oauth_token":             `(?i)(?:['"]?[a-z0-9_-]+['"]?(?:\s*):(?:\s*)['"]?[a-z0-9!]{30,}['"]?)`,
+        "oauth_token":             `(?i)(?:oauth[._-]?token|access[._-]?token)[\s]*[=:]+[\s]*["']([a-zA-Z0-9_\-\.]{30,})["']|["']([a-zA-Z0-9]{40,})["'][\s]*[:=]+[\s]*(?:oauth|token|true|false)`,
         "basic_auth":              `(?i)(?:basic\s*)(?:[a-zA-Z0-9\+\/=]{5,100})`,
         
-        // Generic patterns
-        "simple_api_key":          `['"](?:api_?key|apikey|key|token|secret|credential)['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-\.=]{8,64})['"]`,
-        "named_api_key":           `['"](?:api|auth|token|secret|key)_[a-zA-Z]+['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-\.=]{8,64})['"]`,
-        "generic_secret":          `['"](?:secret|private_?key|password|credential)['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-\.=]{8,64})['"]`,
-        "password_field":          `['"](?:password|passwd|pwd)['"]?\s*[:=]\s*['"]([^'"]{4,32})['"]`,
+        // Remover o padrão high_entropy_string problemático
+        // "high_entropy_string": `['"]?([a-zA-Z0-9+/=_\-]{32,64})['"]?`,
         
-        // Cloud Providers
-        "github_token":            `gh[pous]_[A-Za-z0-9_]{36,255}`,
-        "github_oauth":            `github_pat_[A-Za-z0-9_]{82}`,
-        "heroku_api_key":          `[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`,
+        // Versão melhorada do generic_password para evitar falsos positivos
+        "generic_password": `(?i)(?:password|passwd|pwd|secret)[\s]*[=:]+[\s]*["']([^'"]{8,30})["'](?!\s+(?:does|don|isn|doesn|match|valid|must))`,
         
-        // High entropy strings - keep at the end to avoid capturing already matched patterns
-        "high_entropy_string":     `['"]([a-zA-Z0-9+/=_\-]{32,64})['"]`,
+        // Remover o padrão twilio_account_sid problemático
+        // "twilio_account_sid":  `AC[a-zA-Z0-9_\-]{32}`,
+        
+        // Remover o padrão twilio_app_sid problemático
+        // "twilio_app_sid":      `AP[a-zA-Z0-9_\-]{32}`,
+        
+        // Modificar o padrão google_oauth_refresh
+        "google_oauth_refresh": `(?i)(?:refresh_token|oauth_token)[._-]?[\s]*[=:]+[\s]*["']1/[0-9A-Za-z\-_]{43,64}["']|["']1/[0-9A-Za-z\-_]{43,64}["'][\s]*[:=]+[\s]*(?:true|false|raw)`,
+        
+        // Modificar o padrão google_measurement_id
+        "google_measurement_id": `(?i)(?:google_measurement_id|gtag|gtm_id|ga_tracking_id)[\s]*[=:]+[\s]*["']G-[A-Z0-9]{10}["']|dataLayer\.push\([\s\S]{0,50}["']G-[A-Z0-9]{10}["']`,
     }
     
-    // Compile and inject each pattern
-    for name, pattern := range expandedPatterns {
-        re, err := regexp.Compile(pattern)
-        if err != nil {
-            // Skip invalid patterns in diagnostic mode
-            continue
+    // Adicionar apenas padrões que não existem ainda
+    for name, pattern := range additionalPatterns {
+        if _, exists := rm.patterns[name]; !exists {
+            re, err := regexp.Compile(pattern)
+            if err == nil {
+                rm.patterns[name] = re
+            }
         }
-        rm.patterns[name] = re
     }
     
     // Ensure exclusions are initialized
     rm.exclusionPatterns = make([]*regexp.Regexp, 0)
     rm.patternExclusions = make(map[string][]*regexp.Regexp)
+    
+    // Adicionar padrões de exclusão globais
+    for _, pattern := range ExclusionPatterns {
+        re, err := regexp.Compile(pattern)
+        if err == nil {
+            rm.exclusionPatterns = append(rm.exclusionPatterns, re)
+        }
+    }
+    
+    // Adicionar exclusões específicas por padrão
+    for patternName, exclusions := range SpecificExclusions {
+        var compiledExclusions []*regexp.Regexp
+        for _, exclusion := range exclusions {
+            re, err := regexp.Compile(exclusion)
+            if err == nil {
+                compiledExclusions = append(compiledExclusions, re)
+            }
+        }
+        if len(compiledExclusions) > 0 {
+            rm.patternExclusions[patternName] = compiledExclusions
+        }
+    }
     
     // Reset config to more permissive default values
     rm.minSecretLength = 4

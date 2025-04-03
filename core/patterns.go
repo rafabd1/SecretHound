@@ -8,8 +8,8 @@ var RegexPatterns = map[string]string{
 	"google_api":            `AIza[0-9A-Za-z\-_]{35}`,
 	"google_oauth":          `ya29\.[0-9A-Za-z\-_]+`,
 	"google_cloud_platform": `[0-9]+-[0-9A-Za-z_]{32}\.apps\.googleusercontent\.com`,
-	"google_captcha":        `6L[0-9A-Za-z-_]{38}|^6[0-9a-zA-Z_-]{39}$`,
-	"google_oauth_refresh":  `1/[0-9A-Za-z\-_]{43}|1/[0-9A-Za-z\-_]{64}`,
+	"google_captcha":        `(?i)(?:recaptcha|captcha)(?:_|-|\.|site|key)(?:key|token|site)?[\s]*(?:=|:)[\s]*(?:["'])(6L[0-9A-Za-z-_]{38}|6[0-9a-zA-Z_-]{39})["']`,
+	"google_oauth_refresh":  `(?i)(?:refresh_token|oauth_token)[._-]?[\s]*[=:]+[\s]*["']1/[0-9A-Za-z\-_]{43,64}["']|["']1/[0-9A-Za-z\-_]{43,64}["'][\s]*[:=]+[\s]*(?:true|false|raw)`,
 	"firebase":              `AAAA[A-Za-z0-9_-]{7}:[A-Za-z0-9_-]{140}`,
 	"firebase_config":       `(?i)firebaseio\.com.*?["']?(?:auth|secret|key)["']?\s*[:=]\s*["']([^"']+)["']`,
 
@@ -29,9 +29,9 @@ var RegexPatterns = map[string]string{
 	"adyen_api_key":          `AQE[a-zA-Z0-9]{36}`,
 	"adyen_client_key":       `(?i)adyen[._-]?(?:client|public|api|checkout)[._-]?(?:key|token|id)[\s]*[=:][\s]*["']([a-zA-Z0-9_-]{40,50})["']`,
 	"coinbase_api_key":       `(?i)coinbase[._-]?(?:api)?[._-]?(?:key|token|secret)(?:[._-]?id)?[\s]*[=:][\s]*["']([a-zA-Z0-9]{16,64})["']`,
-	"coinbase_versioned_key": `[0-9a-zA-Z]{64}`,
+	"coinbase_versioned_key": `(?i)(?:coinbase)[._-]?(?:api|token|key|secret)[\s]*[=:]+[\s]*['"]([0-9a-zA-Z]{64})['"]`,
 	"chargify_api_key":       `chrgfy-[a-zA-Z0-9]{43}`,
-	"fastspring_api_key":     `[a-zA-Z0-9]{10}_[a-zA-Z0-9]{10}`,
+	"fastspring_api_key":     `(?i)(?:fastspring)(?:_|-|\.)(?:api)?(?:_|-|\.)?(?:key|token|secret)(?:[_-]?id)?['\"]?\s*[:=]\s*['"][a-zA-Z0-9_-]{10,40}['"]`,
 
 	// Email Services
 	"mailgun_api_key":        `key-[0-9a-zA-Z]{32}`,
@@ -49,7 +49,7 @@ var RegexPatterns = map[string]string{
 	"aws_s3_url":              `s3:\/\/[a-zA-Z0-9-\.\_]+`,
 	"azure_storage_account":   `https?:\/\/[a-zA-Z0-9_-]{3,24}\.(?:blob|file|table)\.core\.windows\.net\/`,
 	"azure_subscription_key":  `(?i)azure[._-]?(?:subscription|storage|service)[._-]?(?:key|token|secret)(?:[._-]?id)?[\s]*[=:][\s]*["']([a-zA-Z0-9/+]{43}=)["']`,
-	"azure_sq_auth_key":       `[a-zA-Z0-9_-]{64}`,
+	"azure_sq_auth_key":       `(?i)(?:azure|sq_auth)(?:_|-|\.)?(?:key|token|secret)(?:[_-]?id)?['\"]?\s*[:=]\s*['"][a-zA-Z0-9_-]{32,64}['"]`,
 	"azure_sql_conn_string":   `(?i)Server=tcp:[^,]+,1433;Initial Catalog=[^;]+;Persist Security Info=False;User ID=[^;]+;Password=[^;]+;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;`,
 	"cloudinary_url":          `cloudinary:\/\/[0-9]{15}:[a-zA-Z0-9_-]{30,35}@[a-zA-Z0-9_-]+`,
 	"cloudinary_basic_auth":   `(?i)cloudinary[._-]?(?:api|url)?[._-]?(?:key|token|secret)(?:[._-]?id)?[\s]*[=:][\s]*["']([0-9a-zA-Z:@]+)["']`,
@@ -57,11 +57,11 @@ var RegexPatterns = map[string]string{
 	"digitalocean_pat":        `dop_v1_[a-f0-9]{64}`,
 	"dropbox_api_key":         `(?i)dropbox[._-]?(?:api|access)?[._-]?(?:key|token|secret)(?:[._-]?id)?[\s]*[=:][\s]*["']([a-zA-Z0-9_-]{15,150})["']`,
 	"dropbox_short_token":     `sl\.[a-zA-Z0-9_-]{130,145}`,
-	"dropbox_long_token":      `[a-zA-Z0-9_-]{130,150}`,
+	"dropbox_long_token":      `(?i)(?:dropbox)[._-]?(?:token|access|auth)[._-]?(?:key|secret)?[\s]*[=:]+[\s]*['"]([a-zA-Z0-9_-]{130,150})['"]`,
 	"github_pat":              `ghp_[a-zA-Z0-9_]{36}`,
 	"github_pat_v2":           `github_pat_[a-zA-Z0-9_]{82}`,
 	"gcp_api_key":             `AIza[a-zA-Z0-9_-]{35}`,
-	"gcp_credentials":         `(?:"|')(?:type|project_id|private_key_id|private_key|client_email|client_id|auth_uri|token_uri|auth_provider_x509_cert_url|client_x509_cert_url)(?:"|')`,
+	"gcp_credentials":         `(?:"|')(?:type|project_id|private_key_id|private_key|client_email|client_id|auth_uri|token_uri|auth_provider_x509_cert_url|client_x509_cert_url)(?:"|')\s*:\s*(?:"|')(?!.*(?:example|test|sample|placeholder))`,
 	"heroku_api_key":          `(?i)heroku[\-_]?api[\-_]?key|[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}`,
 	"alibaba_access_key":      `LTAI[a-zA-Z0-9]{20}`,
 	"alibaba_secret_key":      `(?i)alibaba[._-]?(?:cloud|aliyun)?[._-]?(?:key|token|secret)(?:[._-]?id)?[\s]*[=:][\s]*["']([a-zA-Z0-9/+=]{30})["']`,
@@ -85,8 +85,6 @@ var RegexPatterns = map[string]string{
 
 	// Communication Services
 	"twilio_api_key":      `SK[0-9a-fA-F]{32}`,
-	"twilio_account_sid":  `AC[a-zA-Z0-9_\-]{32}`,
-	"twilio_app_sid":      `AP[a-zA-Z0-9_\-]{32}`,
 	"twilio_auth_token":   `(?i)twilio[._-]?(?:api|app|account)?[._-]?(?:key|token|secret|sid|id|auth_token)[\s]*[=:][\s]*["']([a-zA-Z0-9]{32})["']`,
 	"nexmo_api_key":       `(?i)nexmo[._-]?(?:api)?[._-]?(?:key|token|secret|id)[\s]*[=:][\s]*["']([a-zA-Z0-9]{8})["']`,
 	"nexmo_api_secret":    `(?i)nexmo[._-]?(?:api)?[._-]?(?:key|token|secret|id)[\s]*[=:][\s]*["']([a-zA-Z0-9]{16})["']`,
@@ -96,12 +94,12 @@ var RegexPatterns = map[string]string{
 	"sinch_api_key":       `(?i)sinch[._-]?(?:api)?[._-]?(?:key|token|secret|id)[\s]*[=:][\s]*["']([a-zA-Z0-9]{32,64})["']`,
 
 	// Authentication Credentials
-	"basic_auth":          `(?i)(?:basic\s*)(?:[a-zA-Z0-9\+\/=]{5,100})`,
-	"basic_auth_detailed": `(?i)(?:basic\s*)(?:[a-zA-Z0-9\+\/=]{5,100})`,
-	"bearer_token":        `(?i)(?:bearer\s*)(?:[a-zA-Z0-9_\-\.=:_\+\/]{5,100})`,
+	"basic_auth":          `(?i)(?:authorization:\s*|auth:\s*|token:\s*|apikey:\s*|api-key:\s*|'authorization':\s*|"authorization":\s*)basic\s+([a-zA-Z0-9+/=]{5,100})`,
+	"basic_auth_detailed": `(?i)(?:\bbasic\s+)([a-zA-Z0-9+/=]{16,})(?!\s+multilingual|\s+latin|\s+plane|\s+support|\s+block|\s+format)`,
+	"bearer_token":        `(?i)(?:bearer\s+)([a-zA-Z0-9_\-\.\+\/=]{16,})(?![a-zA-Z0-9_\-\.=:])`,
 	"jwt_token":           `(?i)(?:ey[a-zA-Z0-9]{2,4}\.ey[a-zA-Z0-9\/\\_-]{10,}\.(?:[a-zA-Z0-9\/\\_-]*))`,
-	"oauth_token":         `(?i)('|")?[a-z0-9_-]+('|")?(?:\s*):(?:\s*)('|")?[a-z0-9!]{30,}('|")?`,
-	"generic_password":    `(?i)(password|passwd|pwd|secret)[\s]*[=:]+[\s]*['"][^'"]{4,30}['"]`,
+	"oauth_token":         `(?i)(?:oauth[._-]?token|access[._-]?token)[\s]*[=:]+[\s]*["']([a-zA-Z0-9_\-\.]{30,})["']|["']([a-zA-Z0-9]{40,})["'][\s]*[:=]+[\s]*(?:oauth|token|true|false)`,
+	"generic_password":    `(?i)(?:password|passwd|pwd|secret)[\s]*[=:]+[\s]*['"]([^'"]{8,30})['"](?!\s+(?:does|don|isn|doesn|match|valid|must))`,
 	"password_in_url":     `[a-zA-Z]{3,10}://[^/\s:@]{3,20}:[^/\s:@]{3,20}@.{1,100}['"\s]`,
 	"otp_secret":          `otp_secret\s*=\s*['"]([a-zA-Z0-9]{16})['"]`,
 	"okta_api_key":        `(?i)okta[._-]?(?:api)?[._-]?(?:key|token|secret|id)[\s]*[=:][\s]*["']([a-zA-Z0-9_-]{40})["']`,
@@ -150,7 +148,7 @@ var RegexPatterns = map[string]string{
 
 	// Analytics and Tracking
 	"google_analytics_id":          `UA-[0-9]{5,}-[0-9]{1,}`,
-	"google_measurement_id":        `G-[A-Z0-9]{10}`,
+	"google_measurement_id":        `(?i)(?:google_measurement_id|gtag|gtm_id|ga_tracking_id)[\s]*[=:]+[\s]*["']G-[A-Z0-9]{10}["']|dataLayer\.push\([\s\S]{0,50}["']G-[A-Z0-9]{10}["']`,
 	"segment_api_key":              `(?i)(?:segment)(?:_|-|\.)(?:api)?(?:_|-|\.)?(?:key|token|secret)['"\s=:]+(?-i)[a-zA-Z0-9_-]{20,72}['"\s]*[\n,;]`,
 	"amplitude_api_key":            `(?i)(?:amplitude)(?:_|-|\.)(?:api)?(?:_|-|\.)?(?:key|token|secret)['"\s=:]+(?-i)[a-zA-Z0-9_-]{32,72}['"\s]*[\n,;]`,
 	"mixpanel_project_token":       `(?i)(?:mixpanel)(?:_|-|\.)(?:api|project)?(?:_|-|\.)?(?:key|token|id)['"\s=:]+(?-i)[a-zA-Z0-9_-]{5,72}['"\s]*[\n,;]`,
@@ -160,7 +158,7 @@ var RegexPatterns = map[string]string{
 
 	// Content Delivery Networks
 	"cloudflare_api_key":        `(?i)(?:cloudflare)(?:_|-|\.)(?:api)?(?:_|-|\.)?(?:key|token|secret)['"\s=:]+(?-i)[a-zA-Z0-9_-]{32,50}['"\s]*[\n,;]`,
-	"cloudflare_api_token":      `(?i)(?:[a-z0-9]{40,100})`,
+	"cloudflare_api_token":      `(?i)(?:cloudflare|cf)[\s\-_\.]*(?:token|key|secret)[\s\-_\.]*(?:=|:|\s=>|\s->)?\s*["\']([a-zA-Z0-9_\-]{40,90})["\']`,
 	"akamai_api_key":            `(?i)(?:akamai)(?:_|-|\.)(?:api)?(?:_|-|\.)?(?:key|token|secret|id|credential|password)['"\s=:]+(?-i)[a-zA-Z0-9_-]{10,72}['"\s]*[\n,;]`,
 	"fastly_api_key":            `(?i)(?:fastly)(?:_|-|\.)(?:api)?(?:_|-|\.)?(?:key|token|secret|password)['"\s=:]+(?-i)[a-zA-Z0-9_-]{20,72}['"\s]*[\n,;]`,
 	"imperva_api_key":           `(?i)(?:imperva)(?:_|-|\.)(?:api)?(?:_|-|\.)?(?:key|token|secret|id|password)['"\s=:]+(?-i)[a-zA-Z0-9_-]{20,72}['"\s]*[\n,;]`,
@@ -185,7 +183,7 @@ var RegexPatterns = map[string]string{
 	"argo_api_token":          `(?i)(?:argo)(?:_|-|\.)(?:api)?(?:_|-|\.)?(?:key|token|secret|password)['"\s=:]+(?-i)[a-zA-Z0-9_-]{40,100}['"\s]*[\n,;]`,
 	"datadog_api_key":         `(?i)(?:datadog)(?:_|-|\.)(?:api)?(?:_|-|\.)?(?:key|token|secret)['"\s=:]+(?-i)[a-zA-Z0-9_-]{32,40}['"\s]*[\n,;]`,
 	"new_relic_api_key":       `NRAK-[A-Z0-9]{27}`,
-	"new_relic_license_key":   `(?i)[a-f0-9]{40}`,
+	"new_relic_license_key":   `(?i)(?:new_relic|nr)[._-]?(?:license|account)?[._-]?(?:key|token|id)[\s]*[=:]+[\s]*['"]([a-f0-9]{40})['"]`,
 	"new_relic_insights_key":  `(?i)(?:insights)?(?:_|-|\.)?(?:insert)?(?:_|-|\.)(?:key|api_key)['"\s=:]+(?-i)[a-zA-Z0-9_-]{16,40}['"\s]*[\n,;]`,
 	"npm_access_token":        `(?i)(?:npm)(?:_|-|\.)(?:access_token|token|secret|password|credential)['"\s=:]+(?-i)[a-zA-Z0-9_-]{40,100}['"\s]*[\n,;]`,
 	"sentry_access_token":     `(?i)(?:sentry)(?:_|-|\.)(?:access_token|token|secret|password|credential)['"\s=:]+(?-i)[a-zA-Z0-9_-]{32,100}['"\s]*[\n,;]`,
@@ -194,7 +192,6 @@ var RegexPatterns = map[string]string{
 	// Generic Secrets
 	"generic_api_key":     `(?i)(?:api[_-]?(?:key)|token|secret)[\s]*[=:]+[\s]*['"][a-zA-Z0-9_\-+=,./:]{8,100}['"]`,
 	"generic_secret":      `(?i)(?:secret|private[_-]?key|password)[\s]*[=:]+[\s]*['"][a-zA-Z0-9_\-+=,./:]{8,100}['"]`,
-	"high_entropy_string": `(?i)(?:[^a-z0-9_.-]|^)([a-zA-Z0-9_\-]{32,100})(?:[^a-z0-9_.-]|$)`,
 }
 
 // ExclusionPatterns contains regex patterns to exclude (common false positives)
@@ -266,30 +263,104 @@ var ExclusionPatterns = []string{
 	`\.[a-zA-Z][a-zA-Z0-9_-]*\s*{`,
 	`\[[a-zA-Z][a-zA-Z0-9_-]*\]`,
 	
-	// jQuery and JavaScript specific patterns
-	`jQuery`,
-	`\$\(`,
-	`\.ready\(`,
-	`\.click\(`,
-	`\.on\(`,
-	
 	// Common JavaScript patterns
 	`function\(t,e`,
 	`function\(e,t`,
 	`return[a-z]&&`,
 	`\?[a-z]\.`,
 	`:[a-z]\.`,
+
+	// Additional exclusions for CSS properties
+	`--[a-zA-Z0-9_-]+-(background|color|border|shadow|width|height|margin|padding|radius|distance|opacity|blur)`,
+	`(width|height|margin|padding|radius|distance|opacity|blur)-(x|y|color|width|height)`,
+	
+	// Additional exclusions for HTML/CSS/JS
+	`origin-trial`,
+	`(?i)(insufficient|authentication|insufficient_authentication)`,
+	`(?i)(button|modal|tooltip|patterns)-(primary|secondary|hover|background|border|color)`,
+	
+	// Exclude common JS reserved metadata
+	`__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED`,
+	`unstable_[a-zA-Z]+`,
+	
+	// Additional browser/protocol metadata
+	`eyJvcmlnaW4i`, // Common base64 prefix in browser origin tokens
+
+	// UI components and labels
+	`(?i)(?:children|autoComplete|placeholder|label|title)\s*(?::|=)[\s\w]*["']bearer[\s-]*token["']`,
+	`(?i)Bearer[\s-]Token`,
+	
+	// JavaScript/React specific patterns
+	`(?i)UNSAFE_[a-zA-Z_]+`,
+	`(?i)__UNSAFE`,
+	`(?i)freshchat_[a-zA-Z_]+`,
+	`(?i)enable[A-Z][a-zA-Z]+[A-Z][a-zA-Z]+`,
+	
+	// UUID patterns that aren't secrets
+	`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`,
+	
+	// Separators and code comments
+	`[-]{5,}`,
+	
+	// Repetitive patterns in minified code - improved more specific versions
+	`[NL1]{10,}`,
+	`[a-z]{1,2}[A-Z]{1,2}[a-z]{5,}`,
+	`[mrnb]{5,}[mrnb]{5,}`,
+	
+	// Base64 specific patterns that aren't secrets (origin trials, etc)
+	`eyJ[a-zA-Z0-9_\-\.]+(?:=*)`,
+
+	// MIME types and content types (common false positives)
+	`application/[a-zA-Z0-9_\.\-]+`,
+	`text/[a-zA-Z0-9_\.\-]+`,
+	`image/[a-zA-Z0-9_\.\-]+`,
+	`audio/[a-zA-Z0-9_\.\-]+`,
+	`video/[a-zA-Z0-9_\.\-]+`,
+	
+	// Common file paths and URLs
+	`(?i)(?:http|https)://[a-zA-Z0-9_\.\-]+/[a-zA-Z0-9_/\.\-]+`,
+	`node_modules/[a-zA-Z0-9_\-\.]+/[a-zA-Z0-9_\-\.]+`,
+	`./node_modules/[a-zA-Z0-9_\-\.]+/[a-zA-Z0-9_\-\.]+`,
+
+	// Exclusões adicionais para evitar detecção em arquivos de tradução/internacionalização
+	`(?i)_(?:chart|msg|flash|trend|enabled|disabled)["'\s:}]`,
+	`(?i)i18n`,
+	`(?i)translation`,
+	`(?i)localization`,
+	`(?i)locale`,
+
+	// Adicionar padrões para excluir sequências numéricas repetitivas (como encontradas nos falsos positivos)
+	`[0-9]{1}(?:\1+){10,}`,  // Números repetidos como 111111 ou 777777
+	`(?:[0-9]{2})\1{5,}`,    // Padrões como 1212121212...
+	`(?:[01]{8})\1{2,}`,     // Sequências de bits repetitivas como 01010101...
+	
+	// Padrões para excluir strings em arquivos minificados
+	`(?:[A-Z]{1}[a-zA-Z0-9]{1,3}){20,}`,  // Sequências de identificadores curtos como AC4E1D3GB2...
+	
+	// Excluir comentários de documentação e texto Unicode
+	`Basic\s+Multilingual\s+Plane`,  // Referência ao Unicode BMP
+	`(?i)surrogate\s+pairs?`,        // Referência a códigos surrogate do Unicode
+	
+	// Excluir variáveis e constantes em código minificado
+	`[a-zA-Z][0-9][a-zA-Z][0-9]{2,}(?![a-z]{3,})`,  // Padrões como A4B12C em código minificado
+	
+	// Excluir padrões de zonas de tempo/dados geográficos (como vistos nos falsos positivos)
+	`(?:Africa|America|Asia|Europe|Pacific)/[A-Za-z]+\|[A-Z]{3,4}`,  // Referências a fusos horários
+
+	// Adicionar novos padrões de exclusão para códigos de JavaScript minificado
+	`(?:[A-Z]{1}[a-z][0-9][A-Z][a-z][0-9]){3,}`,  // Padrões como AaBbCc123
+	`(?:["']\d+[A-Za-z]+\d+[A-Za-z]+["'])`,       // Strings como "123Ab456Cd"
+	
+	// Excluir padrões de código que parecem OAuth tokens
+	`['"][a-zA-Z0-9!@]{1,5}[a-zA-Z]+\d+['"]`,     // Strings curtas de código como "AAAA123"
+	
+	// Identificadores G- em código minificado que não são do Google Analytics
+	`G-\d{1,2}[A-Z]{1,3}\d{1,2}[A-Z]{1,3}\d{1,3}`,  // Padrões como G-12AB34CD5 em variáveis
 }
 
-// SpecificExclusions is a map of specific exclusions for each regex pattern
+// SpecificExclusions é um mapa de exclusões específicas para cada padrão de regex
 var SpecificExclusions = map[string][]string{
 	"amazon_aws_url": {
-		`selectors`,
-		`css3-selectors`,
-		`REC-css3-selectors`,
-		`w3.org/TR`,
-	},
-	"amazon_aws_url2": {
 		`selectors`,
 		`css3-selectors`,
 		`REC-css3-selectors`,
@@ -319,7 +390,9 @@ var SpecificExclusions = map[string][]string{
 		`isSecret`,
 		`_secret_`,
 	},
-	"twilio_account_sid": {
+	"twilio_account_sid": {},
+	"twilio_app_sid": {},
+	"twilio_api_key": {
 		`base64`,
 		`charset`,
 		`styles`,
@@ -335,23 +408,7 @@ var SpecificExclusions = map[string][]string{
 		`margin:`,
 		`padding:`,
 	},
-	"twilio_app_sid": {
-		`base64`,
-		`charset`,
-		`styles`,
-		`background`,
-		`data:`,
-		`font-face`,
-		`@font-face`,
-		`eJy`,
-		`AAA`,
-		`content:`,
-		`width:`,
-		`height:`,
-		`margin:`,
-		`padding:`,
-	},
-	"Heroku API KEY": {
+	"heroku_api_key": {
 		`target`,
 		`id:`,
 		`element`,
@@ -393,33 +450,84 @@ var SpecificExclusions = map[string][]string{
 		`(?i)api_key["']?\s*[:,]\s*["']DEMO_KEY["']`,
 	},
 	"high_entropy_string": {
-		// Arquivo e recursos
 		`[a-f0-9]{32}\.png`,
 		`[a-f0-9]{32}\.jpe?g`,
 		`[a-f0-9]{32}\.gif`,
 		`[a-f0-9]{32}\.svg`,
 		`[a-f0-9]{32}\.webp`,
 		`[a-f0-9]{32,40}\.min\.(js|css)`,
-		// Padrões já cobertos por outros detectores específicos
-		`pk_live_[0-9a-zA-Z]{24}`,            // stripe_publishable_key
-		`sk_live_[0-9a-zA-Z]{24}`,            // stripe_api_key
-		`sk_test_[0-9a-zA-Z]{24}`,            // stripe_test_key
-		`pk_test_[0-9a-zA-Z]{24}`,            // stripe test key
-		`AIza[0-9A-Za-z\-_]{35}`,             // google_api
-		`eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}`,  // JWT tokens
-		`GOCSPX-[a-zA-Z0-9_-]{20,30}`,        // Google OAuth client secret
-		`api_key_[a-zA-Z0-9]{20,40}`,         // Named API keys
-		`admin_api_[a-zA-Z0-9]{20,40}`,       // Admin API keys
-		`tr_sec_[a-zA-Z0-9]{20,40}`,          // Transaction secrets
-		`[a-zA-Z]{10,20}(Token|Secret|Key)[a-zA-Z0-9]{5,30}`,  // Common naming patterns
-		`npm_[a-zA-Z0-9_]{10,60}`,            // NPM tokens
-		`node_[a-zA-Z0-9_]{10,60}`,           // Node related tokens
-		`react_[a-zA-Z0-9_]{10,60}`,          // React related tokens
-		`angular_[a-zA-Z0-9_]{10,60}`,        // Angular related tokens
-		`vue_[a-zA-Z0-9_]{10,60}`,            // Vue related tokens
-		`github_pat_[a-zA-Z0-9_]{60,90}`,     // GitHub personal access tokens
-		`ghp_[a-zA-Z0-9]{36}`,                // GitHub personal access tokens
-		`gho_[a-zA-Z0-9]{36}`,                // GitHub OAuth tokens
+		`pk_live_[0-9a-zA-Z]{24}`,
+		`sk_live_[0-9a-zA-Z]{24}`,
+		`sk_test_[0-9a-zA-Z]{24}`,
+		`pk_test_[0-9a-zA-Z]{24}`,
+		`AIza[0-9A-Za-z\-_]{35}`,
+		`eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}`,
+		`GOCSPX-[a-zA-Z0-9_-]{20,30}`,
+		`api_key_[a-zA-Z0-9]{20,40}`,
+		`admin_api_[a-zA-Z0-9]{20,40}`,
+		`tr_sec_[a-zA-Z0-9]{20,40}`,
+		`[a-zA-Z]{10,20}(Token|Secret|Key)[a-zA-Z0-9]{5,30}`,
+		`npm_[a-zA-Z0-9_]{10,60}`,
+		`node_[a-zA-Z0-9_]{10,60}`,
+		`react_[a-zA-Z0-9_]{10,60}`,
+		`angular_[a-zA-Z0-9_]{10,60}`,
+		`vue_[a-zA-Z0-9_]{10,60}`,
+		`github_pat_[a-zA-Z0-9_]{60,90}`,
+		`ghp_[a-zA-Z0-9]{36}`,
+		`gho_[a-zA-Z0-9]{36}`,
+		`--[a-z0-9_-]+-[a-z0-9_-]+`,
+		`width`,
+		`height`,
+		`margin`,
+		`border`,
+		`padding`,
+		`color`,
+		`background`,
+		`shadow`,
+		`hover`,
+		`opacity`,
+		`distance`,
+		`backdrop`,
+		`modal`,
+		`tooltip`,
+		`insufficient`,
+		`authentication`,
+		`unstable_`,
+		`__SECRET_INTERNALS`,
+		`enableClient`,
+		`distance-x`,
+		`distance-y`,
+		`shadow-blur`,
+		`shadow-color`,
+		`origin-trial`,
+		`UNSAFE_`,
+		`__UNSAFE`,
+		`freshchat_`,
+		`enable[A-Z][a-zA-Z]+`,
+		`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`,
+		`^-{5,}$`,
+		`application/x-www-form-urlencoded`,
+		`application/json`,
+		`application/xml`,
+		`application/javascript`,
+		`application/octet-stream`,
+		`multipart/form-data`,
+		`node_modules/core-js/modules/`,
+		`node_modules/webpack/`,
+		`node_modules/babel/`,
+		`node_modules/react/`,
+		`node_modules/angular/`,
+		`node_modules/vue/`,
+		`node_modules/jquery/`,
+		`node_modules/lodash/`,
+		`documentation\.html`,
+		`docs\.github\.com`,
+		`developer\.mozilla\.org`,
+		`/documentation`,
+		`/api/documentation`,
+		`/docs/reference`,
+		`charset=UTF-8`,
+		`charset=utf-8`,
 	},
 	"messagebird_api_key": {
 		`pickers`,
@@ -443,5 +551,152 @@ var SpecificExclusions = map[string][]string{
 		`Section`,
 		`InputBase`,
 		`Classes`,
+	},
+	"cloudflare_api_token": {
+		`eyJvcmlnaW4i`,
+		`iidW7srW31oQ`,
+		`origin`,
+		`NNNNLNNNNN`,
+		`NLNNN1LNNNNN`,
+		`origin-trial`,
+		`recaptcha`,
+		`N1{10}N{5,}L{10,}`,
+		`N+L+N+L+N+`,
+		`n{5,}r{5,}m{5,}`,
+		`m{5,}N+m{5,}r{5,}`,
+		`b{5,}s{1,}b{5,}`,
+		`eyJ(?:vcmlnaW4|ZlYXR1cmU|leHBpcnk|pcm1h)`,
+	},
+	"azure_sq_auth_key": {
+		`eyJvcmlnaW4i`,
+		`recaptcha`,
+		`origin-trial`,
+		`bbbbbbbbb`,
+		`nnnnnn`,
+		`mmmmmmm`,
+		`NLNNN1LNNNNN`,
+		`N1111111111N`,
+	},
+	"gcp_credentials": {
+		`staticmethod`,
+		`super`,
+		`tuple`,
+		`vars`,
+		`zip`,
+		`__import__`,
+	},
+	"fastspring_api_key": {
+		`PROCESSING_INSTRUCTION_NODE`,
+		`COMMENT_NODE`,
+		`DOCUMENT_NODE`,
+	},
+	"bearer_token": {
+		`children:"Bearer Token"`,
+		`autoComplete="bearer-token"`,
+		`placeholder="Bearer Token"`,
+		`label="Bearer Token"`,
+		`name="bearer"`,
+		`class="bearer"`,
+		`id="bearer"`,
+	},
+	"dropbox_long_token": {
+		// Sequências repetitivas e padrões encontrados em códigos minificados
+		`^[01]+$`,
+		`^[0-9]{2}(?:\1)+$`,
+		`^[0-9]{3}(?:\1)+$`,
+		// Padrões de timezones e dados geográficos
+		`^01[0-9]*2[0-9]*$`,
+		`^012[0-9]+$`,
+		// Códigos minificados comuns
+		`[A-Z]{1,2}[0-9]{1,3}[A-Z]{1,2}`,
+	},
+	"coinbase_versioned_key": {
+		// Padrões encontrados em JavaScript minificado
+		`[A-Z]{1,2}[0-9]{1,2}[A-Z]{1,2}`,
+		`[a-zA-Z]{1,2}[0-9]{1,2}[a-zA-Z]{1,2}`,
+		// Variáveis curtas típicas de código minificado
+		`[a-zA-Z][0-9][a-zA-Z][0-9]`,
+		// Strings minificadas com códigos
+		`[a-z]{1,3}[A-Z]{1,2}[0-9]{1,2}`,
+		// Sequências de letras/números aleatórios em arquivos JS
+		`[a-zA-Z0-9]{5,10}[a-zA-Z]{3,5}`,
+	},
+	"new_relic_license_key": {
+		// Sequências de números repetitivos (comuns em JavaScript minificado)
+		`[0-9]{1}(?:\1+){10,}`,
+		`(?:[0-9]{2})\1{5,}`,
+		`^[0-9]+$`,
+		// Padrões específicos de timezone encontrados nos falsos positivos
+		`^01[0-9]*$`,
+		`^76[0-9]*$`,
+		// Nomes e referências geográficas
+		`Africa/`, `America/`, `Europe/`, `Asia/`, `Pacific/`,
+		// Abreviações de timezone
+		`GMT`, `UTC`, `EST`, `CST`, `MST`, `PST`, `CET`, `MSD`,
+	},
+	"basic_auth": {
+		// Excluir referências ao Unicode e documentação
+		`[Bb]asic [Mm]ultilingual`,
+		`[Bb]asic [Ll]atin`,
+		`[Bb]asic [Pp]lane`,
+		`[Bb]asic [Ss]upport`,
+		`[Bb]asic [Bb]lock`,
+		`[Bb]asic [Ff]ormat`,
+		// Excluir referências a documentação e exemplos
+		`[Bb]asic [Tt]ype`,
+		`[Bb]asic [Aa]uthentication`,
+		`[Bb]asic [Ee]xample`,
+	},
+	"basic_auth_detailed": {
+		// Mesmas exclusões do basic_auth
+		`[Bb]asic [Mm]ultilingual`,
+		`[Bb]asic [Ll]atin`,
+		`[Bb]asic [Pp]lane`,
+		`[Bb]asic [Ss]upport`,
+		`[Bb]asic [Bb]lock`,
+		`[Bb]asic [Ff]ormat`,
+		`[Bb]asic [Tt]ype`,
+		`[Bb]asic [Aa]uthentication`,
+		`[Bb]asic [Ee]xample`,
+	},
+	"google_oauth_refresh": {
+		// Excluir padrões de base64 comuns em código
+		`1/[A-Za-z0-9]{10,}`,
+		`[a-zA-Z0-9+/]{43,}`,
+		`(?:app|cdn)\.js`,
+		`\.min\.js`,
+		`cdn\.`,
+		`app\.`,
+		`[a-z][A-Z][0-9][a-z]`,
+		`[0-9][a-z][A-Z][0-9]`,
+		`(?:[0-9]+[a-zA-Z]+){3,}`,
+	},
+	"oauth_token": {
+		// Excluir padrões de código, não tokens verdadeiros
+		`YO':`,
+		`O'#`,
+		`O':`,
+		`O'A`,
+		`QVO`,
+		`QUO`,
+		`app\.js`,
+		`cdn\.`,
+		`\.min\.js`,
+		`1G1`,
+		`[a-z][A-Z][0-9][a-z]`,
+		`[0-9][a-z][A-Z][0-9]`,
+		`[^a-zA-Z0-9_\-.]`, // Caracteres inválidos para tokens OAuth reais
+	},
+	"google_measurement_id": {
+		// Excluir IDs falsos em código minificado
+		`G-\d{1,2}[A-Z]{1,2}\d{1,2}[A-Z]{1,2}\d{1,2}`,
+		`G-\d{1,2}[A-Z]{1,2}\d{1,2}[A-Z]{1,2}`,
+		`app\.js`,
+		`cdn\.`,
+		`\.min\.js`,
+		`\.js\?`,
+		`vendor\.js`,
+		`[a-zA-Z][0-9][A-Z][0-9]`,
+		`[0-9][A-Z][0-9][A-Z]`,
 	},
 }

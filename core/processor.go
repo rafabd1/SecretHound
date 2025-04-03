@@ -56,8 +56,12 @@ func (p *Processor) InitializeRegexManager() error {
     // Always create a fresh instance
     p.regexManager = NewRegexManager()
     
-    // Load patterns directly
-    p.regexManager.InjectDefaultPatternsDirectly()
+    // Load patterns using the standard method
+    err := p.regexManager.LoadPredefinedPatterns()
+    if err != nil {
+        p.logger.Error("Failed to load patterns: %v", err)
+        return err
+    }
     
     p.logger.Debug("Successfully initialized RegexManager with %d patterns", p.regexManager.GetPatternCount())
     return nil
@@ -77,35 +81,82 @@ func (p *Processor) ProcessJSContent(content string, url string) ([]Secret, erro
     startTime := time.Now()
     p.logger.Debug("Processing content from URL: %s", url)
 
+    // Special handling for local file detection
+    isLocalFile := strings.HasPrefix(url, "file://")
+    if isLocalFile {
+        p.logger.Debug("Processing local file with %d patterns and %d bytes", 
+            p.regexManager.GetPatternCount(), len(content))
+    }
+
     // Use the regex manager to find secrets in the content
     var secrets []Secret
     var err error
-    secrets, err = p.regexManager.FindSecrets(content, url)
     
-    if err != nil {
-        p.mu.Lock()
-        p.stats.FailedFiles++
-        p.mu.Unlock()
-        return nil, utils.NewError(utils.ProcessingError, fmt.Sprintf("failed to process content from %s", url), err)
+    // For local files, use a different approach with less filtering
+    if isLocalFile {
+        // Use direct pattern search with minimal filtering for local files
+        patternMatches := p.regexManager.FindMatches(content, url)
+        
+        for patternName, matches := range patternMatches {
+            for _, match := range matches {
+                // Check if match is a valid secret
+                if !p.regexManager.IsExcluded(match, patternName) {
+                    // Create context and other details
+                    context := extractContext(content, match)
+                    lineNum := utils.FindLineNumber(content, match)
+                    
+                    secret := Secret{
+                        Type:    patternName,
+                        Value:   match,
+                        Context: context,
+                        URL:     url,
+                        Line:    lineNum,
+                    }
+                    secrets = append(secrets, secret)
+                }
+            }
+        }
+    } else {
+        // Use standard approach for web content
+        secrets, err = p.regexManager.FindSecrets(content, url)
+        if err != nil {
+            p.mu.Lock()
+            p.stats.FailedFiles++
+            p.mu.Unlock()
+            return nil, utils.NewError(utils.ProcessingError, fmt.Sprintf("failed to process content from %s", url), err)
+        }
     }
     
-    // DIAGNÓSTICO: Pular todo o filtro adicional
-    filteredSecrets := secrets
-    
     // Store in cache for future use
-    p.cacheService.StoreSecrets(content, filteredSecrets)
+    p.cacheService.StoreSecrets(content, secrets)
 
     // Update stats
     p.mu.Lock()
     p.stats.FilesProcessed++
-    p.stats.SecretsFound += len(filteredSecrets)
+    p.stats.SecretsFound += len(secrets)
     p.stats.TotalBytesRead += int64(len(content))
     p.stats.ProcessingTime += time.Since(startTime)
     p.mu.Unlock()
 
-    return filteredSecrets, nil
+    p.logger.Debug("Found %d secrets in %s (took %v)", 
+        len(secrets), url, time.Since(startTime))
+    
+    return secrets, nil
 }
 
+// extractContext extracts context around a match
+func extractContext(content, match string) string {
+    idx := strings.Index(content, match)
+    if idx == -1 {
+        return ""
+    }
+
+    // Extract more context (100 chars before and after)
+    contextStart := max(0, idx-100)
+    contextEnd := min(len(content), idx+len(match)+100)
+    
+    return content[contextStart:contextEnd]
+}
 
 // ProcessJSStream processes a JavaScript content stream and extracts secrets
 func (p *Processor) ProcessJSStream(ctx context.Context, reader io.Reader, url string) ([]Secret, error) {

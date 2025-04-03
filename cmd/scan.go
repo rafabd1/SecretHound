@@ -650,11 +650,14 @@ func createAndInitRegexManager(logger *output.Logger) *core.RegexManager {
 			if verbose {
 				logger.Warning("Failed to load regex patterns from file: %v", err)
 				logger.Info("Loading predefined patterns instead")
-			}
-
-			err = regexManager.LoadPredefinedPatterns()
-			if err != nil {
-				logger.Error("Failed to load predefined regex patterns: %v", err)
+				// Inicializar RegexManager com todos os padrões predefinidos
+				regexManager.InjectDefaultPatternsDirectly()
+            
+				// Também tentar carregar via método normal para garantir
+				err = regexManager.LoadPredefinedPatterns()
+				if err != nil {
+					logger.Warning("Failed to load predefined regex patterns: %v", err)
+				}
 			}
 		} else {
 			// Usar timeColor para garantir que os timestamps estejam na cor dim
@@ -666,13 +669,25 @@ func createAndInitRegexManager(logger *output.Logger) *core.RegexManager {
 				fmt.Sprintf("Loaded regex patterns from file: %s", regexFile))
 		}
 	} else {
-			// Carregar padrões sem logar redundantemente
+        // Forçar carregamento direto para garantir todos os padrões
+		regexManager.InjectDefaultPatternsDirectly()
+        
+        // Adicionalmente carregar pelo método normal
 		err := regexManager.LoadPredefinedPatterns()
 		if err != nil {
-			logger.Error("Failed to load predefined regex patterns: %v", err)
+			logger.Warning("Failed to load predefined regex patterns: %v", err)
 		}
 	}
 	
+    // Verificar se todos os padrões foram carregados
+    patternCount := regexManager.GetPatternCount()
+    if patternCount < 50 {
+        logger.Warning("Loaded only %d regex patterns. Expected at least 50 patterns.", patternCount)
+        
+        // Tentar novamente com injeção direta
+        regexManager.InjectDefaultPatternsDirectly()
+    }
+    
 	return regexManager
 }
 
