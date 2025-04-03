@@ -85,13 +85,20 @@ var DefaultPatterns = &PatternDefinitions{
 			Description: "JWT Token",
 			Enabled:     true,
 			MinLength:   30,
-			KeywordExcludes: []string{"function", "example", "placeholder", "test", "demo"},
+			KeywordExcludes: []string{"function", "example", "placeholder", "test", "demo", "origin-trial", "originTrial", "feature", "expiry", "recaptcha", "gstatic", "content=", "prepend", "minified", "compressed", "webpack", "bundle", "base64", "encoded", "data:", "source", "map", "+", "=", "==", "btoa", "atob", "encode", "padding", "charAt", "substring", "slice"},
 		},
 		"basic_auth": {
-			Regex:       `(?i)(?:basic\s*)(?:[a-zA-Z0-9\+\/=]{5,100})`,
+			Regex:       `(?i)(?:basic\s+)(?:[a-zA-Z0-9\+\/=]{10,100})`,
 			Description: "HTTP Basic Authentication",
 			Enabled:     true,
-			MinLength:   20,
+			MinLength:   15, // Adjusting minimum length to avoid "Basic usage" false positives
+			KeywordExcludes: []string{
+				"example", "sample", "usage", "caption", "documentation",
+				"test", "@example", "description", "tutorial", "unicode",
+				"Basic Multilingual", "BMP", "fromCharCode", 
+				"createElement", "<h1", "<h2", "<h3", "<h4", "<h5", "<h6",
+				"Basic authorization", "Basic authentication", "Basic configuration",
+			},
 		},
 		"bearer_token": {
 			Regex:       `(?i)bearer\s+[a-zA-Z0-9_\-\.=]{10,500}`,
@@ -105,7 +112,7 @@ var DefaultPatterns = &PatternDefinitions{
 			Description: "OAuth Token",
 			Enabled:     true,
 			MinLength:   20,
-			KeywordExcludes: []string{"QVO", "QUO", "YO"},
+			KeywordExcludes: []string{"QVO", "QUO", "YO", "accessToken:", ".accessToken", "oauth_token=", "variable", "config", "credential"},
 		},
 
 		// Generic secrets - Universal patterns
@@ -115,17 +122,100 @@ var DefaultPatterns = &PatternDefinitions{
 			Enabled:     true,
 			MinLength:   8,
 			MaxLength:   30,
-			KeywordExcludes: []string{"match", "valid", "must", "should", "hint", "help", "message", "error"},
+			KeywordExcludes: []string{"match", "valid", "must", "should", "hint", "help", "message", "error", "Change password", "Reset password", "Forgot password", "pseudo", "selector", "createElement", "render", "component", "input[type", "USERNAME", "PASSWORD"},
 		},
-		"high_entropy_string": {
-			Regex:       `['"]?([a-zA-Z0-9+/=_\-]{32,64})['"]?`,
-			Description: "High Entropy String",
+		
+		// NOVOS PADRÕES ESPECÍFICOS (substituindo high_entropy_string)
+		"auth_token": {
+			Regex:       `['"]?([a-zA-Z0-9_\-\.]{32,64})['"]?\s*[,;]?\s*\/\/\s*[Aa]uth(?:entication)?\s+[Tt]oken`,
+			Description: "Authentication Token",
 			Enabled:     true,
 			MinLength:   32,
 			MaxLength:   64,
-			KeywordExcludes: []string{"function", "return", "export", "import", "require"},
 		},
-
+		"api_key_assignment": {
+			Regex:       `['"]?(?:api_?key|api_?secret|app_?key|app_?secret)['"]?\s*[=:]\s*['"]([a-zA-Z0-9_\-\.]{16,64})['"]`,
+			Description: "API Key Assignment",
+			Enabled:     true,
+			MinLength:   16,
+			KeywordExcludes: []string{"example", "sample", "placeholder", "test", "your", "xxx"},
+		},
+		"firebase_api_key": {
+			Regex:       `AIzaSy[0-9A-Za-z_-]{33}`,
+			Description: "Firebase API Key",
+			Enabled:     true,
+			MinLength:   39,
+			KeywordExcludes: []string{"googleapis.com/webfonts", "fonts.googleapis", "webfonts?key="},
+		},
+		"github_personal_token": {
+			Regex:       `gh[a-z]_[A-Za-z0-9_]{36,255}`,
+			Description: "GitHub Personal Token",
+			Enabled:     true,
+			MinLength:   40,
+		},
+		"slack_token": {
+			Regex:       `xox[pbar]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-zA-Z0-9]{32}`,
+			Description: "Slack Token",
+			Enabled:     true,
+			MinLength:   40,
+		},
+		"slack_webhook": {
+			Regex:       `https:\/\/hooks\.slack\.com\/services\/T[a-zA-Z0-9_]{8,12}\/B[a-zA-Z0-9_]{8,12}\/[a-zA-Z0-9_]{24,32}`,
+			Description: "Slack Webhook URL",
+			Enabled:     true,
+			MinLength:   70,
+		},
+		"mailchimp_api_key": {
+			Regex:       `[0-9a-zA-Z]{32}-us[0-9]{1,2}`,
+			Description: "Mailchimp API Key",
+			Enabled:     true,
+			MinLength:   35,
+		},
+		"private_key_content": {
+			Regex:       `-----BEGIN (?:RSA|OPENSSH|DSA|EC|PGP) PRIVATE KEY( BLOCK)?-----`,
+			Description: "Private Key Content",
+			Enabled:     true,
+			MinLength:   30,
+		},
+		"square_access_token": {
+			Regex:       `sq0atp-[0-9A-Za-z\-_]{22}`,
+			Description: "Square Access Token",
+			Enabled:     true,
+			MinLength:   30,
+		},
+		"square_oauth_secret": {
+			Regex:       `sq0csp-[0-9A-Za-z\-_]{43}`,
+			Description: "Square OAuth Secret",
+			Enabled:     true,
+			MinLength:   50,
+		},
+		"sendgrid_api_key": {
+			Regex:       `SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}`,
+			Description: "SendGrid API Key",
+			Enabled:     true,
+			MinLength:   69,
+		},
+		"encryption_key": {
+			Regex:       `(?i)['"]?enc(?:ryption)?[_-]?key['"]?\s*[=:]\s*['"]([a-zA-Z0-9+/]{16,64})['"]`,
+			Description: "Encryption Key",
+			Enabled:     true,
+			MinLength:   16,
+			KeywordExcludes: []string{"example", "sample", "placeholder", "test"},
+		},
+		"signing_key": {
+			Regex:       `(?i)['"]?sign(?:ing)?[_-]?(?:secret|key)['"]?\s*[=:]\s*['"]([a-zA-Z0-9+/]{16,64})['"]`,
+			Description: "Signing Key/Secret",
+			Enabled:     true,
+			MinLength:   16,
+			KeywordExcludes: []string{"example", "sample", "placeholder", "test"},
+		},
+		"heroku_api_key": {
+			Regex:       `[h|H][e|E][r|R][o|O][k|K][u|U].{0,30}[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}`,
+			Description: "Heroku API Key",
+			Enabled:     true,
+			MinLength:   30,
+		},
+		
 		// Config/env file patterns - Common local file patterns
 		"config_api_key": {
 			Regex:       `['"]?(?:api|app)(?:_|-|\.)?(?:key|token|secret)['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-\.]{8,})['"]`,
@@ -145,7 +235,7 @@ var DefaultPatterns = &PatternDefinitions{
 			Enabled:     true,
 			MinLength:   8,
 		},
-		"private_key": {
+		"private_key_var": {
 			Regex:       `['"]?(?:private_?key|secret_?key)['"]?\s*[:=]\s*['"]([^'"]{20,})['"]`,
 			Description: "Private Key Variable",
 			Enabled:     true,
@@ -172,23 +262,58 @@ var DefaultPatterns = &PatternDefinitions{
 
 // Global list of excluded strings that are likely false positives
 var GlobalExclusions = []string{
-	// Common code patterns
-	"function", "return", "import", "export", "require",
-	"console.log", "window.", "document.", "getElementById",
-	"querySelector", "addEventListener", "module.exports",
-	
-	// Common file paths
-	"node_modules", "/dist/", "/build/", "/src/", "/public/",
-	
-	// Media types
-	"application/json", "text/html", "text/plain",
-	
-	// HTML DOM elements
-	"div", "span", "input", "button", "form",
-	
-	// Development-related
-	"localhost", "127.0.0.1", "0.0.0.0", "test", "example",
-	"development", "staging", "production",
+    // Common code patterns
+    "function", "return", "import", "export", "require",
+    "console.log", "window.", "document.", "getElementById",
+    "querySelector", "addEventListener", "module.exports",
+    
+    // Common file paths
+    "node_modules", "/dist/", "/build/", "/src/", "/public/",
+    
+    // Media types
+    "application/json", "text/html", "text/plain",
+    
+    // HTML DOM elements
+    "div", "span", "input", "button", "form",
+    
+    // Development-related
+    "localhost", "127.0.0.1", "0.0.0.0", "test", "example",
+    "development", "staging", "production",
+
+    // CSS variables and documentation
+    "--", "css", "style", "class", "border-radius", "margin", "padding",
+    "tooltip", "shadow", "background-color", "font-size", "wiki", "github",
+    "example", "usage", "documentation", "tutorial", "sample", "@caption",
+    "origin-trial", ".com/", "hover", "distance", "basic usage", "basic example",
+    "freshchat_", "min_", "max_", "login", "uuid", "component", "module",
+    "transition", "transform", "position", "display", "overflow", "align",
+    "container", "wrapper", "element", "selector", "pattern", "template",
+    
+    // Novos padrões para JavaScript e UI
+    "transition", "enable", "disable", "verify", "validate", "enroll", 
+    "authenticate", "regenerate", "display", "postpone", "reminder",
+    "constraint", "camelCase", "addEventListener", "querySelector",
+    "dispatch", "onChange", "onClick", "onSubmit", "setState", "source", 
+    "mapping", "sourceMappingURL", "INSUFFICIENT", "PASSWORD", "DISABLED",
+    "fallback", "message", "prefix", "suffix", "handle", "callback",
+    
+    // Novos termos específicos para os falsos positivos identificados
+    "Basic authorization", "Basic authentication", "Basic configuration", "Basic setup",
+    "Basic usage", "Basic example", "Basic security", "Basic settings",
+    "<h1", "<h2", "<h3", "<h4", "<h5", "<h6", "createElement",
+    
+    // Novos termos específicos para os falsos positivos identificados
+    "Basic Multilingual", "BMP", "Unicode", "origin-trial", 
+    "createElement", "render", "component", "Change password", 
+    "access_token", "accessToken", ".accessToken", "oauth_token", 
+    "webfonts", "googleapis.com", "type=\"password\"", "input[type=",
+    "changingPassword", "resetPassword", "charCodeAt", "fromCharCode",
+
+    // Excluir padrões específicos de código minificado com strings base64
+    "data:image", "data:application", "sourceMappingURL", 
+    "base64,", "/base64", "btoa(", "atob(", "encode(",
+    "charAt(", "substring(", "slice(", "map(", "join(",
+    "replace(", "split(", "charCode", "fromCharCode",
 }
 
 // CompiledPattern represents a pattern with its compiled regex

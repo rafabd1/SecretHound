@@ -43,6 +43,14 @@ func IsBinaryContent(content []byte) bool {
 	return float64(controlCount+nullCount)/float64(checkLength) > 0.1
 }
 
+// max returns the larger of a and b
+func max(a, b int) int {
+    if a > b {
+        return a
+    }
+    return b
+}
+
 // Helper for min function (Go 1.21+ has this in the standard library)
 func min(a, b int) int {
 	if a < b {
