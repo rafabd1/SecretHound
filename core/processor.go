@@ -86,34 +86,35 @@ func (p *Processor) ProcessJSContent(content string, url string) ([]Secret, erro
     if isLocalFile {
         p.logger.Debug("Processing local file with %d patterns and %d bytes", 
             p.regexManager.GetPatternCount(), len(content))
+            
+        // Para arquivos locais, ativamos modo especial com menos filtros
+        p.regexManager.SetLocalFileMode(true)
+        defer p.regexManager.SetLocalFileMode(false) // Restaurar ao final
     }
 
     // Use the regex manager to find secrets in the content
     var secrets []Secret
     var err error
     
-    // For local files, use a different approach with less filtering
+    // Para arquivos locais, use uma abordagem diferente com menos filtragem
     if isLocalFile {
         // Use direct pattern search with minimal filtering for local files
         patternMatches := p.regexManager.FindMatches(content, url)
         
         for patternName, matches := range patternMatches {
             for _, match := range matches {
-                // Check if match is a valid secret
-                if !p.regexManager.IsExcluded(match, patternName) {
-                    // Create context and other details
-                    context := extractContext(content, match)
-                    lineNum := utils.FindLineNumber(content, match)
-                    
-                    secret := Secret{
-                        Type:    patternName,
-                        Value:   match,
-                        Context: context,
-                        URL:     url,
-                        Line:    lineNum,
-                    }
-                    secrets = append(secrets, secret)
+                // Check if match is a valid secret - já verificado em FindMatches para local files
+                context := extractContext(content, match)
+                lineNum := utils.FindLineNumber(content, match)
+                
+                secret := Secret{
+                    Type:    patternName,
+                    Value:   match,
+                    Context: context,
+                    URL:     url,
+                    Line:    lineNum,
                 }
+                secrets = append(secrets, secret)
             }
         }
     } else {

@@ -17,6 +17,7 @@ type RegexManager struct {
     excludedExtensions []string               // File extensions to ignore
     minSecretLength    int                    // Minimum length to consider a secret
     maxSecretLength    int                    // Maximum length to consider a secret
+    isLocalFileMode    bool                   // Special mode for local files with less filtering
     mu                 sync.RWMutex
 }
 
@@ -464,6 +465,23 @@ func (rm *RegexManager) IsExcluded(match string, patternName string) bool {
     return false
 }
 
+// SetLocalFileMode enables special mode for local files
+func (rm *RegexManager) SetLocalFileMode(enabled bool) {
+    rm.mu.Lock()
+    defer rm.mu.Unlock()
+    
+    rm.isLocalFileMode = enabled
+    
+    // When enabling local file mode, use less strict length limits
+    if enabled {
+        rm.minSecretLength = 4  // Menos restritivo para arquivos locais
+        rm.maxSecretLength = 500
+    } else {
+        rm.minSecretLength = 5  // Configuração normal
+        rm.maxSecretLength = 200
+    }
+}
+
 // FindMatches finds all regex matches in content and returns them directly
 // This is especially useful for local file scanning
 func (rm *RegexManager) FindMatches(content, url string) map[string][]string {
@@ -483,39 +501,82 @@ func (rm *RegexManager) FindMatches(content, url string) map[string][]string {
 
     // Find matches for each pattern
     for name, re := range rm.patterns {
+        // Para arquivos locais, usamos tanto FindAllString quanto FindAllStringSubmatch
+        // para capturar todas as possibilidades
+        
+        // Primeiro, encontrar todos os matches completos
         found := re.FindAllString(content, -1)
-        if len(found) > 0 {
-            // Filter out duplicates
-            unique := make(map[string]bool)
-            for _, match := range found {
-                // Skip excluded patterns
-                if !rm.IsExcluded(match, name) {
-                    // Apply stricter validation for local files to reduce false positives
-                    isValid := true
+        
+        // Em paralelo, encontrar matches com grupos de captura
+        var allMatches [][]string
+        if isLocalFile || rm.isLocalFileMode {
+            allMatches = re.FindAllStringSubmatch(content, -1)
+        }
+        
+        // Container para armazenar resultados únicos
+        unique := make(map[string]bool)
+        
+        // Processar primeiro os matches de grupos de captura, se disponíveis
+        if len(allMatches) > 0 {
+            for _, matchGroup := range allMatches {
+                if len(matchGroup) > 1 && matchGroup[1] != "" {
+                    // Usar o primeiro grupo de captura como valor
+                    match := matchGroup[1]
                     
-                    if isLocalFile {
-                        // Check if match is valid in local file context
-                        isValid = rm.isLocalFileSecretValid(match, name, content)
-                    } else if needsStrictFiltering {
-                        // For minified content, apply stricter filtering
-                        isValid = rm.isValidSecretStrict(match, name)
-                    }
-                    
-                    if isValid {
-                        unique[match] = true
+                    // Verificar se este match é válido
+                    if !rm.IsExcluded(match, name) {
+                        // Arquivos locais usam validação especial
+                        isValid := true
+                        
+                        if isLocalFile || rm.isLocalFileMode {
+                            isValid = rm.isLocalFileSecretValid(match, name, content)
+                        } else if needsStrictFiltering {
+                            isValid = rm.isValidSecretStrict(match, name)
+                        }
+                        
+                        if isValid {
+                            unique[match] = true
+                        }
                     }
                 }
             }
-
-            // Convert map keys to slice
-            var uniqueMatches []string
-            for match := range unique {
+        }
+        
+        // Também processar os matches completos para capturar padrões sem grupos
+        for _, match := range found {
+            if !rm.IsExcluded(match, name) {
+                isValid := true
+                
+                if isLocalFile || rm.isLocalFileMode {
+                    isValid = rm.isLocalFileSecretValid(match, name, content)
+                } else if needsStrictFiltering {
+                    isValid = rm.isValidSecretStrict(match, name)
+                }
+                
+                if isValid {
+                    unique[match] = true
+                }
+            }
+        }
+        
+        // Converter para slice
+        var uniqueMatches []string
+        for match := range unique {
+            // Para arquivos locais, reduzir o filtro ao mínimo
+            if isLocalFile || rm.isLocalFileMode {
+                // Já aplicamos a validação isLocalFileSecretValid, 
+                // então só verificamos comprimento mínimo para evitar ruído
+                if len(match) >= rm.minSecretLength {
+                    uniqueMatches = append(uniqueMatches, match)
+                }
+            } else {
                 uniqueMatches = append(uniqueMatches, match)
             }
-
-            if len(uniqueMatches) > 0 {
-                matches[name] = uniqueMatches
-            }
+        }
+        
+        // Adicionar ao mapa de resultados
+        if len(uniqueMatches) > 0 {
+            matches[name] = uniqueMatches
         }
     }
 
@@ -524,6 +585,20 @@ func (rm *RegexManager) FindMatches(content, url string) map[string][]string {
 
 // isLocalFileSecretValid performs additional validation for local file secrets
 func (rm *RegexManager) isLocalFileSecretValid(match, patternName, content string) bool {
+    // Se estamos em modo de arquivo local, usamos validação específica
+    if rm.isLocalFileMode {
+        // Para arquivos de teste/exemplo, validação mínima
+        if strings.Contains(content, "DO NOT COMMIT") || 
+           strings.Contains(content, "example") || 
+           strings.Contains(content, "EXAMPLE") ||
+           strings.Contains(content, "test") ||
+           strings.Contains(content, "TEST") {
+            
+            // Para arquivos de exemplo/teste, aceitamos quase tudo se tiver comprimento mínimo
+            return len(match) >= rm.minSecretLength
+        }
+    }
+    
     // Always exclude very short or very long values
     if len(match) < rm.minSecretLength || len(match) > rm.maxSecretLength {
         return false
@@ -975,9 +1050,7 @@ func hasMinifiedCodePattern(s string) bool {
 // hasRandomBase64Pattern verifica se uma string parece conter dados aleatórios de base64
 func hasRandomBase64Pattern(s string) bool {
     // Remove o prefixo "1/" se existir
-    if strings.HasPrefix(s, "1/") {
-        s = s[2:]
-    }
+    s = strings.TrimPrefix(s, "1/")
     
     // Verifica a entropia da string (presença de caracteres aleatórios)
     charFrequency := make(map[rune]int)
