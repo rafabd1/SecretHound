@@ -2,8 +2,8 @@ package utils
 
 import (
 	"container/list"
+	"sort"
 	"sync"
-	"time"
 )
 
 // LRUCache implements a thread-safe Least Recently Used (LRU) cache
@@ -127,26 +127,100 @@ func (c *LRUCache) removeLRU() {
 }
 
 // GetWithExpiry gets a value from the cache and checks if it's expired
-func (c *LRUCache) GetWithExpiry(key string, maxAge time.Duration) (interface{}, bool) {
+func (c *LRUCache) GetWithExpiry(key string, maxAge Duration) (interface{}, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	
 	if element, found := c.items[key]; found {
 		item := element.Value.(*cacheItem)
-		if timestamp, ok := item.value.(time.Time); ok {
-			if time.Since(timestamp) < maxAge {
+		if timestamp, ok := item.value.(Time); ok {
+			if Since(timestamp) < maxAge {
 				c.list.MoveToFront(element) // Mark as recently used
 				return item.value, true
 			} else {
 				// Remove expired item
 				c.list.Remove(element)
 				delete(c.items, key)
-				return nil, false
 			}
 		}
-		c.list.MoveToFront(element) // Mark as recently used
+		// If not a timestamp, move to front and return
+		c.list.MoveToFront(element)
 		return item.value, true
 	}
 	
 	return nil, false
+}
+
+// As funções e tipos abaixo foram removidos pois estão duplicados em common.go:
+// - SafeCounter (tipo e métodos)
+// - SafeMap (tipo e métodos)
+
+// SimpleSortByDomainCount sorts domains by their URL count in descending order
+func SimpleSortByDomainCount(domains []string, countFunc func(string) int) []string {
+	sort.Slice(domains, func(i, j int) bool {
+		return countFunc(domains[i]) > countFunc(domains[j])
+	})
+	return domains
+}
+
+// SortByValue sorts a slice based on values returned by a value function
+func SortByValue[T any, V int | float64 | string](items []T, valueFunc func(T) V) {
+	sort.Slice(items, func(i, j int) bool {
+		return valueFunc(items[i]) < valueFunc(items[j])
+	})
+}
+
+// SortByValueDesc sorts a slice in descending order based on values returned by a value function
+func SortByValueDesc[T any, V int | float64 | string](items []T, valueFunc func(T) V) {
+	sort.Slice(items, func(i, j int) bool {
+		return valueFunc(items[i]) > valueFunc(items[j])
+	})
+}
+
+// ChunkSlice divides a slice into chunks of the specified size
+func ChunkSlice[T any](slice []T, chunkSize int) [][]T {
+	if chunkSize <= 0 {
+		return [][]T{slice}
+	}
+	
+	var chunks [][]T
+	for i := 0; i < len(slice); i += chunkSize {
+		end := i + chunkSize
+		if end > len(slice) {
+			end = len(slice)
+		}
+		chunks = append(chunks, slice[i:end])
+	}
+	
+	return chunks
+}
+
+// ChunkBy divides a slice into chunks based on a predicate function
+func ChunkBy[T any](items []T, predicate func(T, T) bool) [][]T {
+	var result [][]T
+	
+	if len(items) == 0 {
+		return result
+	}
+	
+	// Start with the first item
+	currentChunk := []T{items[0]}
+	
+	for i := 1; i < len(items); i++ {
+		// If the predicate returns true, add to current chunk
+		if predicate(items[i-1], items[i]) {
+			currentChunk = append(currentChunk, items[i])
+		} else {
+			// Otherwise, start a new chunk
+			result = append(result, currentChunk)
+			currentChunk = []T{items[i]}
+		}
+	}
+	
+	// Add the last chunk
+	if len(currentChunk) > 0 {
+		result = append(result, currentChunk)
+	}
+	
+	return result
 }

@@ -33,7 +33,6 @@ func IsHighEntropy(s string, threshold float64) bool {
 }
 
 // IsLikelyRandomPassword checks if a string looks like a random password or token
-// rather than natural language or code
 func IsLikelyRandomPassword(s string) bool {
 	// Calculate entropy
 	entropy := CalculateEntropy(s)
@@ -43,23 +42,10 @@ func IsLikelyRandomPassword(s string) bool {
 		return false
 	}
 	
-	// CSS variables and class names are often high entropy but not secrets
-	if IsLikelyCSS(s) {
-		return false
-	}
-	
-	// Internationalization keys are not secrets
-	if IsLikelyI18nKey(s) {
-		return false
-	}
-	
-	// Function names are not secrets
-	if IsLikelyFunctionName(s) {
-		return false
-	}
-	
-	// URLs and documentation references are not secrets
-	if IsLikelyUrl(s) || IsLikelyDocumentation(s, "") {
+	// Verify it's not a common code pattern
+	if IsLikelyCSS(s) || IsLikelyI18nKey(s) || 
+	   IsLikelyFunctionName(s) || IsLikelyUrl(s) || 
+	   IsLikelyDocumentation(s, "") {
 		return false
 	}
 	

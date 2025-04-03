@@ -2,8 +2,6 @@ package utils
 
 import (
 	"sync"
-	"sync/atomic"
-	"time"
 )
 
 // SafeCounter is a thread-safe counter
@@ -18,27 +16,27 @@ func NewSafeCounter() *SafeCounter {
 
 // Increment increments the counter
 func (sc *SafeCounter) Increment() int64 {
-	return atomic.AddInt64(&sc.count, 1)
+	return AtomicAddInt64(&sc.count, 1)
 }
 
 // Decrement decrements the counter
 func (sc *SafeCounter) Decrement() int64 {
-	return atomic.AddInt64(&sc.count, -1)
+	return AtomicAddInt64(&sc.count, -1)
 }
 
 // Add adds a value to the counter
 func (sc *SafeCounter) Add(value int64) int64 {
-	return atomic.AddInt64(&sc.count, value)
+	return AtomicAddInt64(&sc.count, value)
 }
 
 // Value returns the current value of the counter
 func (sc *SafeCounter) Value() int64 {
-	return atomic.LoadInt64(&sc.count)
+	return AtomicLoadInt64(&sc.count)
 }
 
 // Reset resets the counter to zero
 func (sc *SafeCounter) Reset() {
-	atomic.StoreInt64(&sc.count, 0)
+	AtomicStoreInt64(&sc.count, 0)
 }
 
 // SafeMap is a thread-safe map
@@ -54,19 +52,19 @@ func NewSafeMap[K comparable, V any]() *SafeMap[K, V] {
 	}
 }
 
+// Get gets a value from the map
+func (sm *SafeMap[K, V]) Get(key K) (V, bool) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	val, ok := sm.data[key]
+	return val, ok
+}
+
 // Set sets a key-value pair in the map
 func (sm *SafeMap[K, V]) Set(key K, value V) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.data[key] = value
-}
-
-// Get gets a value from the map
-func (sm *SafeMap[K, V]) Get(key K) (V, bool) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	value, ok := sm.data[key]
-	return value, ok
 }
 
 // Delete deletes a key from the map
@@ -120,70 +118,15 @@ func (sm *SafeMap[K, V]) Clear() {
 	sm.data = make(map[K]V)
 }
 
-// Copy creates a copy of the map
-func (sm *SafeMap[K, V]) Copy() map[K]V {
+// Snapshot returns a copy of the map
+func (sm *SafeMap[K, V]) Snapshot() map[K]V {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	copy := make(map[K]V, len(sm.data))
+	
+	result := make(map[K]V, len(sm.data))
 	for k, v := range sm.data {
-		copy[k] = v
+		result[k] = v
 	}
-	return copy
-}
-
-// Throttle creates a function that throttles calls to the given function
-func Throttle(f func(), delay time.Duration) func() {
-	var lastCall time.Time
-	var mu sync.Mutex
 	
-	return func() {
-		mu.Lock()
-		defer mu.Unlock()
-		
-		now := time.Now()
-		if now.Sub(lastCall) >= delay {
-			lastCall = now
-			f()
-		}
-	}
-}
-
-// Debounce creates a function that debounces calls to the given function
-func Debounce(f func(), delay time.Duration) func() {
-	var timer *time.Timer
-	var mu sync.Mutex
-	
-	return func() {
-		mu.Lock()
-		defer mu.Unlock()
-		
-		if timer != nil {
-			timer.Stop()
-		}
-		
-		timer = time.AfterFunc(delay, f)
-	}
-}
-
-// RunWithTimeout runs a function with a timeout
-func RunWithTimeout(f func() (interface{}, error), timeout time.Duration) (interface{}, error) {
-	resultCh := make(chan struct {
-		result interface{}
-		err    error
-	}, 1)
-	
-	go func() {
-		result, err := f()
-		resultCh <- struct {
-			result interface{}
-			err    error
-		}{result, err}
-	}()
-	
-	select {
-	case r := <-resultCh:
-		return r.result, r.err
-	case <-time.After(timeout):
-		return nil, NewError(TemporaryError, "operation timed out", nil)
-	}
+	return result
 }

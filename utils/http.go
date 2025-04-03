@@ -1,10 +1,8 @@
 package utils
 
 import (
-	"bufio"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -37,36 +35,6 @@ func IsValidURL(urlStr string) bool {
 	
 	// Check if the URL has a scheme and host
 	return parsedURL.Scheme != "" && parsedURL.Host != ""
-}
-
-// ReadLinesFromFile reads lines from a file
-func ReadLinesFromFile(filePath string) ([]string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %v", err)
-	}
-	defer file.Close()
-	
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	
-	// Increase buffer size for very long lines
-	const maxCapacity = 512 * 1024 // 512KB
-	buf := make([]byte, maxCapacity)
-	scanner.Buffer(buf, maxCapacity)
-	
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" && !strings.HasPrefix(line, "#") {
-			lines = append(lines, line)
-		}
-	}
-	
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading file: %v", err)
-	}
-	
-	return lines, nil
 }
 
 // SanitizeURL sanitizes a URL
@@ -105,28 +73,6 @@ func IsValidJSURL(urlStr string) bool {
 		   strings.Contains(strings.ToLower(urlStr), ".js&")
 }
 
-// EnforceJSExtension adds .js extension to URL if not present
-func EnforceJSExtension(urlStr string) string {
-	if IsValidJSURL(urlStr) {
-		return urlStr
-	}
-	
-	parsedURL, err := url.Parse(urlStr)
-	if err != nil {
-		return urlStr + ".js" // Simple case
-	}
-	
-	// If there's a query string, insert .js before it
-	if parsedURL.RawQuery != "" {
-		base := strings.Split(urlStr, "?")[0]
-		query := "?" + parsedURL.RawQuery
-		return base + ".js" + query
-	}
-	
-	// Otherwise just append .js
-	return urlStr + ".js"
-}
-
 // IsJavaScriptFile checks if a URL is likely a JavaScript file
 func IsJavaScriptFile(url string) bool {
 	// Check if the URL ends with .js or contains .js in the query string
@@ -154,20 +100,24 @@ func IsJavaScriptFile(url string) bool {
 	return false
 }
 
-// IsMinfiedJavaScript checks if a JavaScript file is minified
-func IsMinifiedJavaScript(content string) bool {
-	// JavaScript files are often minified by removing whitespace and comments
-	lines := strings.Split(content, "\n")
-	if len(lines) == 1 && len(content) > 1000 {
-		return true
+// EnforceJSExtension adds .js extension to URL if not present
+func EnforceJSExtension(urlStr string) string {
+	if IsValidJSURL(urlStr) {
+		return urlStr
 	}
 	
-	// Count the number of semicolons and braces
-	semicolons := strings.Count(content, ";")
-	braces := strings.Count(content, "{") + strings.Count(content, "}")
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return urlStr + ".js" // Simple case
+	}
 	
-	// Calculate the density of symbols
-	symbolDensity := float64(semicolons+braces) / float64(len(content))
+	// If there's a query string, insert .js before it
+	if parsedURL.RawQuery != "" {
+		base := strings.Split(urlStr, "?")[0]
+		query := "?" + parsedURL.RawQuery
+		return base + ".js" + query
+	}
 	
-	return symbolDensity > 0.02 // 2% threshold
+	// Otherwise just append .js
+	return urlStr + ".js"
 }

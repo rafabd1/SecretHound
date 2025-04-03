@@ -7,42 +7,45 @@ import (
 )
 
 var (
-	randSource = rand.NewSource(time.Now().UnixNano())
-	randGen    = rand.New(randSource)
-	randMutex  sync.Mutex
+	// Global random number generator
+	globalRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+	
+	// Mutex to protect access to the global random number generator
+	randMutex sync.Mutex
 )
 
 // RandomFloat returns a random float64 between 0.0 and 1.0
 func RandomFloat() float64 {
 	randMutex.Lock()
 	defer randMutex.Unlock()
-	return randGen.Float64()
+	return globalRand.Float64()
 }
 
 // RandomInt returns a random integer between min and max (inclusive)
 func RandomInt(min, max int) int {
-	if min >= max {
-		return min
+	if min > max {
+		min, max = max, min
 	}
 	
 	randMutex.Lock()
 	defer randMutex.Unlock()
-	return randGen.Intn(max-min+1) + min
+	
+	return min + globalRand.Intn(max-min+1)
 }
 
 // RandomString generates a random string of the specified length
 func RandomString(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	result := make([]byte, length)
 	
 	randMutex.Lock()
 	defer randMutex.Unlock()
 	
-	for i := range result {
-		result[i] = charset[randGen.Intn(len(charset))]
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[globalRand.Intn(len(charset))]
 	}
 	
-	return string(result)
+	return string(b)
 }
 
 // RandomUserAgent returns a random user agent string
@@ -61,39 +64,92 @@ func RandomUserAgent() string {
 	
 	randMutex.Lock()
 	defer randMutex.Unlock()
-	return userAgents[randGen.Intn(len(userAgents))]
+	
+	return userAgents[globalRand.Intn(len(userAgents))]
 }
 
 // Shuffle randomly shuffles a slice
-func Shuffle(slice []string) {
+func Shuffle[T any](slice []T) {
 	randMutex.Lock()
 	defer randMutex.Unlock()
 	
-	rand.Shuffle(len(slice), func(i, j int) {
+	globalRand.Shuffle(len(slice), func(i, j int) {
 		slice[i], slice[j] = slice[j], slice[i]
 	})
 }
 
 // RandomChoice randomly selects an element from a slice
-func RandomChoice[T any](items []T) T {
+func RandomChoice[T any](slice []T) (T, bool) {
+	if len(slice) == 0 {
+		var zero T
+		return zero, false
+	}
+	
 	randMutex.Lock()
 	defer randMutex.Unlock()
 	
-	if len(items) == 0 {
-		var zero T
-		return zero
-	}
-	
-	return items[randGen.Intn(len(items))]
+	return slice[globalRand.Intn(len(slice))], true
 }
 
 // ShuffleSlice randomly shuffles a slice in-place
-func ShuffleSlice[T any](items []T) {
+func ShuffleSlice[T any](slice []T) {
+	Shuffle(slice)
+}
+
+// RandomBytes generates random bytes of the specified length
+func RandomBytes(length int) []byte {
 	randMutex.Lock()
 	defer randMutex.Unlock()
 	
-	for i := range items {
-		j := randGen.Intn(i + 1)
-		items[i], items[j] = items[j], items[i]
+	b := make([]byte, length)
+	globalRand.Read(b)
+	return b
+}
+
+// ResetRandomSeed resets the random seed using the current time
+func ResetRandomSeed() {
+	randMutex.Lock()
+	defer randMutex.Unlock()
+	
+	globalRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+}
+
+// WeightedChoice selects an item from choices based on weights
+func WeightedChoice[T any](choices []T, weights []float64) (T, bool) {
+	if len(choices) == 0 || len(choices) != len(weights) {
+		var zero T
+		return zero, false
 	}
+	
+	// Calculate total weight
+	var totalWeight float64
+	for _, w := range weights {
+		if w < 0 {
+			var zero T
+			return zero, false
+		}
+		totalWeight += w
+	}
+	
+	if totalWeight <= 0 {
+		var zero T
+		return zero, false
+	}
+	
+	// Generate a random value between 0 and total weight
+	randMutex.Lock()
+	r := globalRand.Float64() * totalWeight
+	randMutex.Unlock()
+	
+	// Find the item corresponding to this value
+	var cumulativeWeight float64
+	for i, w := range weights {
+		cumulativeWeight += w
+		if r < cumulativeWeight {
+			return choices[i], true
+		}
+	}
+	
+	// Fallback (should rarely happen due to floating point precision)
+	return choices[len(choices)-1], true
 }
