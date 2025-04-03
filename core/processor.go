@@ -58,7 +58,7 @@ func (p *Processor) InitializeRegexManager() error {
     
     // Load patterns using the standard method
     err := p.regexManager.LoadPredefinedPatterns()
-    if err != nil {
+    if (err != nil) {
         p.logger.Error("Failed to load patterns: %v", err)
         return err
     }

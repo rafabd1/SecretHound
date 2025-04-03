@@ -615,28 +615,31 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 	return err
 }
 
-// processLocalFiles processes local files using a direct file reading approach
+// processLocalFiles processa arquivos locais usando o escaneador
 func processLocalFiles(files []string, logger *output.Logger, writer *output.Writer) error {
-	// Ensure there are files to process
-	if len(files) == 0 {
-		return nil // No local files to process
+	// Cria gerenciador de regex
+	regexManager := core.NewRegexManager()
+	
+	// Carrega padrões padrão
+	err := regexManager.LoadPredefinedPatterns()
+	if err != nil {
+		return fmt.Errorf("falha ao carregar padrões: %v", err)
 	}
 	
-	// Log that we're processing local files
-	logger.Info("Starting to process %d local files", len(files))
+	// Força injeção de padrões padrão para arquivos locais
+	regexManager.InjectDefaultPatternsDirectly()
 	
-	// Create regex manager and load patterns
-	regexManager := createAndInitRegexManager(logger)
-	
-	// Create processor
+	// Cria processador com gerenciador de regex
 	processor := core.NewProcessor(regexManager, logger)
+
+	// Configura escaneador local
+	localScanner := core.NewLocalScanner(processor, writer, logger)
 	
-	// Create local file scanner
-	scanner := core.NewLocalScanner(processor, writer, logger)
-	scanner.SetConcurrency(concurrency)
+	// Configura concorrência
+	localScanner.SetConcurrency(concurrency)
 	
-	// Start processing local files
-	return scanner.ScanFiles(files)
+	// Escaneia arquivos
+	return localScanner.ScanFiles(files)
 }
 
 // createAndInitRegexManager creates and initializes a RegexManager with patterns
