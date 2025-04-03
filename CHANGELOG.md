@@ -1,21 +1,30 @@
 # SecretHound Changelog
 
-<<<<<<< HEAD
-## v0.1.2 (Unreleased)
+## v0.2.0 (2025-04-03)
 
 ### Improvements
-- Added 50+ new regex patterns for detecting additional types of secrets
-- Added support for Machine Learning service API keys (OpenAI, HuggingFace, Anthropic, etc.)
-- Added patterns for CI/CD and DevOps tools (Jenkins, CircleCI, Docker Hub, etc.)
-- Enhanced detection of database connection strings
-- Added exclusion patterns to reduce false positives
-- Organized patterns into logical categories
-- Updated documentation with comprehensive list of supported secrets
+- Added support for skipping SSL/TLS certificate verification with `--insecure`
+- Complete redesign of the regex pattern system
+- Added support for custom HTTP headers with `-H/--header`
+- Fixed timeout and concurrency issues
+- Fixed `-r/--retries` parameter that wasn't being applied
+- Reorganized patterns package for better maintenance
+- Redesigned error handling system
+- Temporarily disabled `--regex-file` option
 
-## v0.1.1 (2024-07-05)
-=======
+### Bug Fixes
+- Fixed issue with URLs having invalid certificates
+- Resolved timeout problems in large scans
+- Improved thread synchronization to prevent resource leaks
+- Fixed false positive issues in certain regex patterns
+
+### Technical Changes
+- Added new error type for certificate issues
+- Improved HTTP response handling logic
+- Added utility functions for certificate validation
+- Optimized regex patterns for better performance and accuracy
+
 ## v0.1.1 (2025-03-28)
->>>>>>> d5bcfdec4f2010ce44706453f011967cd40b343f
 
 ### Improvements
 - Removed global execution timeout allowing scans to run without time constraints

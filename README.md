@@ -18,13 +18,13 @@
 ## Features
 
 - **Multi-Source Scanning**: Process remote URLs, local files, and entire directories
-- **Intelligent Detection**: 100+ regex patterns to identify different types of secrets
+- **Intelligent Detection**: 50+ regex patterns to identify different types of secrets
 - **Concurrent Processing**: Fast multi-threaded architecture for efficient scanning
 - **Domain-Aware Scheduling**: Smart distribution of requests to avoid rate limiting
 - **WAF/Rate Limit Evasion**: Automatic detection and handling of security measures
 - **Context Analysis**: Reduces false positives by analyzing surrounding code
 - **Real-Time Progress**: Live updates with progress bar and statistics
-- **Multiple Output Formats**: Output to JSON or formatted text
+- **Multiple Output Formats**: Output to formatted text
 
 ## Installation
 
@@ -109,7 +109,7 @@ SecretHound supports the following options:
 | `-n, --concurrency` | Number of concurrent workers | 10 |
 | `-l, --rate-limit` | Requests per second per domain (0 = auto) | 0 |
 | `-H, --header` | Custom HTTP header (format: 'Name: Value') | - |
-| `--regex-file` | File containing custom regex patterns | - |
+| `--insecure` | Disable SSL/TLS certificate verification | false |
 | `-v, --verbose` | Enable verbose output | false |
 
 ## Documentation
