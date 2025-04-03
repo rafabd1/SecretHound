@@ -50,115 +50,116 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	
-		return &Scheduler{
-			domainManager: domainManager,
-			client:        client,
-			processor:     processor,
-			writer:        writer,
-			logger:        logger,
-			concurrency:   10, // Default, will be overridden by Schedule
-			ctx:           ctx,
-			cancel:        cancel,
-			domainLastAccess: utils.NewSafeMap[string, time.Time](),
-			domainCooldown: 500 * time.Millisecond, // Internal cooldown between requests to the same domain
-			stats: SchedulerStats{
-				DomainRetries: make(map[string]int),
-				StartTime:     time.Now(),
-			},
-		}
-}
-	// Schedule distributes URLs among worker threads
-	func (s *Scheduler) Schedule(urls []string) error {
-		s.mutex.Lock()
-		s.stats.TotalURLs = len(urls)
-		s.stats.StartTime = time.Now()
-		s.mutex.Unlock()
-
-		// Group URLs by domain before scheduling
-		s.domainManager.GroupURLsByDomain(urls)
-		domains := s.domainManager.GetDomainList()
-		
-		// Build the balanced work queue without redundant logging
-		s.buildBalancedWorkQueue(domains)
-
-		// Removendo o log redundante do rate limit, já que agora ele é mostrado nas estatísticas iniciais
-
-		// Critical pause to ensure all initial stats are displayed
-		time.Sleep(200 * time.Millisecond)
-
-		// Create and start progress bar
-		progressBar := output.NewProgressBar(len(urls), 40)
-		progressBar.SetPrefix("Processing: ")
-
-		// Connect progress bar to logger
-		s.logger.SetProgressBar(progressBar)
-
-		// Start tracking stats in real-time
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-
-		go func() {
-			for {
-				select {
-				case <-ticker.C:
-					s.mutex.Lock()
-					processedCount := s.stats.ProcessedURLs
-					secretsFound := s.stats.TotalSecrets
-					s.mutex.Unlock()
-
-					// Update progress bar
-					progressBar.Update(processedCount)
-
-					// Update suffix with statistics
-					progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
-						secretsFound,
-						float64(processedCount)/time.Since(s.stats.StartTime).Seconds()))
-				case <-s.ctx.Done():
-					return
-				}
-			}
-		}()
-		
-		// Start progress bar AFTER all important info is displayed
-		progressBar.Start()
-
-		// Create a worker pool with the configured concurrency
-		s.workerPool = utils.NewWorkerPool(s.concurrency, len(urls))
-
-		// Start worker goroutines
-		for i := 0; i < s.concurrency; i++ {
-			s.waitGroup.Add(1)
-			go s.worker(i)
-		}
-
-		// Wait for all workers to complete
-		s.waitGroup.Wait()
-
-		// Stop the progress bar
-		progressBar.Stop()
-
-		// Record end time and log summary
-		s.mutex.Lock()
-		s.stats.EndTime = time.Now()
-		duration := s.stats.EndTime.Sub(s.stats.StartTime)
-		urlsPerSecond := float64(s.stats.ProcessedURLs) / duration.Seconds()
-		s.mutex.Unlock()
-
-		// Print detailed statistics
-		s.logger.Info("Processing completed in %.2f seconds", duration.Seconds())
-		s.logger.Info("Processed %d URLs (%.2f URLs/second)", s.stats.ProcessedURLs, urlsPerSecond)
-		s.logger.Info("Found %d secrets", s.stats.TotalSecrets)
-		s.logger.Info("Failed to process %d URLs", s.stats.FailedURLs)
-		s.logger.Info("Encountered rate limiting %d times", s.stats.RateLimitHits)
-		s.logger.Info("Encountered WAF blocks %d times", s.stats.WAFBlockHits)
-
-		// Show domain statistics if in verbose mode
-		if s.logger.IsVerbose() {
-			s.printDomainStatistics()
-		}
-
-		return nil
+	return &Scheduler{
+		domainManager: domainManager,
+		client:        client,
+		processor:     processor,
+		writer:        writer,
+		logger:        logger,
+		concurrency:   10, // Default, will be overridden by Schedule
+		ctx:           ctx,
+		cancel:        cancel,
+		domainLastAccess: utils.NewSafeMap[string, time.Time](), // Correção aqui
+		domainCooldown: 500 * time.Millisecond, // Internal cooldown between requests to the same domain
+		stats: SchedulerStats{
+			DomainRetries: make(map[string]int),
+			StartTime:     time.Now(),
+		},
 	}
+}
+
+// Schedule distributes URLs among worker threads
+func (s *Scheduler) Schedule(urls []string) error {
+	s.mutex.Lock()
+	s.stats.TotalURLs = len(urls)
+	s.stats.StartTime = time.Now()
+	s.mutex.Unlock()
+
+	// Group URLs by domain before scheduling
+	s.domainManager.GroupURLsByDomain(urls)
+	domains := s.domainManager.GetDomainList()
+	
+	// Build the balanced work queue without redundant logging
+	s.buildBalancedWorkQueue(domains)
+
+	// Removendo o log redundante do rate limit, já que agora ele é mostrado nas estatísticas iniciais
+
+	// Critical pause to ensure all initial stats are displayed
+	time.Sleep(200 * time.Millisecond)
+
+	// Create and start progress bar
+	progressBar := output.NewProgressBar(len(urls), 40)
+	progressBar.SetPrefix("Processing: ")
+
+	// Connect progress bar to logger
+	s.logger.SetProgressBar(progressBar)
+
+	// Start tracking stats in real-time
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				s.mutex.Lock()
+				processedCount := s.stats.ProcessedURLs
+				secretsFound := s.stats.TotalSecrets
+				s.mutex.Unlock()
+
+				// Update progress bar
+				progressBar.Update(processedCount)
+
+				// Update suffix with statistics
+				progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
+					secretsFound,
+					float64(processedCount)/time.Since(s.stats.StartTime).Seconds()))
+			case <-s.ctx.Done():
+				return
+			}
+		}
+	}()
+	
+	// Start progress bar AFTER all important info is displayed
+	progressBar.Start()
+
+	// Create a worker pool with the configured concurrency
+	s.workerPool = utils.NewWorkerPool(s.concurrency, len(urls))
+
+	// Start worker goroutines
+	for i := 0; i < s.concurrency; i++ {
+		s.waitGroup.Add(1)
+		go s.worker(i)
+	}
+
+	// Wait for all workers to complete
+	s.waitGroup.Wait()
+
+	// Stop the progress bar
+	progressBar.Stop()
+
+	// Record end time and log summary
+	s.mutex.Lock()
+	s.stats.EndTime = time.Now()
+	duration := s.stats.EndTime.Sub(s.stats.StartTime)
+	urlsPerSecond := float64(s.stats.ProcessedURLs) / duration.Seconds()
+	s.mutex.Unlock()
+
+	// Print detailed statistics
+	s.logger.Info("Processing completed in %.2f seconds", duration.Seconds())
+	s.logger.Info("Processed %d URLs (%.2f URLs/second)", s.stats.ProcessedURLs, urlsPerSecond)
+	s.logger.Info("Found %d secrets", s.stats.TotalSecrets)
+	s.logger.Info("Failed to process %d URLs", s.stats.FailedURLs)
+	s.logger.Info("Encountered rate limiting %d times", s.stats.RateLimitHits)
+	s.logger.Info("Encountered WAF blocks %d times", s.stats.WAFBlockHits)
+
+	// Show domain statistics if in verbose mode
+	if s.logger.IsVerbose() {
+		s.printDomainStatistics()
+	}
+
+	return nil
+}
 
 // buildBalancedWorkQueue distributes domains in a balanced way to the work queue
 func (s *Scheduler) buildBalancedWorkQueue(domains []string) {
