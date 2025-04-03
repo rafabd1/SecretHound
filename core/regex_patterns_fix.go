@@ -38,23 +38,23 @@ func (rm *RegexManager) InjectDefaultPatternsDirectly() {
         "oauth_token":             `(?i)(?:oauth[._-]?token|access[._-]?token)[\s]*[=:]+[\s]*["']([a-zA-Z0-9_\-\.]{30,})["']|["']([a-zA-Z0-9]{40,})["'][\s]*[:=]+[\s]*(?:oauth|token|true|false)`,
         "basic_auth":              `(?i)(?:basic\s*)(?:[a-zA-Z0-9\+\/=]{5,100})`,
         
-        // Remover o padrão high_entropy_string problemático
-        // "high_entropy_string": `['"]?([a-zA-Z0-9+/=_\-]{32,64})['"]?`,
-        
         // Versão melhorada do generic_password para evitar falsos positivos
         "generic_password": `(?i)(?:password|passwd|pwd|secret)[\s]*[=:]+[\s]*["']([^'"]{8,30})["'](?!\s+(?:does|don|isn|doesn|match|valid|must))`,
-        
-        // Remover o padrão twilio_account_sid problemático
-        // "twilio_account_sid":  `AC[a-zA-Z0-9_\-]{32}`,
-        
-        // Remover o padrão twilio_app_sid problemático
-        // "twilio_app_sid":      `AP[a-zA-Z0-9_\-]{32}`,
         
         // Modificar o padrão google_oauth_refresh
         "google_oauth_refresh": `(?i)(?:refresh_token|oauth_token)[._-]?[\s]*[=:]+[\s]*["']1/[0-9A-Za-z\-_]{43,64}["']|["']1/[0-9A-Za-z\-_]{43,64}["'][\s]*[:=]+[\s]*(?:true|false|raw)`,
         
         // Modificar o padrão google_measurement_id
         "google_measurement_id": `(?i)(?:google_measurement_id|gtag|gtm_id|ga_tracking_id)[\s]*[=:]+[\s]*["']G-[A-Z0-9]{10}["']|dataLayer\.push\([\s\S]{0,50}["']G-[A-Z0-9]{10}["']`,
+        
+        // Local file patterns: Adicionar padrões específicos para arquivos locais
+        // que detectam configurações típicas em arquivos JavaScript/JSON
+        "config_api_key": `['"]?(?:api|app)(?:_|-|\.)?(?:key|token|secret)['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-\.]{8,})['"]`,
+        "config_secret": `['"]?(?:secret|private|auth)(?:_|-|\.)?(?:key|token)['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-\.]{8,})['"]`,
+        "auth_token": `['"]?(?:auth|token|credentials|access)['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-\.]{8,})['"]`,
+        "password_field": `['"]?(?:password|passwd)['"]?\s*[:=]\s*['"]([^'"]{8,})['"]`,
+        "mongodb_uri": `(?:mongodb(?:\+srv)?://)[^'"]*:[^'"]*@[^'"]*`,
+        "test_private_key": `['"]?(?:private_?key|secret_?key)['"]?\s*[:=]\s*['"]([^'"]{20,})['"]`,
     }
     
     // Adicionar apenas padrões que não existem ainda
@@ -93,7 +93,7 @@ func (rm *RegexManager) InjectDefaultPatternsDirectly() {
         }
     }
     
-    // Reset config to more permissive default values
-    rm.minSecretLength = 4
-    rm.maxSecretLength = 500
+    // Forçar configuração para arquivos locais
+    rm.minSecretLength = 4  // Menor comprimento mínimo
+    rm.maxSecretLength = 500 // Maior comprimento máximo
 }

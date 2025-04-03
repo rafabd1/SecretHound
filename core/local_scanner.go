@@ -342,19 +342,47 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
     }
     localURL := "file://" + filepath.ToSlash(absPath)
     
+    // Adicionar log mais detalhado para debug
+    s.logger.Debug("Scanning local file with URL: %s", localURL)
+    
     // Add more diagnostic info in verbose mode
     if s.logger.IsVerbose() {
         ext := utils.GetFileExtension(filePath)
         s.logger.Debug("File details: %s, extension: %s, size: %d bytes", filepath.Base(filePath), ext, len(content))
     }
     
+    // Antes de processar, vamos forçar a inicialização do RegexManager para arquivos locais
+    if s.processor.regexManager == nil || s.processor.regexManager.GetPatternCount() == 0 {
+        s.logger.Debug("RegexManager não inicializado. Inicializando para arquivo local...")
+        err := s.processor.InitializeRegexManager()
+        if err != nil {
+            s.logger.Error("Failed to initialize RegexManager: %v", err)
+            return 0, err
+        }
+        
+        // Para arquivos locais, também injetamos diretamente os padrões para garantir
+        s.processor.regexManager.InjectDefaultPatternsDirectly()
+        s.logger.Debug("Padrões regex injetados diretamente: %d padrões", 
+                      s.processor.regexManager.GetPatternCount())
+    }
+    
+    // Reduzir filtros para arquivos locais antes de processar
+    s.processor.regexManager.SetLocalFileMode(true)
+    
     // Process the content with extra diagnostic info
     secrets, err := s.processor.ProcessJSContent(fileContent, localURL)
+    
+    // Restaurar configuração normal após o processamento
+    s.processor.regexManager.SetLocalFileMode(false)
+    
     if err != nil {
         s.incrementFailedFiles()
         s.logger.Error("Failed to process file %s: %v", filePath, err)
         return 0, err
     }
+    
+    // Adicionar log para debug da quantidade de secrets encontrados
+    s.logger.Debug("Found %d secrets in file %s", len(secrets), filePath)
     
     // Add line numbers if missing and enhance context
     enhancedSecrets := make([]Secret, 0, len(secrets))
