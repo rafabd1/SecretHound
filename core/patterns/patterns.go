@@ -165,12 +165,6 @@ var DefaultPatterns = &PatternDefinitions{
 			Enabled:     true,
 			MinLength:   70,
 		},
-		"mailchimp_api_key": {
-			Regex:       `[0-9a-zA-Z]{32}-us[0-9]{1,2}`,
-			Description: "Mailchimp API Key",
-			Enabled:     true,
-			MinLength:   35,
-		},
 		"private_key_content": {
 			Regex:       `-----BEGIN (?:RSA|OPENSSH|DSA|EC|PGP) PRIVATE KEY( BLOCK)?-----`,
 			Description: "Private Key Content",
@@ -188,12 +182,6 @@ var DefaultPatterns = &PatternDefinitions{
 			Description: "Square OAuth Secret",
 			Enabled:     true,
 			MinLength:   50,
-		},
-		"sendgrid_api_key": {
-			Regex:       `SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}`,
-			Description: "SendGrid API Key",
-			Enabled:     true,
-			MinLength:   69,
 		},
 		"encryption_key": {
 			Regex:       `(?i)['"]?enc(?:ryption)?[_-]?key['"]?\s*[=:]\s*['"]([a-zA-Z0-9+/]{16,64})['"]`,
@@ -250,12 +238,235 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   40,
 		},
 		
-		// Azure - Major cloud provider
+		
+		// Adição de novos padrões para bancos de dados
+		"postgresql_connection_string": {
+			Regex:       `postgres(?:ql)?:\/\/[^:]+:[^@]+@[^\/]+\/\w+`,
+			Description: "PostgreSQL Connection String",
+			Enabled:     true,
+			MinLength:   30,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "localhost", "sample"},
+		},
+		"mongodb_srv_connection": {
+			Regex:       `mongodb\+srv:\/\/[^:]+:[^@]+@[^\/]+\/[^?]+`,
+			Description: "MongoDB SRV Connection String",
+			Enabled:     true,
+			MinLength:   40,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "localhost", "sample"},
+		},
+		"mysql_connection_string": {
+			Regex:       `mysql:\/\/[^:]+:[^@]+@[^\/]+\/\w+`,
+			Description: "MySQL Connection String",
+			Enabled:     true,
+			MinLength:   30,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "localhost", "sample"},
+		},
+		"redis_url": {
+			Regex:       `redis(?::\\/\\/)[^:]+:[^@]+@[^\/]+(?::\d+)?`,
+			Description: "Redis Connection URL",
+			Enabled:     true,
+			MinLength:   20,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "localhost", "sample"},
+		},
+		"msql_connection_string": {
+			Regex:       `Server=.+;Database=.+;User (?:ID|Id)=.+;Password=.+;`,
+			Description: "Microsoft SQL Server Connection String",
+			Enabled:     true,
+			MinLength:   40,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "localhost", "sample"},
+		},
+		
+		// Serviços Cloud e APIs
+		"twilio_api_key": {
+			Regex:       `SK[0-9a-fA-F]{32}`,
+			Description: "Twilio API Key",
+			Enabled:     true,
+			MinLength:   34,
+		},
+		"twilio_account_sid": {
+			Regex:       `AC[a-zA-Z0-9]{32}`,
+			Description: "Twilio Account SID",
+			Enabled:     true,
+			MinLength:   34,
+		},
+		"twilio_auth_token": {
+			Regex:       `(?<!Account SID)[a-zA-Z0-9]{32}(?=.*AC[a-zA-Z0-9]{32})`,
+			Description: "Twilio Auth Token",
+			Enabled:     true,
+			MinLength:   32,
+		},
+		"mailgun_api_key": {
+			Regex:       `key-[0-9a-zA-Z]{32}`,
+			Description: "Mailgun API Key",
+			Enabled:     true,
+			MinLength:   36,
+		},
+		"digitalocean_access_token": {
+			Regex:       `dop_v1_[a-f0-9]{64}`,
+			Description: "DigitalOcean Personal Access Token",
+			Enabled:     true,
+			MinLength:   69,
+		},
+		"digitalocean_oauth_token": {
+			Regex:       `doo_v1_[a-f0-9]{64}`,
+			Description: "DigitalOcean OAuth Token",
+			Enabled:     true,
+			MinLength:   69,
+		},
+		"digitalocean_refresh_token": {
+			Regex:       `dor_v1_[a-f0-9]{64}`,
+			Description: "DigitalOcean Refresh Token",
+			Enabled:     true,
+			MinLength:   69,
+		},
+		"shopify_access_token": {
+			Regex:       `shpat_[a-fA-F0-9]{32}`,
+			Description: "Shopify Access Token",
+			Enabled:     true,
+			MinLength:   38,
+		},
+		"shopify_custom_app_token": {
+			Regex:       `shpca_[a-fA-F0-9]{32}`,
+			Description: "Shopify Custom App Access Token",
+			Enabled:     true,
+			MinLength:   38,
+		},
+		"shopify_private_app_token": {
+			Regex:       `shppa_[a-fA-F0-9]{32}`,
+			Description: "Shopify Private App Access Token",
+			Enabled:     true,
+			MinLength:   38,
+		},
+		"shopify_shared_secret": {
+			Regex:       `shpss_[a-fA-F0-9]{32}`,
+			Description: "Shopify Shared Secret",
+			Enabled:     true,
+			MinLength:   38,
+		},
+		"npm_access_token": {
+			Regex:       `npm_[A-Za-z0-9]{36}`,
+			Description: "NPM Access Token",
+			Enabled:     true,
+			MinLength:   40,
+		},
+		"docker_hub_token": {
+			Regex:       `dckr_pat_[A-Za-z0-9_-]{56}`,
+			Description: "Docker Hub Personal Access Token",
+			Enabled:     true,
+			MinLength:   64,
+		},
+		
+		// Serviços de Pagamento
+		"paypal_client_id": {
+			Regex:       `(?i)(?:paypal|braintree).{0,20}['\"][A-Za-z0-9_-]{20,64}['\"]`,
+			Description: "PayPal Client ID",
+			Enabled:     true,
+			MinLength:   20,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "sample"},
+		},
+		"paypal_client_secret": {
+			Regex:       `(?i)(?:paypal|braintree).{0,20}['\"][A-Za-z0-9_-]{20,64}['\"]`,
+			Description: "PayPal Client Secret",
+			Enabled:     true,
+			MinLength:   20,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "sample"},
+		},
+		"braintree_token": {
+			Regex:       `access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}`,
+			Description: "Braintree Access Token",
+			Enabled:     true,
+			MinLength:   67,
+		},
+		"stripe_test_secret_key": {
+			Regex:       `sk_test_[0-9a-zA-Z]{24,34}`,
+			Description: "Stripe Test Secret Key",
+			Enabled:     true,
+			MinLength:   30,
+		},
+		"stripe_test_publishable_key": {
+			Regex:       `pk_test_[0-9a-zA-Z]{24,34}`,
+			Description: "Stripe Test Publishable Key",
+			Enabled:     true,
+			MinLength:   30,
+		},
+		
+		// Serviços de Email
+		"mailchimp_api_key": {
+			Regex:       `[0-9a-f]{32}-us[0-9]{1,2}`,
+			Description: "Mailchimp API Key",
+			Enabled:     true,
+			MinLength:   36,
+		},
+		"sendgrid_api_key": {
+			Regex:       `SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}`,
+			Description: "SendGrid API Key",
+			Enabled:     true,
+			MinLength:   69,
+		},
+		
+		// Microsoft Azure
 		"azure_connection_string": {
 			Regex:       `DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[^;]+;EndpointSuffix=`,
 			Description: "Azure Storage Connection String",
 			Enabled:     true,
 			MinLength:   70,
+		},
+		"azure_sql_connection": {
+			Regex:       `Server=tcp:[^,]+,1433;Initial Catalog=[^;]+;Persist Security Info=False;User ID=[^;]+;Password=[^;]+;`,
+			Description: "Azure SQL Connection String",
+			Enabled:     true,
+			MinLength:   50,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "localhost", "sample"},
+		},
+		"azure_service_bus": {
+			Regex:       `Endpoint=sb:\/\/[^.]+\.servicebus\.windows\.net\/;SharedAccessKeyName=[^;]+;SharedAccessKey=[^;]+`,
+			Description: "Azure Service Bus Connection String",
+			Enabled:     true,
+			MinLength:   60,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "localhost", "sample"},
+		},
+		"azure_cosmosdb": {
+			Regex:       `AccountEndpoint=https:\/\/[^.]+\.documents\.azure\.com:443\/;AccountKey=[^;]+;`,
+			Description: "Azure CosmosDB Connection String",
+			Enabled:     true,
+			MinLength:   70,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "localhost", "sample"},
+		},
+		
+		// JWT e OAuth - Melhorias nos padrões existentes
+		"jwt_improved": {
+			Regex:       `eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+`,
+			Description: "JWT Token (Improved Pattern)",
+			Enabled:     true,
+			MinLength:   30,
+			KeywordExcludes: []string{"function", "example", "placeholder", "test", "demo", "origin-trial"},
+		},
+		"oauth2_access_token": {
+			Regex:       `ya29\.[0-9A-Za-z\-_]+`,
+			Description: "OAuth 2.0 Access Token",
+			Enabled:     true,
+			MinLength:   30,
+		},
+		
+		// Serviços de CI/CD
+		"gitlab_runner_token": {
+			Regex:       `glrt-[0-9a-zA-Z_\-]{20,}`,
+			Description: "GitLab Runner Registration Token",
+			Enabled:     true,
+			MinLength:   25,
+		},
+		"gitlab_personal_token": {
+			Regex:       `glpat-[0-9a-zA-Z_\-]{20,}`,
+			Description: "GitLab Personal Access Token",
+			Enabled:     true,
+			MinLength:   25,
+		},
+		"jenkins_api_token": {
+			Regex:       `(?i)(?:jenkins|hudson).{0,5}(?:api)?.{0,5}(?:token).{0,5}['\"]([0-9a-zA-Z]{30,})['\"]`,
+			Description: "Jenkins API Token",
+			Enabled:     true,
+			MinLength:   30,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "sample"},
 		},
 	},
 }
@@ -275,10 +486,6 @@ var GlobalExclusions = []string{
     
     // HTML DOM elements
     "div", "span", "input", "button", "form",
-    
-    // Development-related
-    "localhost", "127.0.0.1", "0.0.0.0", "test", "example",
-    "development", "staging", "production",
 
     // CSS variables and documentation
     "--", "css", "style", "class", "border-radius", "margin", "padding",
@@ -305,9 +512,8 @@ var GlobalExclusions = []string{
     // Novos termos específicos para os falsos positivos identificados
     "Basic Multilingual", "BMP", "Unicode", "origin-trial", 
     "createElement", "render", "component", "Change password", 
-    "access_token", "accessToken", ".accessToken", "oauth_token", 
-    "webfonts", "googleapis.com", "type=\"password\"", "input[type=",
-    "changingPassword", "resetPassword", "charCodeAt", "fromCharCode",
+    "webfonts", "googleapis.com", "type=\"password\"", "input[type=", 
+	"charCodeAt", "fromCharCode",
 
     // Excluir padrões específicos de código minificado com strings base64
     "data:image", "data:application", "sourceMappingURL", 
