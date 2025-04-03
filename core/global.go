@@ -4,18 +4,18 @@ import (
 	"sync"
 )
 
-// Global variables used to track instances of core components
+// Global registry variables
 var (
-	// Track all RegexManager instances
 	globalRegexManagers     []*RegexManager
 	globalRegexManagersLock sync.Mutex
 
-	// Track all Processor instances
 	globalProcessors     []*Processor
 	globalProcessorsLock sync.Mutex
 )
 
-// RegisterRegexManager adds a RegexManager to the global registry
+/* 
+   Adds a RegexManager to the global registry
+*/
 func RegisterRegexManager(rm *RegexManager) {
 	if rm == nil {
 		return
@@ -27,7 +27,9 @@ func RegisterRegexManager(rm *RegexManager) {
 	globalRegexManagers = append(globalRegexManagers, rm)
 }
 
-// RegisterProcessor adds a Processor to the global registry
+/* 
+   Adds a Processor to the global registry
+*/
 func RegisterProcessor(p *Processor) {
 	if p == nil {
 		return
@@ -39,28 +41,26 @@ func RegisterProcessor(p *Processor) {
 	globalProcessors = append(globalProcessors, p)
 }
 
-// ResetGlobalInstances resets all globally registered instances
+/*
+   Resets all globally registered instances and their internal state
+*/
 func ResetGlobalInstances() {
-	// Reset RegexManagers
 	globalRegexManagersLock.Lock()
 	currentRegexManagers := globalRegexManagers
 	globalRegexManagers = nil
 	globalRegexManagersLock.Unlock()
 	
-	// Reset each manager separately (outside the lock to avoid deadlocks)
 	for _, rm := range currentRegexManagers {
 		if rm != nil {
 			rm.Reset()
 		}
 	}
 	
-	// Reset Processors
 	globalProcessorsLock.Lock()
 	currentProcessors := globalProcessors
 	globalProcessors = nil
 	globalProcessorsLock.Unlock()
 	
-	// Reset each processor separately
 	for _, p := range currentProcessors {
 		if p != nil {
 			p.ResetStats()

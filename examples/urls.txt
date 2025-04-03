@@ -1,4 +1,4 @@
 # URLs list example
-https://exemplo.com/script1.js
-https://exemplo.com/script2.js
-https://cdn.exemplo.com/lib/jquery.min.js
+https://example.com/script1.js
+https://example.com/script2.js
+https://cdn.example.com/lib/jquery.min.js

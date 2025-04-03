@@ -1,138 +1,120 @@
 package output
 
 import (
-	"fmt"
-	"os"
-	"strings"
-	"sync"
-	"time"
+    "fmt"
+    "os"
+    "strings"
+    "sync"
+    "time"
 
-	"github.com/fatih/color"
-	"github.com/rafabd1/SecretHound/utils"
+    "github.com/fatih/color"
+    "github.com/rafabd1/SecretHound/utils"
 )
 
 type LogLevel int
 
 const (
-	DEBUG LogLevel = iota
-	INFO
-	WARNING
-	ERROR
-	SUCCESS
+    DEBUG LogLevel = iota
+    INFO
+    WARNING
+    ERROR
+    SUCCESS
 )
 
-// LogMessage represents a log message in the queue
 type LogMessage struct {
-	Level     LogLevel
-	Message   string
-	Time      time.Time
-	Critical  bool    // Flag for critical messages that should be shown regardless of verbose mode
+    Level     LogLevel
+    Message   string
+    Time      time.Time
+    Critical  bool
 }
 
-// Logger provides structured logging with queue management
 type Logger struct {
-	verbose     bool
-	outputMu    sync.Mutex // Mutex for coordinating terminal output
-	logQueue    chan LogMessage
-	done        chan struct{}
+    verbose     bool
+    outputMu    sync.Mutex
+    logQueue    chan LogMessage
+    done        chan struct{}
 
-	// Color functions
-	debugColor   func(format string, a ...interface{}) string
-	infoColor    func(format string, a ...interface{}) string
-	warningColor func(format string, a ...interface{}) string
-	errorColor   func(format string, a ...interface{}) string
-	successColor func(format string, a ...interface{}) string
-	timeColor    func(format string, a ...interface{}) string
-	
-	// Progress bar integration
-	progressBar  *ProgressBar
-	progressMu   sync.Mutex
+    debugColor   func(format string, a ...interface{}) string
+    infoColor    func(format string, a ...interface{}) string
+    warningColor func(format string, a ...interface{}) string
+    errorColor   func(format string, a ...interface{}) string
+    successColor func(format string, a ...interface{}) string
+    timeColor    func(format string, a ...interface{}) string
+    
+    progressBar  *ProgressBar
+    progressMu   sync.Mutex
 
-	// Adicionar um mecanismo para verificar segredos já logados
-	loggedSecrets map[string]bool
-	secretsMutex  sync.Mutex
+    loggedSecrets map[string]bool
+    secretsMutex  sync.Mutex
 }
 
-// NewLogger creates a new logger
 func NewLogger(verbose bool) *Logger {
-	logger := &Logger{
-		verbose:  verbose,
-		logQueue: make(chan LogMessage, 100), // Buffer for 100 log messages
-		done:     make(chan struct{}),
+    logger := &Logger{
+        verbose:  verbose,
+        logQueue: make(chan LogMessage, 100),
+        done:     make(chan struct{}),
 
-		 // Ensure all colors use the same function for time
-		timeColor:    color.New(color.FgHiBlack).SprintfFunc(),
-		debugColor:   color.New(color.FgHiBlack).SprintfFunc(),
-		infoColor:    color.New(color.FgCyan).SprintfFunc(),
-		warningColor: color.New(color.FgYellow).SprintfFunc(),
-		errorColor:   color.New(color.FgRed, color.Bold).SprintfFunc(),
-		successColor: color.New(color.FgGreen, color.Bold).SprintfFunc(),
+        timeColor:    color.New(color.FgHiBlack).SprintfFunc(),
+        debugColor:   color.New(color.FgHiBlack).SprintfFunc(),
+        infoColor:    color.New(color.FgCyan).SprintfFunc(),
+        warningColor: color.New(color.FgYellow).SprintfFunc(),
+        errorColor:   color.New(color.FgRed, color.Bold).SprintfFunc(),
+        successColor: color.New(color.FgGreen, color.Bold).SprintfFunc(),
 
-		// No construtor do logger, inicializar o mapa
-		loggedSecrets: make(map[string]bool),
-	}
+        loggedSecrets: make(map[string]bool),
+    }
 
-	// Start log processor in background
-	go logger.processLogs()
+    go logger.processLogs()
 
-	return logger
+    return logger
 }
 
-// SetProgressBar configures the progress bar for the logger
 func (l *Logger) SetProgressBar(pb *ProgressBar) {
-	l.progressMu.Lock()
-	defer l.progressMu.Unlock()
-	l.progressBar = pb
+    l.progressMu.Lock()
+    defer l.progressMu.Unlock()
+    l.progressBar = pb
 }
 
-// processLogs processes log messages from the queue
+/* 
+   Processes log messages from the queue in background 
+*/
 func (l *Logger) processLogs() {
-	for {
-		select {
-		case <-l.done:
-			return
-		case msg := <-l.logQueue:
-			// Lock output to prevent race with progress bar
-			l.outputMu.Lock()
-			l.writeLog(msg)
-			l.outputMu.Unlock()
-		}
-	}
+    for {
+        select {
+        case <-l.done:
+            return
+        case msg := <-l.logQueue:
+            l.outputMu.Lock()
+            l.writeLog(msg)
+            l.outputMu.Unlock()
+        }
+    }
 }
 
-// writeLog writes a log message to the console
 func (l *Logger) writeLog(msg LogMessage) {
-    // Skip DEBUG messages if not in verbose mode
     if !l.verbose && msg.Level == DEBUG {
         return
     }
     
-    // Skip INFO and WARNING messages if not in verbose mode
     if !l.verbose && (msg.Level == INFO || msg.Level == WARNING) {
         return
     }
     
-    // Skip ERROR messages if not in verbose mode and not critical
     if !l.verbose && msg.Level == ERROR && !msg.Critical {
         return
     }
     
-    // Always show SUCCESS messages regardless of verbose mode
-    
-    // Get the terminal controller for coordinating output
     tc := GetTerminalController()
     
     l.progressMu.Lock()
     pb := l.progressBar
     l.progressMu.Unlock()
     
-    // Pause the progress bar if it exists
     if pb != nil {
         pb.PauseRender()
     }
     
     tc.CoordinateOutput(func() {
-        // Format and print the log message with consistent dim timestamp
         timestamp := l.timeColor("[%s]", msg.Time.Format("15:04:05"))
         var prefix string
         var formatted string
@@ -155,126 +137,110 @@ func (l *Logger) writeLog(msg LogMessage) {
             formatted = l.successColor("%s", msg.Message)
         }
 
-        // Print without any extra newlines
         fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
     })
     
-    // Resume the progress bar if it exists
     if pb != nil {
-        // Allow some time for the output to be processed
         time.Sleep(1 * time.Millisecond)
         pb.ResumeRender()
     }
 }
 
-// enqueueLog adds a log message to the queue
 func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) {
-	// Create log message
-	msg := LogMessage{
-		Level:   level,
-		Message: fmt.Sprintf(format, args...),
-		Time:    time.Now(),
-		Critical: isCriticalMessage(level, format),
-	}
+    msg := LogMessage{
+        Level:   level,
+        Message: fmt.Sprintf(format, args...),
+        Time:    time.Now(),
+        Critical: isCriticalMessage(level, format),
+    }
 
-	// Non-blocking send to the log queue
-	select {
-	case l.logQueue <- msg:
-		// Message sent successfully
-	default:
-		// Queue is full, write directly to avoid blocking
-		l.outputMu.Lock()
-		l.writeLog(msg)
-		l.outputMu.Unlock()
-	}
+    select {
+    case l.logQueue <- msg:
+    default:
+        l.outputMu.Lock()
+        l.writeLog(msg)
+        l.outputMu.Unlock()
+    }
 }
 
-// isCriticalMessage determines if a message is critical and should be shown regardless of verbose mode
+/* 
+   Determines if a message should be shown regardless of verbose mode 
+*/
 func isCriticalMessage(level LogLevel, message string) bool {
-	// All success messages are considered critical
-	if level == SUCCESS {
-		return true
-	}
-	
-	// Only check ERROR messages for criticality
-	if level == ERROR {
-		criticalPatterns := []string{
-			"failed to create output file",
-			"no valid input sources found",
-			"failed to access input file",
-			"failed to load regex patterns",
-			"timeout exceeded",
-			"fatal error",
-		}
-		
-		for _, pattern := range criticalPatterns {
-			if strings.Contains(strings.ToLower(message), pattern) {
-				return true
-			}
-		}
-	}
-	
-	return false
+    if level == SUCCESS {
+        return true
+    }
+    
+    if level == ERROR {
+        criticalPatterns := []string{
+            "failed to create output file",
+            "no valid input sources found",
+            "failed to access input file",
+            "failed to load regex patterns",
+            "timeout exceeded",
+            "fatal error",
+        }
+        
+        for _, pattern := range criticalPatterns {
+            if strings.Contains(strings.ToLower(message), pattern) {
+                return true
+            }
+        }
+    }
+    
+    return false
 }
 
-// Debug logs a debug message (only shown in verbose mode)
 func (l *Logger) Debug(format string, args ...interface{}) {
-	l.enqueueLog(DEBUG, format, args...)
+    l.enqueueLog(DEBUG, format, args...)
 }
 
-// Info logs an informational message (only shown in verbose mode)
 func (l *Logger) Info(format string, args ...interface{}) {
-	l.enqueueLog(INFO, format, args...)
+    l.enqueueLog(INFO, format, args...)
 }
 
-// Warning logs a warning message
 func (l *Logger) Warning(format string, args ...interface{}) {
-	l.enqueueLog(WARNING, format, args...)
+    l.enqueueLog(WARNING, format, args...)
 }
 
-// Error logs an error message
 func (l *Logger) Error(format string, args ...interface{}) {
-	l.enqueueLog(ERROR, format, args...)
+    l.enqueueLog(ERROR, format, args...)
 }
 
-// Success logs a success message
 func (l *Logger) Success(format string, args ...interface{}) {
-	l.enqueueLog(SUCCESS, format, args...)
+    l.enqueueLog(SUCCESS, format, args...)
 }
 
-// SecretFound logs a discovered secret
+/* 
+   Logs a discovered secret while avoiding duplicates 
+*/
 func (l *Logger) SecretFound(secretType string, secretValue string, url string) {
-    // Create a deterministic key for this secret to avoid duplicates
     key := fmt.Sprintf("%s:%s:%s", url, secretType, secretValue)
     
     l.secretsMutex.Lock()
     
-    // Check if this secret has already been logged
     if _, exists := l.loggedSecrets[key]; exists {
         l.secretsMutex.Unlock()
-        return // Already logged, do nothing
+        return
     }
     
-    // Mark this secret as logged
     l.loggedSecrets[key] = true
     l.secretsMutex.Unlock()
     
-    // Proceed with normal logging without any extra blank lines
     secretPart := utils.TruncateString(secretValue, 35)
     
-    // Ensure this is a message that's always displayed
     l.Success("Found %s: %s... in %s", secretType, secretPart, url)
     
-    // Adiciona uma pequena pausa para garantir que o log seja processado
     time.Sleep(5 * time.Millisecond)
 }
 
-// ProgressBar returns the current progress bar
+/* 
+   Flushes all queued log messages and ensures they are processed 
+*/
 func (l *Logger) Flush() {
     startTime := time.Now()
-    maxWaitTime := 1000 * time.Millisecond // Aumentado para garantir processamento completo
+    maxWaitTime := 1000 * time.Millisecond
     
-    // Wait for the log queue to be empty or until the max wait time is reached
     for len(l.logQueue) > 0 {
         if time.Since(startTime) > maxWaitTime {
             break
@@ -283,7 +249,6 @@ func (l *Logger) Flush() {
         time.Sleep(20 * time.Millisecond)
     }
     
-    // Additional pause to ensure logger has time to process
     time.Sleep(200 * time.Millisecond)
     
     l.progressMu.Lock()
@@ -300,7 +265,6 @@ func (l *Logger) Flush() {
     }
 }
 
-// Close closes the logger and flushes any remaining log messages
 func (l *Logger) Close() {
     l.Flush()
     
@@ -315,40 +279,38 @@ func (l *Logger) Close() {
     l.progressMu.Unlock()
 }
 
-// ResetState completely resets the logger's state
+/* 
+   Completely resets the logger's internal state 
+*/
 func (l *Logger) ResetState() {
-    // Acquire all locks to ensure thread safety
     l.outputMu.Lock()
     defer l.outputMu.Unlock()
     
     l.secretsMutex.Lock()
     defer l.secretsMutex.Unlock()
     
-    // Create a brand new map for logged secrets
     l.loggedSecrets = make(map[string]bool)
     
-    // Drain log queue
-    for len(l.logQueue) > 0 {
-        select {
-        case <-l.logQueue:
-            // Discard message
-        default:
-            break
+    drainLoop:
+        for len(l.logQueue) > 0 {
+            select {
+            case <-l.logQueue:
+            default:
+                break drainLoop
+            }
         }
-    }
     
-    // Reset progress bar if present
     l.progressMu.Lock()
     l.progressBar = nil
     l.progressMu.Unlock()
 }
 
 func (l *Logger) IsVerbose() bool {
-	return l.verbose
+    return l.verbose
 }
 
 func (l *Logger) SetVerbose(verbose bool) {
-	l.outputMu.Lock()
-	defer l.outputMu.Unlock()
-	l.verbose = verbose
+    l.outputMu.Lock()
+    defer l.outputMu.Unlock()
+    l.verbose = verbose
 }

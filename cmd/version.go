@@ -21,7 +21,6 @@ var versionCmd = &cobra.Command{
 	Short: "Print version information",
 	Long:  `Display build, version, and runtime information about SecretHound.`,
 	Run: func(cmd *cobra.Command, args []string) {	
-		// Print version information with colored output
 		cyan := color.New(color.FgCyan).SprintFunc()
 		green := color.New(color.FgGreen).SprintFunc()
 		

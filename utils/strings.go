@@ -8,7 +8,6 @@ import (
 	"unicode"
 )
 
-// TruncateString truncates a string to maxLength
 func TruncateString(s string, maxLength int) string {
 	if len(s) <= maxLength {
 		return s
@@ -17,12 +16,9 @@ func TruncateString(s string, maxLength int) string {
 	return s[:maxLength-3] + "..."
 }
 
-// SplitLines splits a string into lines
 func SplitLines(s string) []string {
-	// Split by Unix, Windows, and old Mac line endings
 	lines := strings.Split(strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n"), "\n")
 	
-	// Remove empty lines
 	result := make([]string, 0, len(lines))
 	for _, line := range lines {
 		if line != "" {
@@ -33,13 +29,11 @@ func SplitLines(s string) []string {
 	return result
 }
 
-// HashString returns a SHA-256 hash of a string
 func HashString(s string) string {
 	hash := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(hash[:])
 }
 
-// HasAnyPrefix checks if any of the prefixes match the string
 func HasAnyPrefix(s string, prefixes ...string) bool {
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(s, prefix) {
@@ -49,7 +43,6 @@ func HasAnyPrefix(s string, prefixes ...string) bool {
 	return false
 }
 
-// HasAnySuffix checks if any of the suffixes match the string
 func HasAnySuffix(s string, suffixes ...string) bool {
 	for _, suffix := range suffixes {
 		if strings.HasSuffix(s, suffix) {
@@ -59,7 +52,6 @@ func HasAnySuffix(s string, suffixes ...string) bool {
 	return false
 }
 
-// ContainsAny checks if any of the substrings are in the string
 func ContainsAny(s string, substrings ...string) bool {
 	for _, substring := range substrings {
 		if strings.Contains(s, substring) {
@@ -69,7 +61,6 @@ func ContainsAny(s string, substrings ...string) bool {
 	return false
 }
 
-// FormatByteSize formats a byte size into a human-readable string
 func FormatByteSize(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
@@ -85,7 +76,10 @@ func FormatByteSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// FormatDuration formats a duration in a human-readable format
+/* 
+ * Formats time duration into a human-readable string
+ * including hours, minutes and seconds when applicable
+ */
 func FormatDuration(d Duration) string {
 	if d.Seconds() < 60.0 {
 		return fmt.Sprintf("%.2f seconds", d.Seconds())
@@ -102,7 +96,6 @@ func FormatDuration(d Duration) string {
 	return fmt.Sprintf("%d hours %d minutes %.2f seconds", hours, minutes, seconds)
 }
 
-// SplitCamelCase splits a camelCase string into individual words
 func SplitCamelCase(s string) []string {
 	var words []string
 	var currentWord strings.Builder
@@ -122,8 +115,7 @@ func SplitCamelCase(s string) []string {
 	return words
 }
 
-// ContainsIgnoreCase verifies if a string contains another, case-insensitively
 func ContainsIgnoreCase(s, substr string) bool {
-    s, substr = strings.ToLower(s), strings.ToLower(substr)
-    return strings.Contains(s, substr)
+	s, substr = strings.ToLower(s), strings.ToLower(substr)
+	return strings.Contains(s, substr)
 }

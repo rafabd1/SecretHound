@@ -6,12 +6,10 @@ import (
 	"strings"
 )
 
-// ResponseFilter filters HTTP responses
 type ResponseFilter struct {
 	contentTypeWhitelist []string
 }
 
-// NewResponseFilter creates a new response filter
 func NewResponseFilter() *ResponseFilter {
 	return &ResponseFilter{
 		contentTypeWhitelist: []string{
@@ -19,57 +17,42 @@ func NewResponseFilter() *ResponseFilter {
 			"text/javascript",
 			"application/x-javascript",
 			"text/plain",
-			"text/html", // Sometimes JS is embedded in HTML
-			"application/json", // Sometimes JS is in JSON responses
+			"text/html",
+			"application/json",
 		},
 	}
 }
 
-// ShouldProcess determines if a response should be processed
+/* 
+   Determines if an HTTP response should be processed based on status code and content type
+*/
 func (rf *ResponseFilter) ShouldProcess(resp *http.Response) bool {
-	// Check for successful status codes
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Non-successful status code
 		return false
 	}
 
-	// Check content type if present
 	contentType := resp.Header.Get("Content-Type")
 	if contentType != "" {
-		// Check against whitelist
 		for _, allowedType := range rf.contentTypeWhitelist {
 			if strings.Contains(strings.ToLower(contentType), allowedType) {
 				return true
 			}
 		}
 		
-		// If content type is present but not in whitelist, skip
-		// However, some servers don't set content type correctly for JS files
-		// So we also check the URL
-		if strings.HasSuffix(strings.ToLower(resp.Request.URL.Path), ".js") {
-			return true
-		}
-		
-		return false
+		return strings.HasSuffix(strings.ToLower(resp.Request.URL.Path), ".js")
 	}
 	
-	// If no content type, accept if URL ends with .js
-	if strings.HasSuffix(strings.ToLower(resp.Request.URL.Path), ".js") {
-		return true
-	}
-	
-	// Default to true if we can't determine
-	return true
+	return strings.HasSuffix(strings.ToLower(resp.Request.URL.Path), ".js") || true
 }
 
-// IsRateLimited checks if a response indicates rate limiting
+/* 
+   Checks if a response indicates rate limiting based on status code and headers
+*/
 func (rf *ResponseFilter) IsRateLimited(resp *http.Response) bool {
-	// Check status code
 	if resp.StatusCode == 429 {
 		return true
 	}
 	
-	// Check headers
 	rateLimitHeaders := []string{
 		"X-RateLimit-Remaining",
 		"X-Rate-Limit-Remaining",
@@ -78,14 +61,12 @@ func (rf *ResponseFilter) IsRateLimited(resp *http.Response) bool {
 	
 	for _, header := range rateLimitHeaders {
 		if val := resp.Header.Get(header); val != "" {
-			// If rate limit remaining is 0 or retry-after is present
 			if val == "0" || (header == "Retry-After" && val != "") {
 				return true
 			}
 		}
 	}
 	
-	// Check for common rate limit messages in the response body
 	rateLimitKeywords := []string{
 		"rate limit exceeded",
 		"too many requests",
@@ -93,7 +74,6 @@ func (rf *ResponseFilter) IsRateLimited(resp *http.Response) bool {
 		"throttled",
 	}
 	
-	// If the status code is in the 4xx range, it might be rate limiting with custom message
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 		for _, keyword := range rateLimitKeywords {
 			if strings.Contains(strings.ToLower(resp.Status), keyword) {
@@ -105,11 +85,11 @@ func (rf *ResponseFilter) IsRateLimited(resp *http.Response) bool {
 	return false
 }
 
-// IsWAFBlocked checks if a response indicates WAF blocking
+/* 
+   Checks if a response indicates Web Application Firewall blocking
+*/
 func (rf *ResponseFilter) IsWAFBlocked(resp *http.Response) bool {
-	// Check status code (403 Forbidden often indicates WAF)
 	if resp.StatusCode == 403 {
-		// Additional check for WAF specific headers
 		wafHeaders := []string{
 			"X-Firewall-Block",
 			"X-Aws-Waf",
@@ -128,7 +108,6 @@ func (rf *ResponseFilter) IsWAFBlocked(resp *http.Response) bool {
 			}
 		}
 		
-		// Check for common WAF block messages
 		wafKeywords := []string{
 			"blocked",
 			"firewall",
@@ -139,7 +118,6 @@ func (rf *ResponseFilter) IsWAFBlocked(resp *http.Response) bool {
 			"challenge",
 		}
 		
-		// If status is 403 and contains WAF keywords, it's likely a WAF block
 		for _, keyword := range wafKeywords {
 			if strings.Contains(strings.ToLower(resp.Status), keyword) {
 				return true
@@ -147,7 +125,6 @@ func (rf *ResponseFilter) IsWAFBlocked(resp *http.Response) bool {
 		}
 	}
 	
-	// Check for specific WAF-like response codes
 	wafStatusCodes := []int{418, 419, 420}
 	for _, code := range wafStatusCodes {
 		if resp.StatusCode == code {
@@ -158,18 +135,18 @@ func (rf *ResponseFilter) IsWAFBlocked(resp *http.Response) bool {
 	return false
 }
 
-// IsTimeout checks if an error represents a timeout
+/* 
+   Determines if an error represents a network timeout
+*/
 func (f *ResponseFilter) IsTimeout(err error) bool {
 	if err == nil {
 		return false
 	}
 	
-	// Check common timeout error patterns
 	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 		return true
 	}
 	
-	// Check error string for timeout indicators
 	errStr := err.Error()
 	timeoutPatterns := []string{
 		"timeout",
@@ -190,7 +167,6 @@ func (f *ResponseFilter) IsTimeout(err error) bool {
 	return false
 }
 
-// AddContentTypeWhitelist adds a content type to the whitelist
 func (rf *ResponseFilter) AddContentTypeWhitelist(contentType string) {
 	rf.contentTypeWhitelist = append(rf.contentTypeWhitelist, strings.ToLower(contentType))
 }

@@ -15,7 +15,6 @@ import (
 	"github.com/rafabd1/SecretHound/utils"
 )
 
-// LocalScanner handles scanning of local files
 type LocalScanner struct {
 	processor   *Processor
 	writer      *output.Writer
@@ -27,7 +26,6 @@ type LocalScanner struct {
 	cancelFunc  context.CancelFunc
 }
 
-// LocalScannerStats tracks statistics for the local scanner
 type LocalScannerStats struct {
 	TotalFiles     int
 	ProcessedFiles int
@@ -38,7 +36,6 @@ type LocalScannerStats struct {
 	EndTime        time.Time
 }
 
-// NewLocalScanner creates a new local file scanner
 func NewLocalScanner(processor *Processor, writer *output.Writer, logger *output.Logger) *LocalScanner {
 	ctx, cancel := context.WithCancel(context.Background())
 	
@@ -46,7 +43,7 @@ func NewLocalScanner(processor *Processor, writer *output.Writer, logger *output
 		processor:   processor,
 		writer:      writer,
 		logger:      logger,
-		concurrency: 10, // Default concurrency
+		concurrency: 10,
 		stats: LocalScannerStats{
 			StartTime: time.Now(),
 		},
@@ -55,37 +52,30 @@ func NewLocalScanner(processor *Processor, writer *output.Writer, logger *output
 	}
 }
 
-// SetConcurrency sets the concurrency level for file processing
 func (s *LocalScanner) SetConcurrency(concurrency int) {
 	s.concurrency = concurrency
 }
 
-// ScanFiles processes a list of local files
 func (s *LocalScanner) ScanFiles(files []string) error {
-    // Get a unique ID for this execution to ensure determinism
-    executionID := GetUniqueExecutionID()
-    s.logger.Debug("Started scan execution #%d with %d files", executionID, len(files))
-    
-    // Reset components to ensure clean state
-    s.processor.CompleteReset()
-    s.logger.ResetState()
-    
-    // Initialize RegexManager with fresh patterns
-    err := s.processor.InitializeRegexManager()
-    if err != nil {
-        return fmt.Errorf("failed to initialize RegexManager: %w", err)
-    }
-    s.logger.Debug("Initialized RegexManager with %d patterns", s.processor.GetRegexPatternCount())
-    
-    // Reset scanner stats
-    s.mu.Lock()
-    s.stats = LocalScannerStats{
-        TotalFiles: len(files),
-        StartTime: time.Now(),
-    }
-    s.mu.Unlock()
+	executionID := GetUniqueExecutionID()
+	s.logger.Debug("Started scan execution #%d with %d files", executionID, len(files))
 	
-	// Remove duplicates from input files and sort for deterministic processing
+	s.processor.CompleteReset()
+	s.logger.ResetState()
+	
+	err := s.processor.InitializeRegexManager()
+	if err != nil {
+		return fmt.Errorf("failed to initialize RegexManager: %w", err)
+	}
+	s.logger.Debug("Initialized RegexManager with %d patterns", s.processor.GetRegexPatternCount())
+	
+	s.mu.Lock()
+	s.stats = LocalScannerStats{
+		TotalFiles: len(files),
+		StartTime: time.Now(),
+	}
+	s.mu.Unlock()
+	
 	uniqueFiles := s.getUniqueAndSortedFiles(files)
 	files = uniqueFiles
 	
@@ -96,28 +86,21 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 
 	s.logger.Info("Found %d local files to scan", len(files))
 
-	// Create a progress bar
 	progressBar := output.NewProgressBar(len(files), 40)
 	progressBar.SetPrefix("Processing: ")
 	
-	// Connect progress bar to logger immediately
 	s.logger.SetProgressBar(progressBar)
 	
-	// Start the progress bar and make it visible
 	progressBar.Start()
 	
-	// Render an initial update to ensure it appears
 	progressBar.Update(0)
 	progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: 0.0/s", 0))
 	
-	// Force a small pause to ensure the bar is rendered before processing starts
 	time.Sleep(50 * time.Millisecond)
 
-	// Create a ticker to update progress
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
-	// Start ticker goroutine to update progress bar
 	done := make(chan struct{})
 	tickerDone := false
 	go func() {
@@ -135,7 +118,6 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 				secretsFound := s.stats.TotalSecrets
 				s.mu.Unlock()
 
-				// Update progress bar
 				progressBar.Update(processedCount)
 				progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
 					secretsFound,
@@ -146,37 +128,29 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		}
 	}()
 
-	// Create a custom worker pool with semaphore instead of using a more complex pool
 	var wg sync.WaitGroup
 	resultChan := make(chan int, len(files))
 	errorChan := make(chan error, len(files))
 	
-	// Semaphore to limit concurrency
 	sem := make(chan struct{}, s.concurrency)
 	
-	// Launch workers for each file
 	for _, file := range files {
-		filePath := file // Create a copy for closure
+		filePath := file
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// Acquire semaphore slot
 			sem <- struct{}{}
-			defer func() { <-sem }() // Release slot when done
+			defer func() { <-sem }()
 			
-			// Process the file
 			count, err := s.processFile(filePath)
 			
-			// Update progress counter regardless of result
 			s.mu.Lock()
 			s.stats.ProcessedFiles++
 			processedCount := s.stats.ProcessedFiles
 			s.mu.Unlock()
 			
-			// Update progress bar for each completed file
 			progressBar.Update(processedCount)
 			
-			// Send result or error
 			if err != nil {
 				errorChan <- err
 			} else {
@@ -185,26 +159,22 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		}()
 	}
 	
-	// Wait for all goroutines in a separate goroutine
 	go func() {
 		wg.Wait()
 		close(resultChan)
 		close(errorChan)
 		
-		// Ensure we only close done channel once
 		s.mu.Lock()
 		if !tickerDone {
 			tickerDone = true
-			close(done) // Signal ticker to stop
+			close(done)
 		}
 		s.mu.Unlock()
 	}()
 	
-	// Process results without a timeout
 	secretsFound := 0
 	var errorList []error
 	
-	// Keep reading from channels until completion
 	filesProcessed := 0
 	totalFiles := len(files)
 	
@@ -212,14 +182,12 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		select {
 		case res, ok := <-resultChan:
 			if (!ok) {
-				// Channel closed
 				continue
 			}
 			secretsFound += res
 			filesProcessed++
 		case err, ok := <-errorChan:
 			if (!ok) {
-				// Channel closed
 				continue
 			}
 			errorList = append(errorList, err)
@@ -227,7 +195,6 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		}
 	}
 	
-	// Make sure ticker goroutine is stopped
 	s.mu.Lock()
 	if !tickerDone {
 		tickerDone = true
@@ -235,24 +202,18 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	}
 	s.mu.Unlock()
 	
-	// Stop and finalize the progress bar
 	progressBar.Stop()
 	progressBar.Finalize()
 	
-	// Remove the progress bar from the logger
 	s.logger.SetProgressBar(nil)
 	
-	// Importante: Aguardar a conclusão do processamento de todos os logs
-	// antes de mostrar as estatísticas finais
 	if s.logger != nil {
 		s.logger.Flush()
-		time.Sleep(50 * time.Millisecond) // Pequena pausa para garantir que todos os logs foram processados
+		time.Sleep(50 * time.Millisecond)
 	}
 	
-	// Agora é seguro mostrar as estatísticas finais, depois que todos os segredos foram exibidos
 	s.logFinalStats()
 	
-	// If there were errors, return the first one
 	if len(errorList) > 0 {
 		return fmt.Errorf("encountered %d errors during local file scanning, first error: %v", 
 			len(errorList), errorList[0])
@@ -261,9 +222,10 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	return nil
 }
 
-// getUniqueAndSortedFiles removes duplicates and sorts files for deterministic processing
+/* 
+   Removes duplicates and sorts files to ensure deterministic processing order
+*/
 func (s *LocalScanner) getUniqueAndSortedFiles(files []string) []string {
-	// Remove duplicates
 	uniqueFilesMap := make(map[string]bool)
 	for _, file := range files {
 		absPath, err := filepath.Abs(file)
@@ -274,207 +236,172 @@ func (s *LocalScanner) getUniqueAndSortedFiles(files []string) []string {
 		}
 	}
 	
-	// Convert to slice
 	uniqueFiles := make([]string, 0, len(uniqueFilesMap))
 	for file := range uniqueFilesMap {
 		uniqueFiles = append(uniqueFiles, file)
 	}
 	
-	// Sort for deterministic processing order
 	sort.Strings(uniqueFiles)
 	
 	return uniqueFiles
 }
 
-// processFile scans a single file for secrets
 func (s *LocalScanner) processFile(filePath string) (int, error) {
-    // Check if context is canceled
-    select {
-    case <-s.ctx.Done():
-        return 0, fmt.Errorf("processing interrupted")
-    default:
-        // Continue processing
-    }
-    
-    // Check if the file exists and is readable
-    fi, err := os.Stat(filePath)
-    if (err != nil) {
-        s.incrementFailedFiles()
-        return 0, fmt.Errorf("cannot access file %s: %v", filePath, err)
-    }
-    
-    // Skip directories (should be filtered earlier, but just to be safe)
-    if fi.IsDir() {
-        s.incrementFailedFiles()
-        return 0, fmt.Errorf("%s is a directory, not a file", filePath)
-    }
-    
-    // Skip files that are too large (> 10MB)
-    if fi.Size() > 10*1024*1024 {
-        s.incrementFailedFiles()
-        return 0, fmt.Errorf("file %s is too large (> 10MB)", filePath)
-    }
-    
-    // Read file content
-    content, err := os.ReadFile(filePath)
-    if err != nil {
-        s.incrementFailedFiles()
-        return 0, fmt.Errorf("failed to read file %s: %v", filePath, err)
-    }
-    
-    // Skip if file appears to be binary
-    if utils.IsBinaryContent(content) {
-        s.incrementProcessedFiles()
-        s.logger.Debug("Skipping binary content in file: %s", filePath)
-        return 0, nil
-    }
-    
-    // Log which file we're processing in debug mode
-    s.logger.Debug("Processing local file: %s (size: %d bytes)", filePath, len(content))
-    
-    // Convert to string and process
-    fileContent := string(content)
-    
-    // Create a custom URL for local files using absolute path
-    absPath, err := filepath.Abs(filePath)
-    if err != nil {
-        absPath = filePath // Fall back to the provided path
-    }
-    localURL := "file://" + filepath.ToSlash(absPath)
-    
-    // Adicionar log mais detalhado para debug
-    s.logger.Debug("Scanning local file with URL: %s", localURL)
-    
-    // Add more diagnostic info in verbose mode
-    if s.logger.IsVerbose() {
-        ext := utils.GetFileExtension(filePath)
-        s.logger.Debug("File details: %s, extension: %s, size: %d bytes", filepath.Base(filePath), ext, len(content))
-    }
-    
-    // Antes de processar, vamos forçar a inicialização do RegexManager para arquivos locais
-    if s.processor.regexManager == nil || s.processor.regexManager.GetPatternCount() == 0 {
-        s.logger.Debug("RegexManager não inicializado. Inicializando para arquivo local...")
-        err := s.processor.InitializeRegexManager()
-        if err != nil {
-            s.logger.Error("Failed to initialize RegexManager: %v", err)
-            return 0, err
-        }
-        
-        // Para arquivos locais, também injetamos diretamente os padrões para garantir
-        s.processor.regexManager.InjectDefaultPatternsDirectly()
-        s.logger.Debug("Padrões regex injetados diretamente: %d padrões", 
-                      s.processor.regexManager.GetPatternCount())
-    }
-    
-    // Reduzir filtros para arquivos locais antes de processar
-    s.processor.regexManager.SetLocalFileMode(true)
-    
-    // Process the content with extra diagnostic info
-    secrets, err := s.processor.ProcessJSContent(fileContent, localURL)
-    
-    // Restaurar configuração normal após o processamento
-    s.processor.regexManager.SetLocalFileMode(false)
-    
-    if err != nil {
-        s.incrementFailedFiles()
-        s.logger.Error("Failed to process file %s: %v", filePath, err)
-        return 0, err
-    }
-    
-    // Adicionar log para debug da quantidade de secrets encontrados
-    s.logger.Debug("Found %d secrets in file %s", len(secrets), filePath)
-    
-    // Add line numbers if missing and enhance context
-    enhancedSecrets := make([]Secret, 0, len(secrets))
-    for _, secret := range secrets {
-        if secret.Line == 0 {
-            secret.Line = utils.FindLineNumber(fileContent, secret.Value)
-        }
-        
-        // Enhance context if needed to show more surrounding code
-        if len(secret.Context) < 60 && secret.Line > 0 {
-            lines := strings.Split(fileContent, "\n")
-            if secret.Line <= len(lines) {
-                startLine := max(0, secret.Line-2)
-                endLine := min(len(lines), secret.Line+2)
-                enhancedContext := strings.Join(lines[startLine:endLine], "\n")
-                if len(enhancedContext) > len(secret.Context) {
-                    secret.Context = enhancedContext
-                }
-            }
-        }
-        
-        enhancedSecrets = append(enhancedSecrets, secret)
-    }
-    
-    // Replace original secrets with enhanced ones
-    secrets = enhancedSecrets
-    
-    // Log the secrets found for this specific file in real time
-    for _, secret := range secrets {
-        // Add the line number to the URL for better locating
-        locationURL := fmt.Sprintf("%s#L%d", localURL, secret.Line)
-        
-        // Log each secret to terminal as soon as it's found
-        s.logger.SecretFound(secret.Type, secret.Value, locationURL)
-        
-        // Write to output file if configured
-        if s.writer != nil {
-            err := s.writer.WriteSecret(secret.Type, secret.Value, locationURL, secret.Context, secret.Line)
-            if err != nil {
-                s.logger.Error("Failed to write secret from file %s to output: %v", filePath, err)
-            }
-        }
-    }
-    
-    // Log summarizing how many secrets were found in this file
-    if len(secrets) > 0 {
-        s.logger.Success("Found %d secrets in %s", len(secrets), filePath)
-    } else {
-        s.logger.Debug("No secrets found in %s", filePath)
-    }
-    
-    // Update stats
-    s.mu.Lock()
-    s.stats.TotalSecrets += len(secrets)
-    s.stats.TotalBytes += fi.Size()
-    s.mu.Unlock()
-    
-    return len(secrets), nil
+	select {
+	case <-s.ctx.Done():
+		return 0, fmt.Errorf("processing interrupted")
+	default:
+	}
+	
+	fi, err := os.Stat(filePath)
+	if (err != nil) {
+		s.incrementFailedFiles()
+		return 0, fmt.Errorf("cannot access file %s: %v", filePath, err)
+	}
+	
+	if fi.IsDir() {
+		s.incrementFailedFiles()
+		return 0, fmt.Errorf("%s is a directory, not a file", filePath)
+	}
+	
+	if fi.Size() > 10*1024*1024 {
+		s.incrementFailedFiles()
+		return 0, fmt.Errorf("file %s is too large (> 10MB)", filePath)
+	}
+	
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		s.incrementFailedFiles()
+		return 0, fmt.Errorf("failed to read file %s: %v", filePath, err)
+	}
+	
+	if utils.IsBinaryContent(content) {
+		s.incrementProcessedFiles()
+		s.logger.Debug("Skipping binary content in file: %s", filePath)
+		return 0, nil
+	}
+	
+	s.logger.Debug("Processing local file: %s (size: %d bytes)", filePath, len(content))
+	
+	fileContent := string(content)
+	
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		absPath = filePath
+	}
+	localURL := "file://" + filepath.ToSlash(absPath)
+	
+	s.logger.Debug("Scanning local file with URL: %s", localURL)
+	
+	if s.logger.IsVerbose() {
+		ext := utils.GetFileExtension(filePath)
+		s.logger.Debug("File details: %s, extension: %s, size: %d bytes", filepath.Base(filePath), ext, len(content))
+	}
+	
+	if s.processor.regexManager == nil || s.processor.regexManager.GetPatternCount() == 0 {
+		s.logger.Debug("RegexManager não inicializado. Inicializando para arquivo local...")
+		err := s.processor.InitializeRegexManager()
+		if err != nil {
+			s.logger.Error("Failed to initialize RegexManager: %v", err)
+			return 0, err
+		}
+		
+		s.processor.regexManager.InjectDefaultPatternsDirectly()
+		s.logger.Debug("Padrões regex injetados diretamente: %d padrões", 
+					  s.processor.regexManager.GetPatternCount())
+	}
+	
+	s.processor.regexManager.SetLocalFileMode(true)
+	
+	secrets, err := s.processor.ProcessJSContent(fileContent, localURL)
+	
+	s.processor.regexManager.SetLocalFileMode(false)
+	
+	if err != nil {
+		s.incrementFailedFiles()
+		s.logger.Error("Failed to process file %s: %v", filePath, err)
+		return 0, err
+	}
+	
+	s.logger.Debug("Found %d secrets in file %s", len(secrets), filePath)
+	
+	enhancedSecrets := make([]Secret, 0, len(secrets))
+	for _, secret := range secrets {
+		if secret.Line == 0 {
+			secret.Line = utils.FindLineNumber(fileContent, secret.Value)
+		}
+		
+		if len(secret.Context) < 60 && secret.Line > 0 {
+			lines := strings.Split(fileContent, "\n")
+			if secret.Line <= len(lines) {
+				startLine := max(0, secret.Line-2)
+				endLine := min(len(lines), secret.Line+2)
+				enhancedContext := strings.Join(lines[startLine:endLine], "\n")
+				if len(enhancedContext) > len(secret.Context) {
+					secret.Context = enhancedContext
+				}
+			}
+		}
+		
+		enhancedSecrets = append(enhancedSecrets, secret)
+	}
+	
+	secrets = enhancedSecrets
+	
+	for _, secret := range secrets {
+		locationURL := fmt.Sprintf("%s#L%d", localURL, secret.Line)
+		
+		s.logger.SecretFound(secret.Type, secret.Value, locationURL)
+		
+		if s.writer != nil {
+			err := s.writer.WriteSecret(secret.Type, secret.Value, locationURL, secret.Context, secret.Line)
+			if err != nil {
+				s.logger.Error("Failed to write secret from file %s to output: %v", filePath, err)
+			}
+		}
+	}
+	
+	if len(secrets) > 0 {
+		s.logger.Success("Found %d secrets in %s", len(secrets), filePath)
+	} else {
+		s.logger.Debug("No secrets found in %s", filePath)
+	}
+	
+	s.mu.Lock()
+	s.stats.TotalSecrets += len(secrets)
+	s.stats.TotalBytes += fi.Size()
+	s.mu.Unlock()
+	
+	return len(secrets), nil
 }
 
-// max returns the larger of a and b
 func max(a, b int) int {
-    if a > b {
-        return a
-    }
-    return b
+	if a > b {
+		return a
+	}
+	return b
 }
 
-// min returns the smaller of a and b
 func min(a, b int) int {
-    if a < b {
-        return a
-    }
-    return b
+	if a < b {
+		return a
+	}
+	return b
 }
 
-// incrementProcessedFiles increments the count of processed files
 func (s *LocalScanner) incrementProcessedFiles() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.stats.ProcessedFiles++
 }
 
-// incrementFailedFiles increments the count of failed files
 func (s *LocalScanner) incrementFailedFiles() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.stats.FailedFiles++
-	s.stats.ProcessedFiles++ // Still count as processed for total tracking
+	s.stats.ProcessedFiles++
 }
 
-// GetStats returns current scanner statistics
 func (s *LocalScanner) GetStats() LocalScannerStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -483,43 +410,38 @@ func (s *LocalScanner) GetStats() LocalScannerStats {
 	return statsCopy
 }
 
-// Cleanup cancels context and releases resources
 func (s *LocalScanner) Cleanup() {
 	s.cancelFunc()
 }
 
-// logFinalStats logs the final statistics in a deterministic order
 func (s *LocalScanner) logFinalStats() {
-    // Record end time and log summary
-    s.mu.Lock()
-    s.stats.EndTime = time.Now()
-    duration := s.stats.EndTime.Sub(s.stats.StartTime)
-    filesPerSecond := float64(s.stats.ProcessedFiles) / duration.Seconds()
-    totalProcessed := s.stats.ProcessedFiles
-    failedFiles := s.stats.FailedFiles
-    s.mu.Unlock()
+	s.mu.Lock()
+	s.stats.EndTime = time.Now()
+	duration := s.stats.EndTime.Sub(s.stats.StartTime)
+	filesPerSecond := float64(s.stats.ProcessedFiles) / duration.Seconds()
+	totalProcessed := s.stats.ProcessedFiles
+	failedFiles := s.stats.FailedFiles
+	s.mu.Unlock()
 
-    timeColor := color.New(color.FgHiBlack).SprintfFunc()
-    timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+	timeColor := color.New(color.FgHiBlack).SprintfFunc()
+	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
 
-    // Pequena pausa para garantir que todos os logs anteriores foram processados    
-    time.Sleep(100 * time.Millisecond)
-    
-    fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-        timeStr,
-        color.CyanString("[INFO]"), 
-        fmt.Sprintf("Local file processing completed in %.2f seconds", duration.Seconds()))
-    
-    fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-        timeStr,
-        color.CyanString("[INFO]"), 
-        fmt.Sprintf("Processed %d files (%.2f files/second)", totalProcessed, filesPerSecond))
-    
-    fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-        timeStr,
-        color.CyanString("[INFO]"), 
-        fmt.Sprintf("Failed to process %d files", failedFiles))
-    
-    // Pequena pausa para garantir que as estatísticas foram processadas
-    time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
+	
+	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		fmt.Sprintf("Local file processing completed in %.2f seconds", duration.Seconds()))
+	
+	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		fmt.Sprintf("Processed %d files (%.2f files/second)", totalProcessed, filesPerSecond))
+	
+	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		timeStr,
+		color.CyanString("[INFO]"), 
+		fmt.Sprintf("Failed to process %d files", failedFiles))
+	
+	time.Sleep(100 * time.Millisecond)
 }
