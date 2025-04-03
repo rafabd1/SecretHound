@@ -5,24 +5,21 @@ import (
 	"sync"
 )
 
-// PatternConfig representa a configuração para um padrão regex individual
 type PatternConfig struct {
-	Regex           string   // Expressão regular para encontrar o segredo
-	Description     string   // Descrição do tipo de segredo
-	Enabled         bool     // Se o padrão está habilitado
-	MinLength       int      // Comprimento mínimo para valores válidos deste padrão
-	MaxLength       int      // Comprimento máximo para valores válidos deste padrão
-	KeywordMatches  []string // Palavras-chave que devem estar no contexto
-	KeywordExcludes []string // Palavras-chave que não devem estar no contexto
-	ExcludeRegexes  []string // Expressões regulares para excluir falsos positivos
+	Regex           string   
+	Description     string   
+	Enabled         bool     
+	MinLength       int      
+	MaxLength       int      
+	KeywordMatches  []string 
+	KeywordExcludes []string 
+	ExcludeRegexes  []string 
 }
 
-// PatternDefinitions armazena a definição de todos os padrões de segredos
 type PatternDefinitions struct {
 	Patterns map[string]PatternConfig
 }
 
-// Global pattern definitions
 var DefaultPatterns = &PatternDefinitions{
 	Patterns: map[string]PatternConfig{
 		// AWS - Critical cloud credentials
@@ -91,7 +88,7 @@ var DefaultPatterns = &PatternDefinitions{
 			Regex:       `(?i)(?:basic\s+)(?:[a-zA-Z0-9\+\/=]{10,100})`,
 			Description: "HTTP Basic Authentication",
 			Enabled:     true,
-			MinLength:   15, // Adjusting minimum length to avoid "Basic usage" false positives
+			MinLength:   15,
 			KeywordExcludes: []string{
 				"example", "sample", "usage", "caption", "documentation",
 				"test", "@example", "description", "tutorial", "unicode",
@@ -125,7 +122,7 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordExcludes: []string{"match", "valid", "must", "should", "hint", "help", "message", "error", "Change password", "Reset password", "Forgot password", "pseudo", "selector", "createElement", "render", "component", "input[type", "USERNAME", "PASSWORD"},
 		},
 		
-		// NOVOS PADRÕES ESPECÍFICOS (substituindo high_entropy_string)
+		// Specific patterns
 		"auth_token": {
 			Regex:       `['"]?([a-zA-Z0-9_\-\.]{32,64})['"]?\s*[,;]?\s*\/\/\s*[Aa]uth(?:entication)?\s+[Tt]oken`,
 			Description: "Authentication Token",
@@ -238,8 +235,7 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   40,
 		},
 		
-		
-		// Adição de novos padrões para bancos de dados
+		// Database connection strings
 		"postgresql_connection_string": {
 			Regex:       `postgres(?:ql)?:\/\/[^:]+:[^@]+@[^\/]+\/\w+`,
 			Description: "PostgreSQL Connection String",
@@ -276,7 +272,7 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordExcludes: []string{"example", "placeholder", "user", "password", "localhost", "sample"},
 		},
 		
-		// Serviços Cloud e APIs
+		// Cloud services and APIs
 		"mailgun_api_key": {
 			Regex:       `key-[0-9a-zA-Z]{32}`,
 			Description: "Mailgun API Key",
@@ -338,7 +334,7 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   64,
 		},
 		
-		// Serviços de Pagamento
+		// Payment services
 		"paypal_client_id": {
 			Regex:       `(?i)(?:paypal|braintree).{0,20}['\"][A-Za-z0-9_-]{20,64}['\"]`,
 			Description: "PayPal Client ID",
@@ -372,7 +368,7 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   30,
 		},
 		
-		// Serviços de Email
+		// Email services
 		"mailchimp_api_key": {
 			Regex:       `[0-9a-f]{32}-us[0-9]{1,2}`,
 			Description: "Mailchimp API Key",
@@ -415,7 +411,7 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordExcludes: []string{"example", "placeholder", "user", "password", "localhost", "sample"},
 		},
 		
-		// JWT e OAuth - Melhorias nos padrões existentes
+		// JWT and OAuth improved patterns
 		"jwt_improved": {
 			Regex:       `eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+`,
 			Description: "JWT Token (Improved Pattern)",
@@ -430,7 +426,7 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   30,
 		},
 		
-		// Serviços de CI/CD
+		// CI/CD services
 		"gitlab_runner_token": {
 			Regex:       `glrt-[0-9a-zA-Z_\-]{20,}`,
 			Description: "GitLab Runner Registration Token",
@@ -453,58 +449,57 @@ var DefaultPatterns = &PatternDefinitions{
 	},
 }
 
-// Global list of excluded strings that are likely false positives
+// List of strings likely to be false positives
 var GlobalExclusions = []string{
-    // Common code patterns
-    "function", "return", "import", "export", "require",
-    "console.log", "window.", "document.", "getElementById",
-    "querySelector", "addEventListener", "module.exports",
-    
-    // Common file paths
-    "node_modules", "/dist/", "/build/", "/src/", "/public/",
-    
-    // Media types
-    "application/json", "text/html", "text/plain",
-    
-    // HTML DOM elements
-    "div", "span", "input", "button", "form",
+	// Common code patterns
+	"function", "return", "import", "export", "require",
+	"console.log", "window.", "document.", "getElementById",
+	"querySelector", "addEventListener", "module.exports",
+	
+	// Common file paths
+	"node_modules", "/dist/", "/build/", "/src/", "/public/",
+	
+	// Media types
+	"application/json", "text/html", "text/plain",
+	
+	// HTML DOM elements
+	"div", "span", "input", "button", "form",
 
-    // CSS variables and documentation
-    "--", "css", "style", "class", "border-radius", "margin", "padding",
-    "tooltip", "shadow", "background-color", "font-size", "wiki", "github",
-    "example", "usage", "documentation", "tutorial", "sample", "@caption",
-    "origin-trial", ".com/", "hover", "distance", "basic usage", "basic example",
-    "freshchat_", "min_", "max_", "login", "uuid", "component", "module",
-    "transition", "transform", "position", "display", "overflow", "align",
-    "container", "wrapper", "element", "selector", "pattern", "template",
-    
-    // Novos padrões para JavaScript e UI
-    "transition", "enable", "disable", "verify", "validate", "enroll", 
-    "authenticate", "regenerate", "display", "postpone", "reminder",
-    "constraint", "camelCase", "addEventListener", "querySelector",
-    "dispatch", "onChange", "onClick", "onSubmit", "setState", "source", 
-    "mapping", "sourceMappingURL", "INSUFFICIENT", "PASSWORD", "DISABLED",
-    "fallback", "message", "prefix", "suffix", "handle", "callback",
-    
-    // Novos termos específicos para os falsos positivos identificados
-    "Basic authorization", "Basic authentication", "Basic configuration", "Basic setup",
-    "Basic usage", "Basic example", "Basic security", "Basic settings",
-    "<h1", "<h2", "<h3", "<h4", "<h5", "<h6", "createElement",
-    
-    // Novos termos específicos para os falsos positivos identificados
-    "Basic Multilingual", "BMP", "Unicode", "origin-trial", 
-    "createElement", "render", "component", "Change password", 
-    "webfonts", "googleapis.com", "type=\"password\"", "input[type=", 
+	// CSS variables and documentation
+	"--", "css", "style", "class", "border-radius", "margin", "padding",
+	"tooltip", "shadow", "background-color", "font-size", "wiki", "github",
+	"example", "usage", "documentation", "tutorial", "sample", "@caption",
+	"origin-trial", ".com/", "hover", "distance", "basic usage", "basic example",
+	"freshchat_", "min_", "max_", "login", "uuid", "component", "module",
+	"transition", "transform", "position", "display", "overflow", "align",
+	"container", "wrapper", "element", "selector", "pattern", "template",
+	
+	// JavaScript and UI patterns
+	"transition", "enable", "disable", "verify", "validate", "enroll", 
+	"authenticate", "regenerate", "display", "postpone", "reminder",
+	"constraint", "camelCase", "addEventListener", "querySelector",
+	"dispatch", "onChange", "onClick", "onSubmit", "setState", "source", 
+	"mapping", "sourceMappingURL", "INSUFFICIENT", "PASSWORD", "DISABLED",
+	"fallback", "message", "prefix", "suffix", "handle", "callback",
+	
+	// Specific terms for false positives
+	"Basic authorization", "Basic authentication", "Basic configuration", "Basic setup",
+	"Basic usage", "Basic example", "Basic security", "Basic settings",
+	"<h1", "<h2", "<h3", "<h4", "<h5", "<h6", "createElement",
+	
+	// More specific false positive terms
+	"Basic Multilingual", "BMP", "Unicode", "origin-trial", 
+	"createElement", "render", "component", "Change password", 
+	"webfonts", "googleapis.com", "type=\"password\"", "input[type=", 
 	"charCodeAt", "fromCharCode",
 
-    // Excluir padrões específicos de código minificado com strings base64
-    "data:image", "data:application", "sourceMappingURL", 
-    "base64,", "/base64", "btoa(", "atob(", "encode(",
-    "charAt(", "substring(", "slice(", "map(", "join(",
-    "replace(", "split(", "charCode", "fromCharCode",
+	// Code minified with base64 strings
+	"data:image", "data:application", "sourceMappingURL", 
+	"base64,", "/base64", "btoa(", "atob(", "encode(",
+	"charAt(", "substring(", "slice(", "map(", "join(",
+	"replace(", "split(", "charCode", "fromCharCode",
 }
 
-// CompiledPattern represents a pattern with its compiled regex
 type CompiledPattern struct {
 	Name        string
 	Description string
@@ -512,7 +507,6 @@ type CompiledPattern struct {
 	Config      PatternConfig
 }
 
-// PatternManager manages regex patterns for secret detection
 type PatternManager struct {
 	compiledPatterns     map[string]*CompiledPattern
 	exclusionPatterns    []*regexp.Regexp
@@ -521,7 +515,9 @@ type PatternManager struct {
 	mu                   sync.RWMutex
 }
 
-// NewPatternManager creates a new pattern manager instance
+/* 
+   Creates a new pattern manager instance with default configuration
+*/
 func NewPatternManager() *PatternManager {
 	pm := &PatternManager{
 		compiledPatterns:   make(map[string]*CompiledPattern),
@@ -529,24 +525,22 @@ func NewPatternManager() *PatternManager {
 		specificExclusions: make(map[string][]*regexp.Regexp),
 	}
 	
-	// Load the default patterns
 	pm.LoadDefaultPatterns()
 	
 	return pm
 }
 
-// LoadDefaultPatterns loads the default pattern set
+/* 
+   Loads and compiles the default pattern set from DefaultPatterns
+*/
 func (pm *PatternManager) LoadDefaultPatterns() error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	
-	// Reset existing patterns
 	pm.compiledPatterns = make(map[string]*CompiledPattern)
 	
-	// MODIFICAÇÃO: Contador para depuração
 	enabledPatterns := 0
 	
-	// Compile each pattern
 	for name, config := range DefaultPatterns.Patterns {
 		if !config.Enabled {
 			continue
@@ -567,8 +561,6 @@ func (pm *PatternManager) LoadDefaultPatterns() error {
 		}
 	}
 	
-	// MODIFICAÇÃO: Reduzir exclusões globais para diminuir falsos negativos
-	// Compile global exclusions - apenas as mais críticas
 	criticalExclusions := []string{
 		"example", "sample", "test", "demo",
 		"function(", "return",
@@ -585,33 +577,31 @@ func (pm *PatternManager) LoadDefaultPatterns() error {
 	return nil
 }
 
-// SetLocalMode enables or disables local file mode
 func (pm *PatternManager) SetLocalMode(enabled bool) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	pm.localModeEnabled = enabled
 }
 
-// IsLocalModeEnabled returns whether local mode is enabled
 func (pm *PatternManager) IsLocalModeEnabled() bool {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	return pm.localModeEnabled
 }
 
-// GetPatternCount returns the number of compiled patterns
 func (pm *PatternManager) GetPatternCount() int {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	return len(pm.compiledPatterns)
 }
 
-// GetCompiledPatterns returns all compiled patterns
+/* 
+   Returns a copy of all compiled patterns to prevent modification
+*/
 func (pm *PatternManager) GetCompiledPatterns() map[string]*CompiledPattern {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	
-	// Return a copy to prevent modification
 	patterns := make(map[string]*CompiledPattern, len(pm.compiledPatterns))
 	for k, v := range pm.compiledPatterns {
 		patterns[k] = v
@@ -620,7 +610,9 @@ func (pm *PatternManager) GetCompiledPatterns() map[string]*CompiledPattern {
 	return patterns
 }
 
-// AddPattern adds a new pattern
+/* 
+   Adds a new pattern to the manager with specified name, regex and description
+*/
 func (pm *PatternManager) AddPattern(name, regex, description string) error {
 	re, err := regexp.Compile(regex)
 	if (err != nil) {
@@ -638,15 +630,17 @@ func (pm *PatternManager) AddPattern(name, regex, description string) error {
 			Regex:       regex,
 			Description: description,
 			Enabled:     true,
-			MinLength:   8,  // Default minimum length
-			MaxLength:   500, // Default maximum length
+			MinLength:   8,
+			MaxLength:   500,
 		},
 	}
 	
 	return nil
 }
 
-// Reset resets the pattern manager to its initial state
+/* 
+   Resets the pattern manager to its initial state
+*/
 func (pm *PatternManager) Reset() {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()

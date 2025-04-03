@@ -1,28 +1,26 @@
 package core
 
 import (
-	"runtime"
-	"sync"
-	"time"
+    "runtime"
+    "sync"
+    "time"
 )
 
 var (
-    // Global lock for entire system operation
     systemLock sync.Mutex
-    
-    // Execution counter to ensure uniqueness
     executionCounter int64
     
     // Component registries
     regexManagerRegistry = make(map[*RegexManager]bool)
     processorRegistry = make(map[*Processor]bool)
     
-    // Registry locks
     regexManagerLock sync.RWMutex
     processorLock sync.RWMutex
 )
 
-// GetUniqueExecutionID returns a unique ID for this execution
+/* 
+   Returns a unique ID for the current execution cycle
+*/
 func GetUniqueExecutionID() int64 {
     systemLock.Lock()
     defer systemLock.Unlock()
@@ -31,20 +29,21 @@ func GetUniqueExecutionID() int64 {
     return executionCounter
 }
 
-// ForceCompleteRefresh performs a complete refresh of the system state
+/*
+   Performs a complete refresh of the system state,
+   including garbage collection and stabilization
+*/
 func ForceCompleteRefresh() {
-    // Acquire global system lock to prevent any operations during refresh
     systemLock.Lock()
     defer systemLock.Unlock()
     
-    // Force garbage collection to clean up memory
     runtime.GC()
-    
-    // Wait for system to stabilize
     time.Sleep(50 * time.Millisecond)
 }
 
-// IsSystemReady checks if the system is in a clean state
+/*
+   Verifies if the system is in a clean state with no active components
+*/
 func IsSystemReady() bool {
     regexManagerLock.RLock()
     managerCount := len(regexManagerRegistry)

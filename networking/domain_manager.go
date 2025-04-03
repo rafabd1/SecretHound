@@ -7,7 +7,6 @@ import (
 	"github.com/rafabd1/SecretHound/utils"
 )
 
-// DomainManager groups URLs by domain and manages blocked domains
 type DomainManager struct {
 	domains        map[string][]string
 	blockedDomains map[string]time.Time
@@ -15,18 +14,16 @@ type DomainManager struct {
 	mu             sync.RWMutex
 }
 
-// DomainStats tracks statistics for a domain
 type DomainStats struct {
-	TotalURLs         int
-	ProcessedURLs     int
-	FailedURLs        int
-	SuccessfulURLs    int
-	LastAccessTime    time.Time
+	TotalURLs           int
+	ProcessedURLs       int
+	FailedURLs          int
+	SuccessfulURLs      int
+	LastAccessTime      time.Time
 	AverageResponseTime time.Duration
-	TotalBlocks       int
+	TotalBlocks         int
 }
 
-// NewDomainManager creates a new domain manager
 func NewDomainManager() *DomainManager {
 	return &DomainManager{
 		domains:        make(map[string][]string),
@@ -35,25 +32,20 @@ func NewDomainManager() *DomainManager {
 	}
 }
 
-// GroupURLsByDomain groups URLs by their domain
 func (dm *DomainManager) GroupURLsByDomain(urls []string) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 	
-	// Clear existing data
 	dm.domains = make(map[string][]string)
 	
 	for _, url := range urls {
 		domain, err := utils.ExtractDomain(url)
 		if err != nil {
-			// Skip URLs with invalid domain
 			continue
 		}
 		
-		// Add URL to its domain group
 		dm.domains[domain] = append(dm.domains[domain], url)
 		
-		// Initialize or update domain stats
 		if _, exists := dm.domainStats[domain]; !exists {
 			dm.domainStats[domain] = &DomainStats{
 				TotalURLs:      0,
@@ -68,20 +60,17 @@ func (dm *DomainManager) GroupURLsByDomain(urls []string) {
 	}
 }
 
-// AddBlockedDomain adds a domain to the blocked list
 func (dm *DomainManager) AddBlockedDomain(domain string, duration time.Duration) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 	
 	dm.blockedDomains[domain] = time.Now().Add(duration)
 	
-	// Update domain stats
 	if _, exists := dm.domainStats[domain]; exists {
 		dm.domainStats[domain].TotalBlocks++
 	}
 }
 
-// IsBlocked checks if a domain is currently blocked
 func (dm *DomainManager) IsBlocked(domain string) bool {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
@@ -91,25 +80,22 @@ func (dm *DomainManager) IsBlocked(domain string) bool {
 		return false
 	}
 	
-	// If expiry time has passed, unblock the domain
 	if time.Now().After(expiry) {
-		// We can't modify the map here due to the RLock
-		// But we'll return false and the next call to IsBlocked
-		// will again check the expiry time
 		return false
 	}
 	
 	return true
 }
 
-// GetNextDomain gets the next available domain
+/* 
+   Returns the next available domain that is not blocked and has URLs to process
+*/
 func (dm *DomainManager) GetNextDomain() string {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
 	
 	var candidateDomains []string
 	
-	// Find all unblocked domains
 	for domain := range dm.domains {
 		if !dm.isBlockedNoLock(domain) && len(dm.domains[domain]) > 0 {
 			candidateDomains = append(candidateDomains, domain)
@@ -120,23 +106,15 @@ func (dm *DomainManager) GetNextDomain() string {
 		return ""
 	}
 	
-	// For simplicity, return the first unblocked domain
-	// In a more advanced implementation, we could prioritize based on:
-	// - Domains with more URLs remaining
-	// - Domains that haven't been accessed recently (to spread load)
-	// - Domains with higher success rates
 	return candidateDomains[0]
 }
 
-// isBlockedNoLock is the same as IsBlocked but doesn't acquire a lock
-// It should only be called when the lock is already held
 func (dm *DomainManager) isBlockedNoLock(domain string) bool {
 	expiry, exists := dm.blockedDomains[domain]
 	if !exists {
 		return false
 	}
 	
-	// If expiry time has passed, unblock the domain
 	if time.Now().After(expiry) {
 		delete(dm.blockedDomains, domain)
 		return false
@@ -145,19 +123,16 @@ func (dm *DomainManager) isBlockedNoLock(domain string) bool {
 	return true
 }
 
-// GetURLsForDomain gets the URLs for a specific domain
 func (dm *DomainManager) GetURLsForDomain(domain string) []string {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
 	
-	// Return a copy to avoid race conditions
 	urls := make([]string, len(dm.domains[domain]))
 	copy(urls, dm.domains[domain])
 	
 	return urls
 }
 
-// RemoveURL removes a URL from its domain group
 func (dm *DomainManager) RemoveURL(url string) {
 	domain, err := utils.ExtractDomain(url)
 	if err != nil {
@@ -170,14 +145,12 @@ func (dm *DomainManager) RemoveURL(url string) {
 	urls := dm.domains[domain]
 	for i, u := range urls {
 		if u == url {
-			// Remove URL from slice
 			dm.domains[domain] = append(urls[:i], urls[i+1:]...)
 			break
 		}
 	}
 }
 
-// RecordURLProcessed records that a URL has been processed
 func (dm *DomainManager) RecordURLProcessed(url string, success bool, responseTime time.Duration) {
 	domain, err := utils.ExtractDomain(url)
 	if err != nil {
@@ -198,11 +171,9 @@ func (dm *DomainManager) RecordURLProcessed(url string, success bool, responseTi
 	if success {
 		stats.SuccessfulURLs++
 		
-		// Update average response time
 		if stats.AverageResponseTime == 0 {
 			stats.AverageResponseTime = responseTime
 		} else {
-			// Weighted average, giving more weight to recent response times
 			stats.AverageResponseTime = (stats.AverageResponseTime*3 + responseTime) / 4
 		}
 	} else {
@@ -210,7 +181,6 @@ func (dm *DomainManager) RecordURLProcessed(url string, success bool, responseTi
 	}
 }
 
-// GetDomainCount returns the number of domains
 func (dm *DomainManager) GetDomainCount() int {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
@@ -218,7 +188,6 @@ func (dm *DomainManager) GetDomainCount() int {
 	return len(dm.domains)
 }
 
-// GetURLCount returns the total number of URLs
 func (dm *DomainManager) GetURLCount() int {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
@@ -231,7 +200,6 @@ func (dm *DomainManager) GetURLCount() int {
 	return total
 }
 
-// GetBlockedDomainCount returns the number of blocked domains
 func (dm *DomainManager) GetBlockedDomainCount() int {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
@@ -245,7 +213,6 @@ func (dm *DomainManager) GetBlockedDomainCount() int {
 	return count
 }
 
-// GetBlockedDomains returns a list of blocked domains
 func (dm *DomainManager) GetBlockedDomains() map[string]time.Time {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
@@ -260,12 +227,10 @@ func (dm *DomainManager) GetBlockedDomains() map[string]time.Time {
 	return blockedDomains
 }
 
-// GetDomainStatus returns a summary of all domain statuses
 func (dm *DomainManager) GetDomainStatus() map[string]DomainStats {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
 	
-	// Create a copy to avoid race conditions
 	status := make(map[string]DomainStats)
 	for domain, stats := range dm.domainStats {
 		status[domain] = *stats
@@ -274,7 +239,6 @@ func (dm *DomainManager) GetDomainStatus() map[string]DomainStats {
 	return status
 }
 
-// GetDomainStructure returns the domain-based URL structure
 func (dm *DomainManager) GetDomainStructure() map[string]int {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
@@ -287,7 +251,6 @@ func (dm *DomainManager) GetDomainStructure() map[string]int {
 	return structure
 }
 
-// GetDomainList returns a list of all domains
 func (dm *DomainManager) GetDomainList() []string {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
@@ -300,7 +263,6 @@ func (dm *DomainManager) GetDomainList() []string {
 	return domains
 }
 
-// GetUnblockedDomains returns domains that are not currently blocked
 func (dm *DomainManager) GetUnblockedDomains() []string {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()

@@ -16,22 +16,13 @@ import (
 	"github.com/rafabd1/SecretHound/utils"
 )
 
-// LocalScannerConfig holds the configuration for local scanner
 type LocalScannerConfig struct {
-	// Number of concurrent goroutines
-	Concurrency int
-	
-	// Be less strict with validation for files in test/example directories
+	Concurrency       int
 	AllowTestExamples bool
-	
-	// Maximum file size to process (in bytes)
-	MaxFileSize int64
-	
-	// Process binary files
+	MaxFileSize       int64
 	ProcessBinaryFiles bool
 }
 
-// LocalScanner scans local files for secrets
 type LocalScanner struct {
 	detector    *detector.Detector
 	writer      *output.Writer
@@ -43,7 +34,6 @@ type LocalScanner struct {
 	cancelFunc  context.CancelFunc
 }
 
-// LocalScanStats holds statistics for local scanning
 type LocalScanStats struct {
 	TotalFiles     int
 	ProcessedFiles int
@@ -55,7 +45,6 @@ type LocalScanStats struct {
 	EndTime        time.Time
 }
 
-// NewLocalScanner creates a new local scanner
 func NewLocalScanner(
 	patternManager *patterns.PatternManager,
 	writer *output.Writer,
@@ -64,16 +53,14 @@ func NewLocalScanner(
 ) *LocalScanner {
 	ctx, cancel := context.WithCancel(context.Background())
 	
-	// Default values if not set
 	if config.Concurrency <= 0 {
 		config.Concurrency = 10
 	}
 	
 	if config.MaxFileSize <= 0 {
-		config.MaxFileSize = 10 * 1024 * 1024 // 10MB
+		config.MaxFileSize = 10 * 1024 * 1024
 	}
 	
-	// Create detector with local file mode enabled
 	secretDetector := detector.NewDetector(
 		patternManager,
 		logger,
@@ -98,7 +85,9 @@ func NewLocalScanner(
 	}
 }
 
-// ScanFiles scans a list of files for secrets
+/* 
+   Scans a list of files for secrets and returns error information
+*/
 func (s *LocalScanner) ScanFiles(files []string) error {
 	s.mu.Lock()
 	s.stats = LocalScanStats{
@@ -107,27 +96,21 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	}
 	s.mu.Unlock()
 	
-	// Get unique, sorted files for deterministic processing
 	uniqueFiles := s.getUniqueAndSortedFiles(files)
 	
 	s.logger.Info("Found %d local files to scan", len(uniqueFiles))
 	
-	// Create a progress bar
 	progressBar := output.NewProgressBar(len(uniqueFiles), 40)
 	progressBar.SetPrefix("Processing: ")
 	
-	// Connect progress bar to logger
 	s.logger.SetProgressBar(progressBar)
 	
-	// Start the progress bar
 	progressBar.Start()
 	progressBar.Update(0)
 	progressBar.SetSuffix("Secrets: 0 | Rate: 0.0/s")
 	
-	// Small delay to ensure the bar is rendered
 	time.Sleep(50 * time.Millisecond)
 	
-	// Set up progress tracking
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	
@@ -149,7 +132,6 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 				secretsFound := s.stats.TotalSecrets
 				s.mu.Unlock()
 				
-				// Update progress bar
 				progressBar.Update(processedCount)
 				progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
 					secretsFound,
@@ -161,33 +143,26 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		}
 	}()
 	
-	// Process files concurrently
 	var wg sync.WaitGroup
 	resultChan := make(chan int, len(uniqueFiles))
 	errorChan := make(chan error, len(uniqueFiles))
 	
-	// Semaphore to limit concurrency
 	sem := make(chan struct{}, s.config.Concurrency)
 	
-	// Process each file
 	for _, file := range uniqueFiles {
 		wg.Add(1)
 		go func(filePath string) {
 			defer wg.Done()
 			
-			// Acquire semaphore slot
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			
-			// Process the file
 			secretCount, err := s.processFile(filePath)
 			
-			// Update processed count
 			s.mu.Lock()
 			s.stats.ProcessedFiles++
 			s.mu.Unlock()
 			
-			// Send result
 			if err != nil {
 				errorChan <- err
 			} else {
@@ -196,13 +171,11 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		}(file)
 	}
 	
-	// Wait for all processing to complete
 	go func() {
 		wg.Wait()
 		close(resultChan)
 		close(errorChan)
 		
-		// Stop the ticker
 		s.mu.Lock()
 		if tickerRunning {
 			tickerRunning = false
@@ -211,7 +184,6 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		s.mu.Unlock()
 	}()
 	
-	// Process results
 	var errorList []error
 	secretsFound := 0
 	filesProcessed := 0
@@ -234,7 +206,6 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 		}
 	}
 	
-	// Ensure ticker is stopped
 	s.mu.Lock()
 	if tickerRunning {
 		tickerRunning = false
@@ -242,21 +213,16 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	}
 	s.mu.Unlock()
 	
-	// Stop progress bar
 	progressBar.Stop()
 	progressBar.Finalize()
 	
-	// Remove progress bar from logger
 	s.logger.SetProgressBar(nil)
 	
-	// Flush logs
 	s.logger.Flush()
 	time.Sleep(50 * time.Millisecond)
 	
-	// Log final stats
 	s.logFinalStats()
 	
-	// Return first error if any
 	if len(errorList) > 0 {
 		return fmt.Errorf("encountered %d errors during scanning, first error: %v",
 			len(errorList), errorList[0])
@@ -265,61 +231,53 @@ func (s *LocalScanner) ScanFiles(files []string) error {
 	return nil
 }
 
-// processFile processes a single file
+/* 
+   Processes a single file by checking its size, content and searching for secrets
+*/
 func (s *LocalScanner) processFile(filePath string) (int, error) {
-	// Check if context is canceled
 	select {
 	case <-s.ctx.Done():
 		return 0, fmt.Errorf("processing interrupted")
 	default:
-		// Continue processing
 	}
 	
-	// Check if file exists and is readable
 	fi, err := os.Stat(filePath)
 	if err != nil {
 		s.incrementFailedFiles()
 		return 0, fmt.Errorf("cannot access file %s: %v", filePath, err)
 	}
 	
-	// Skip directories
 	if fi.IsDir() {
 		s.incrementSkippedFiles()
 		return 0, nil
 	}
 	
-	// Check file size
 	if fi.Size() > s.config.MaxFileSize {
 		s.incrementSkippedFiles()
 		s.logger.Debug("Skipping large file: %s (size: %d bytes)", filePath, fi.Size())
 		return 0, nil
 	}
 	
-	// Read file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		s.incrementFailedFiles()
 		return 0, fmt.Errorf("failed to read file %s: %v", filePath, err)
 	}
 	
-	// Skip binary files unless configured otherwise
 	if !s.config.ProcessBinaryFiles && utils.IsBinaryContent(content) {
 		s.incrementSkippedFiles()
 		s.logger.Debug("Skipping binary content in file: %s", filePath)
 		return 0, nil
 	}
 	
-	// Log processing
 	s.logger.Debug("Processing file: %s (size: %d bytes)", filePath, len(content))
 	
-	// Convert to URL format
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
 		absPath = filePath
 	}
 	fileURL := "file://" + filepath.ToSlash(absPath)
 	
-	// Detect secrets
 	secrets, err := s.detector.DetectSecrets(string(content), fileURL)
 	if err != nil {
 		s.incrementFailedFiles()
@@ -327,22 +285,17 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 		return 0, err
 	}
 	
-	// Enhance secrets with line numbers
 	for i := range secrets {
 		if secrets[i].Line == 0 {
 			secrets[i].Line = utils.FindLineNumber(string(content), secrets[i].Value)
 		}
 	}
 	
-	// Log and write detected secrets
 	for _, secret := range secrets {
-		// Add line number to URL
 		locationURL := fmt.Sprintf("%s#L%d", fileURL, secret.Line)
 		
-		// Log the secret
 		s.logger.SecretFound(secret.Type, secret.Value, locationURL)
 		
-		// Write to output file if configured
 		if s.writer != nil {
 			err := s.writer.WriteSecret(secret.Type, secret.Value, locationURL, secret.Context, secret.Line)
 			if err != nil {
@@ -351,14 +304,12 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 		}
 	}
 	
-	// Log summary
 	if len(secrets) > 0 {
 		s.logger.Success("Found %d secrets in %s", len(secrets), filePath)
 	} else {
 		s.logger.Debug("No secrets found in %s", filePath)
 	}
 	
-	// Update stats
 	s.mu.Lock()
 	s.stats.TotalSecrets += len(secrets)
 	s.stats.TotalBytes += fi.Size()
@@ -367,9 +318,10 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 	return len(secrets), nil
 }
 
-// getUniqueAndSortedFiles removes duplicates and sorts files
+/* 
+   Returns a deduplicated and sorted list of files for deterministic processing
+*/
 func (s *LocalScanner) getUniqueAndSortedFiles(files []string) []string {
-	// Remove duplicates
 	uniqueMap := make(map[string]bool)
 	for _, file := range files {
 		absPath, err := filepath.Abs(file)
@@ -380,35 +332,32 @@ func (s *LocalScanner) getUniqueAndSortedFiles(files []string) []string {
 		}
 	}
 	
-	// Convert to slice
 	uniqueFiles := make([]string, 0, len(uniqueMap))
 	for file := range uniqueMap {
 		uniqueFiles = append(uniqueFiles, file)
 	}
 	
-	// Sort for deterministic processing
 	sort.Strings(uniqueFiles)
 	
 	return uniqueFiles
 }
 
-// incrementFailedFiles increments the failed files counter
 func (s *LocalScanner) incrementFailedFiles() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.stats.FailedFiles++
 }
 
-// incrementSkippedFiles increments the skipped files counter
 func (s *LocalScanner) incrementSkippedFiles() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.stats.SkippedFiles++
 }
 
-// logFinalStats logs final statistics
+/* 
+   Outputs the final scanning statistics to the console
+*/
 func (s *LocalScanner) logFinalStats() {
-	// Record end time
 	s.mu.Lock()
 	s.stats.EndTime = time.Now()
 	duration := s.stats.EndTime.Sub(s.stats.StartTime)
@@ -421,7 +370,6 @@ func (s *LocalScanner) logFinalStats() {
 	timeColor := color.New(color.FgHiBlack).SprintfFunc()
 	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
 	
-	// Small delay for logs to flush
 	time.Sleep(100 * time.Millisecond)
 	
 	fmt.Fprintf(os.Stderr, "%s %s %s\n",
@@ -439,11 +387,9 @@ func (s *LocalScanner) logFinalStats() {
 		color.CyanString("[INFO]"),
 		fmt.Sprintf("Skipped %d files, failed to process %d files", skippedFiles, failedFiles))
 	
-	// Small delay
 	time.Sleep(100 * time.Millisecond)
 }
 
-// GetStats returns scanner statistics
 func (s *LocalScanner) GetStats() LocalScanStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -451,7 +397,6 @@ func (s *LocalScanner) GetStats() LocalScanStats {
 	return s.stats
 }
 
-// Cleanup releases resources
 func (s *LocalScanner) Cleanup() {
 	s.cancelFunc()
 }

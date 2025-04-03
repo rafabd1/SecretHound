@@ -7,33 +7,27 @@ import (
 	"github.com/rafabd1/SecretHound/core/secret"
 )
 
-// FallbackDetector fornece detecção básica quando tudo falhar
 type FallbackDetector struct {
-	// Padrões críticos que devem ser encontrados mesmo em fallback
 	criticalPatterns map[string]*regexp.Regexp
 	initialized      bool
 }
 
-// NewFallbackDetector cria um detector de fallback
 func NewFallbackDetector() *FallbackDetector {
 	fd := &FallbackDetector{
 		criticalPatterns: make(map[string]*regexp.Regexp),
 		initialized:      false,
 	}
 	
-	// Inicializa com padrões mínimos críticos
 	fd.initialize()
 	
 	return fd
 }
 
-// initialize configura os padrões críticos
 func (fd *FallbackDetector) initialize() {
 	if fd.initialized {
 		return
 	}
 	
-	// Conjunto mínimo de padrões críticos que devem sempre funcionar
 	criticalRegexes := map[string]string{
 		"aws_key":        `AKIA[0-9A-Z]{16}`,
 		"github_token":   `ghp_[0-9a-zA-Z]{36}`,
@@ -52,16 +46,16 @@ func (fd *FallbackDetector) initialize() {
 	fd.initialized = true
 }
 
-// DetectWithFallback tenta detectar segredos usando apenas padrões críticos
+/* 
+   Detects secrets using only critical patterns when primary detection fails
+*/
 func (fd *FallbackDetector) DetectWithFallback(content, url string) []secret.Secret {
 	var secrets []secret.Secret
 	
-	// Verifica se a inicialização funcionou
 	if !fd.initialized || len(fd.criticalPatterns) == 0 {
 		fd.initialize()
 	}
 	
-	// Busca usando padrões críticos
 	for name, pattern := range fd.criticalPatterns {
 		matches := pattern.FindAllStringSubmatch(content, -1)
 		
@@ -70,24 +64,21 @@ func (fd *FallbackDetector) DetectWithFallback(content, url string) []secret.Sec
 				continue
 			}
 			
-			// Extrai o valor (grupo de captura ou match completo)
 			value := match[0]
 			if len(match) > 1 && match[1] != "" {
 				value = match[1]
 			}
 			
-			// Filtra valores muito curtos 
 			if len(value) < 8 {
 				continue
 			}
 			
-			// Cria o secret com informações básicas
 			s := secret.NewSecret(
 				name,
 				value,
 				extractBasicContext(content, value),
 				url,
-				0, // Linha desconhecida
+				0,
 			)
 			
 			secrets = append(secrets, s)
@@ -97,21 +88,21 @@ func (fd *FallbackDetector) DetectWithFallback(content, url string) []secret.Sec
 	return secrets
 }
 
-// extractBasicContext extrai contexto simplificado
+/* 
+   Extracts a simple context string surrounding the found secret
+*/
 func extractBasicContext(content, value string) string {
 	idx := strings.Index(content, value)
 	if idx == -1 {
 		return ""
 	}
 	
-	// Extrai 30 caracteres antes e depois
 	start := max(0, idx-30)
 	end := min(len(content), idx+len(value)+30)
 	
 	return content[start:end]
 }
 
-// Funções auxiliares
 func max(a, b int) int {
 	if a > b {
 		return a

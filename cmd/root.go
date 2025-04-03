@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	// cfgFile     string
 	inputFile    string
 	outputFile   string
 	verbose      bool
@@ -20,6 +19,7 @@ var (
 	rateLimit    int
 	regexFile    string
 	customHeader []string
+	insecureSkipVerify bool
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -42,19 +42,15 @@ rate limiting and WAF blocks for remote resources.`,
 
 // beforeCommand executes before any command runs
 func beforeCommand(cmd *cobra.Command, args []string) {
-    // Desabilite a limpeza completa de estado para diagnóstico
     fmt.Println("DEBUG: beforeCommand chamado, limpeza de estado global desativada para diagnóstico")
     
-    // Apenas force GC para garantir memória suficiente
     runtime.GC()
     
-    // Small delay to ensure system is stabilized
     time.Sleep(100 * time.Millisecond)
 }
 
 // Execute adds all child commands to the root command
 func Execute() {
-    // Add pre-run hook to all commands
     for _, cmd := range rootCmd.Commands() {
         originalPreRun := cmd.PreRun
         cmd.PreRun = func(cmd *cobra.Command, args []string) {
@@ -83,8 +79,11 @@ func init() {
 	rootCmd.Flags().IntVarP(&maxRetries, "retries", "r", 3, "maximum number of retries for HTTP requests")
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "n", 10, "number of concurrent workers")
 	rootCmd.Flags().IntVarP(&rateLimit, "rate-limit", "l", 0, "requests per second per domain (0 = auto)")
-	rootCmd.Flags().StringVar(&regexFile, "regex-file", "", "file containing regex patterns (optional)")
+	// Temporarily disable regex file support
+	// rootCmd.Flags().StringVar(&regexFile, "regex-file", "", "file containing regex patterns (optional)")
 	rootCmd.Flags().StringArrayVarP(&customHeader, "header", "H", []string{}, "custom HTTP header (format: 'Name: Value') - can be used multiple times")
+	
+	rootCmd.PersistentFlags().BoolVar(&insecureSkipVerify, "insecure", false, "Disable SSL/TLS certificate verification")
 	
 	rootCmd.Flags().SetInterspersed(true)
 }
