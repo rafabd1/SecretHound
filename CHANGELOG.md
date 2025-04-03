@@ -1,5 +1,6 @@
 # SecretHound Changelog
 
+<<<<<<< HEAD
 ## v0.1.2 (Unreleased)
 
 ### Improvements
@@ -12,6 +13,9 @@
 - Updated documentation with comprehensive list of supported secrets
 
 ## v0.1.1 (2024-07-05)
+=======
+## v0.1.1 (2025-03-28)
+>>>>>>> d5bcfdec4f2010ce44706453f011967cd40b343f
 
 ### Improvements
 - Removed global execution timeout allowing scans to run without time constraints
@@ -30,7 +34,7 @@
 - Improved GitHub Actions workflow for releases
 - Updated documentation for clarity and completeness
 
-## v0.1.0 (2024-06-15)
+## v0.1.0 (2025-03-26)
 
 ### Core Features
 - Multi-threaded scanning of remote URLs and local files
