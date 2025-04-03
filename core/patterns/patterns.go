@@ -277,24 +277,6 @@ var DefaultPatterns = &PatternDefinitions{
 		},
 		
 		// Serviços Cloud e APIs
-		"twilio_api_key": {
-			Regex:       `SK[0-9a-fA-F]{32}`,
-			Description: "Twilio API Key",
-			Enabled:     true,
-			MinLength:   34,
-		},
-		"twilio_account_sid": {
-			Regex:       `AC[a-zA-Z0-9]{32}`,
-			Description: "Twilio Account SID",
-			Enabled:     true,
-			MinLength:   34,
-		},
-		"twilio_auth_token": {
-			Regex:       `(?<!Account SID)[a-zA-Z0-9]{32}(?=.*AC[a-zA-Z0-9]{32})`,
-			Description: "Twilio Auth Token",
-			Enabled:     true,
-			MinLength:   32,
-		},
 		"mailgun_api_key": {
 			Regex:       `key-[0-9a-zA-Z]{32}`,
 			Description: "Mailgun API Key",
@@ -561,15 +543,20 @@ func (pm *PatternManager) LoadDefaultPatterns() error {
 	// Reset existing patterns
 	pm.compiledPatterns = make(map[string]*CompiledPattern)
 	
+	// MODIFICAÇÃO: Contador para depuração
+	enabledPatterns := 0
+	
 	// Compile each pattern
 	for name, config := range DefaultPatterns.Patterns {
 		if !config.Enabled {
 			continue
 		}
 		
+		enabledPatterns++
+		
 		re, err := regexp.Compile(config.Regex)
 		if err != nil {
-			return err
+			continue
 		}
 		
 		pm.compiledPatterns[name] = &CompiledPattern{
@@ -580,8 +567,14 @@ func (pm *PatternManager) LoadDefaultPatterns() error {
 		}
 	}
 	
-	// Compile global exclusions
-	for _, exclusion := range GlobalExclusions {
+	// MODIFICAÇÃO: Reduzir exclusões globais para diminuir falsos negativos
+	// Compile global exclusions - apenas as mais críticas
+	criticalExclusions := []string{
+		"example", "sample", "test", "demo",
+		"function(", "return",
+	}
+	
+	for _, exclusion := range criticalExclusions {
 		re, err := regexp.Compile(regexp.QuoteMeta(exclusion))
 		if err != nil {
 			continue
@@ -630,7 +623,7 @@ func (pm *PatternManager) GetCompiledPatterns() map[string]*CompiledPattern {
 // AddPattern adds a new pattern
 func (pm *PatternManager) AddPattern(name, regex, description string) error {
 	re, err := regexp.Compile(regex)
-	if err != nil {
+	if (err != nil) {
 		return err
 	}
 	

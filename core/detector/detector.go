@@ -74,6 +74,9 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 	// Get all compiled patterns
 	patterns := d.patternManager.GetCompiledPatterns()
 	
+	// Log the number of patterns for debugging
+	d.logger.Debug("Using %d regex patterns for detection", len(patterns))
+	
 	// Use fallback detector se não houver padrões ou se ocorrer um erro grave
 	if (len(patterns) == 0) {
 		// Cria um detector de fallback
@@ -120,7 +123,7 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 			// Calculate line number
 			line := utils.FindLineNumber(content, value)
 			
-			// Validate the secret according to mode
+			// Validate the secret according to mode - SIMPLIFICADA para ser menos restritiva
 			valid, confidence := d.validateSecret(pattern.Name, value, ctx, isExampleContent)
 			
 			if valid && confidence >= d.config.MinConfidence {
@@ -180,7 +183,7 @@ func (d *Detector) validateSecret(
     // Get the pattern config
     patterns := d.patternManager.GetCompiledPatterns()
     pattern, exists := patterns[patternName]
-    if !exists {
+    if (!exists) {
         return false, 0
     }
     
@@ -195,112 +198,34 @@ func (d *Detector) validateSecret(
         return false, 0
     }
     
-    // Example content handling
+    // MODIFICAÇÃO: Relaxar verificação de exemplo para teste
     if isExampleContent && !d.config.AllowTestExamples {
-        return false, 0
+        // No modo detalhado, vamos considerar possíveis exemplos
+        if !d.logger.IsVerbose() {
+            return false, 0
+        }
     }
     
-    // JavaScript specific validations
-    if utils.IsJavaScriptFunction(value) || utils.IsJavaScriptConstant(value) || 
-       utils.HasJavaScriptCamelCasePattern(value) {
-        return false, 0
+    // MODIFICAÇÃO: Limitar verificações JS apenas a caso específico
+    // em vez de aplicar todas as verificações para todos os tipos
+    if patternName == "jwt_token" || patternName == "generic_password" {
+        if utils.IsJavaScriptConstant(value) || utils.IsJavaScriptFunction(value) {
+            return false, 0
+        }
     }
     
-    // Check if matches exclusion keywords
+    // MODIFICAÇÃO: Verificar KeywordExcludes só no valor, não no contexto
+    // para reduzir falsos negativos
     for _, keyword := range config.KeywordExcludes {
-        if strings.Contains(value, keyword) || strings.Contains(context, keyword) {
+        if strings.Contains(value, keyword) {
             return false, 0
         }
     }
     
-    // Common false positive checks
-    if utils.IsLikelyCSS(value) ||
-       utils.IsLikelyI18nKey(value) ||
-       utils.HasRepeatedCharacterPattern(value) ||
-       utils.IsLikelyFunctionName(value) ||
-       utils.IsLikelyDocumentation(value, context) ||
-       utils.IsLikelyUrl(value) ||
-       utils.IsUUID(value) {
+    // MODIFICAÇÃO: Limitar verificações específicas apenas às mais críticas
+    // para evitar que haja muitas exclusões causando falsos negativos
+    if utils.IsUUID(value) || (utils.HasCommonCodePattern(value) && len(value) < 40) {
         return false, 0
-    }
-    
-    // NOVOS VALIDADORES PARA REDUZIR FALSOS POSITIVOS
-    
-    // Validações específicas por tipo de segredo
-    switch patternName {
-    case "jwt_token":
-        // Verificar se parece ser um token de Origin Trial (comum em scripts do Google)
-        if utils.IsLikelyOriginTrialToken(value, context) {
-            return false, 0
-        }
-        
-        // Verifica se é realmente um token JWT válido
-        if !utils.IsValidJWTToken(value) {
-            return false, 0
-        }
-        
-        // Verifica se é apenas um fragmento de uma string base64 maior ou parte de código JS
-        if utils.IsBase64StringFragment(value, context) || utils.IsLongBase64InJSCode(value, context) {
-            return false, 0
-        }
-        
-        // Verifica se está em código minificado sem outros indícios de ser um token real
-        if utils.IsInMinifiedCode(value, context) && !hasStrongJWTIndicators(value, context) {
-            return false, 0
-        }
-        
-        // Caso seja detectado como string longa de base64 em código JS
-        if utils.IsLikelyBase64Data(value) && !hasStrongAuthContext(context) {
-            return false, 0
-        }
-        
-    case "oauth_token":
-        // Verificar se é apenas uma referência de variável em código
-        if utils.IsVariableReference(value, context) {
-            return false, 0
-        }
-        
-    case "basic_auth":
-        // Verificar se é um cabeçalho ou título de UI (como "Basic authorization")
-        if utils.IsUIHeaderOrTitle(value, context) {
-            return false, 0
-        }
-        
-        // Verificar se é uma referência a Unicode Basic Multilingual Plane (BMP)
-        if utils.IsUnicodeReference(value, context) || 
-           strings.Contains(value, "Basic Multilingual") {
-            return false, 0
-        }
-        
-        // Verificar Basic Auth em contexto de documentação
-        if utils.IsLikelyBasicAuthSyntax(value, context) {
-            return false, 0
-        }
-        
-    case "generic_password":
-        // Verificar se é texto de UI/label em vez de senha real
-        if utils.IsUITextOrLabel(value, context) {
-            return false, 0
-        }
-        
-        // Verificar se é um seletor DOM ou pseudo-elemento (como input[type="password"])
-        if utils.IsDOMSelectorOrPseudo(value, context) {
-            return false, 0
-        }
-        
-    case "firebase_api_key":
-        // Verificar se é uma API key do Google Fonts (menos sensível)
-        if utils.IsGoogleFontApiKey(value, context) {
-            return false, 0
-        }
-    }
-    
-    // Check if context indicates minified JavaScript code
-    if utils.IsLikelyMinifiedCode(context) {
-        // More strict validation for minified code to reduce false positives
-        if !hasStrongSecretIndicators(value, context) {
-            return false, 0
-        }
     }
     
     // Calculate confidence based on pattern-specific factors
@@ -309,6 +234,11 @@ func (d *Detector) validateSecret(
     // Local file mode adjustment
     if d.config.LocalFileMode {
         confidence += 0.1
+    }
+    
+    // SIMPLIFICAÇÃO: Reduzir threshold para capturar mais resultados
+    if d.logger.IsVerbose() && confidence >= 0.4 {
+        confidence = 0.6 // Boost para capturar mais resultados
     }
     
     return true, confidence
@@ -505,9 +435,6 @@ func calculateConfidence(patternName, value, context string) float64 {
 	case strings.Contains(patternName, "stripe") && 
 		 (strings.HasPrefix(value, "sk_live_") || strings.HasPrefix(value, "pk_live_")):
 		confidence += 0.3 // Stripe keys are distinctive
-		
-	case strings.Contains(patternName, "twilio") && strings.HasPrefix(value, "AC"):
-		confidence += 0.3 // Twilio keys are distinctive
 		
 	case strings.Contains(patternName, "jwt") && strings.HasPrefix(value, "eyJ"):
 		confidence += 0.2 // JWT tokens are fairly distinctive
