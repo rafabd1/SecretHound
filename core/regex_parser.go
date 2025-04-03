@@ -52,27 +52,6 @@ func (rm *RegexManager) LoadPredefinedPatterns() error {
 	return nil
 }
 
-// isValidSecretStrict applies stricter validation for secrets
-func (rm *RegexManager) isValidSecretStrict(value string, patternType string) bool {
-	if !rm.isValidSecret(value, patternType) {
-		return false
-	}
-
-	if len(value) < rm.minSecretLength*2 || len(value) > rm.maxSecretLength/2 {
-		return false
-	}
-
-	// Verify if the value contains minified code patterns
-	codeChars := []string{"{", "}", ";", "&&", "||", "==", "!=", "=>", "+=", "-="}
-	for _, char := range codeChars {
-		if strings.Contains(value, char) {
-			return false
-		}
-	}
-
-	return true
-}
-
 // isExcludedByContextStrict applies stricter exclusion checks based on context
 func (rm *RegexManager) isExcludedByContextStrict(context string, patternName string) bool {
 	// Aplicar primeiro verificação básica

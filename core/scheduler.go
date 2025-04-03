@@ -311,7 +311,7 @@ func (s *Scheduler) countPendingURLsForDomain(targetDomain string) int {
 		
 		domain, err := utils.ExtractDomain(s.waitingURLs[i])
 		if (err == nil && domain == targetDomain) {
-			count++
+			count++ 
 		}
 	}
 	
@@ -449,9 +449,10 @@ func (s *Scheduler) worker(id int) {
 		s.stats.TotalSecrets += len(secrets)
 		s.mutex.Unlock()
 		
-		// Only log a summary after logging individual secrets
+		// Log worker success message only in verbose mode
 		if len(secrets) > 0 {
-			s.logger.Success("Worker %d: processed URL %s, found %d secrets", id, url, len(secrets))
+			// Usar Debug em vez de Success para que só apareça no modo verbose
+			s.logger.Debug("Worker %d: processed URL %s, found %d secrets", id, url, len(secrets))
 		} else {
 			s.logger.Debug("Worker %d: processed URL %s, found no secrets", id, url)
 		}
