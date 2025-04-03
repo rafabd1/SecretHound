@@ -1,6 +1,8 @@
 package detector
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -73,7 +75,7 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 	patterns := d.patternManager.GetCompiledPatterns()
 	
 	// Use fallback detector se não houver padrões ou se ocorrer um erro grave
-	if len(patterns) == 0 {
+	if (len(patterns) == 0) {
 		// Cria um detector de fallback
 		fallback := NewFallbackDetector()
 		secrets := fallback.DetectWithFallback(content, url)
@@ -170,57 +172,285 @@ func (d *Detector) isExampleContent(content string) bool {
 	return false
 }
 
-// validateSecret validates if a potential secret is valid
+// validateSecret valida se um potencial segredo é válido
 func (d *Detector) validateSecret(
-	patternName, value, context string, 
-	isExampleContent bool,
+    patternName, value, context string, 
+    isExampleContent bool,
 ) (bool, float64) {
-	// First, get the pattern config
-	patterns := d.patternManager.GetCompiledPatterns()
-	pattern, exists := patterns[patternName]
-	if !exists {
-		return false, 0
+    // Get the pattern config
+    patterns := d.patternManager.GetCompiledPatterns()
+    pattern, exists := patterns[patternName]
+    if !exists {
+        return false, 0
+    }
+    
+    config := pattern.Config
+    
+    // Always validate against length
+    if len(value) < config.MinLength {
+        return false, 0
+    }
+    
+    if config.MaxLength > 0 && len(value) > config.MaxLength {
+        return false, 0
+    }
+    
+    // Example content handling
+    if isExampleContent && !d.config.AllowTestExamples {
+        return false, 0
+    }
+    
+    // JavaScript specific validations
+    if utils.IsJavaScriptFunction(value) || utils.IsJavaScriptConstant(value) || 
+       utils.HasJavaScriptCamelCasePattern(value) {
+        return false, 0
+    }
+    
+    // Check if matches exclusion keywords
+    for _, keyword := range config.KeywordExcludes {
+        if strings.Contains(value, keyword) || strings.Contains(context, keyword) {
+            return false, 0
+        }
+    }
+    
+    // Common false positive checks
+    if utils.IsLikelyCSS(value) ||
+       utils.IsLikelyI18nKey(value) ||
+       utils.HasRepeatedCharacterPattern(value) ||
+       utils.IsLikelyFunctionName(value) ||
+       utils.IsLikelyDocumentation(value, context) ||
+       utils.IsLikelyUrl(value) ||
+       utils.IsUUID(value) {
+        return false, 0
+    }
+    
+    // NOVOS VALIDADORES PARA REDUZIR FALSOS POSITIVOS
+    
+    // Validações específicas por tipo de segredo
+    switch patternName {
+    case "jwt_token":
+        // Verificar se parece ser um token de Origin Trial (comum em scripts do Google)
+        if utils.IsLikelyOriginTrialToken(value, context) {
+            return false, 0
+        }
+        
+        // Verifica se é realmente um token JWT válido
+        if !utils.IsValidJWTToken(value) {
+            return false, 0
+        }
+        
+        // Verifica se é apenas um fragmento de uma string base64 maior ou parte de código JS
+        if utils.IsBase64StringFragment(value, context) || utils.IsLongBase64InJSCode(value, context) {
+            return false, 0
+        }
+        
+        // Verifica se está em código minificado sem outros indícios de ser um token real
+        if utils.IsInMinifiedCode(value, context) && !hasStrongJWTIndicators(value, context) {
+            return false, 0
+        }
+        
+        // Caso seja detectado como string longa de base64 em código JS
+        if utils.IsLikelyBase64Data(value) && !hasStrongAuthContext(context) {
+            return false, 0
+        }
+        
+    case "oauth_token":
+        // Verificar se é apenas uma referência de variável em código
+        if utils.IsVariableReference(value, context) {
+            return false, 0
+        }
+        
+    case "basic_auth":
+        // Verificar se é um cabeçalho ou título de UI (como "Basic authorization")
+        if utils.IsUIHeaderOrTitle(value, context) {
+            return false, 0
+        }
+        
+        // Verificar se é uma referência a Unicode Basic Multilingual Plane (BMP)
+        if utils.IsUnicodeReference(value, context) || 
+           strings.Contains(value, "Basic Multilingual") {
+            return false, 0
+        }
+        
+        // Verificar Basic Auth em contexto de documentação
+        if utils.IsLikelyBasicAuthSyntax(value, context) {
+            return false, 0
+        }
+        
+    case "generic_password":
+        // Verificar se é texto de UI/label em vez de senha real
+        if utils.IsUITextOrLabel(value, context) {
+            return false, 0
+        }
+        
+        // Verificar se é um seletor DOM ou pseudo-elemento (como input[type="password"])
+        if utils.IsDOMSelectorOrPseudo(value, context) {
+            return false, 0
+        }
+        
+    case "firebase_api_key":
+        // Verificar se é uma API key do Google Fonts (menos sensível)
+        if utils.IsGoogleFontApiKey(value, context) {
+            return false, 0
+        }
+    }
+    
+    // Check if context indicates minified JavaScript code
+    if utils.IsLikelyMinifiedCode(context) {
+        // More strict validation for minified code to reduce false positives
+        if !hasStrongSecretIndicators(value, context) {
+            return false, 0
+        }
+    }
+    
+    // Calculate confidence based on pattern-specific factors
+    confidence := calculateConfidence(patternName, value, context)
+    
+    // Local file mode adjustment
+    if d.config.LocalFileMode {
+        confidence += 0.1
+    }
+    
+    return true, confidence
+}
+
+// hasStrongSecretIndicators verifica se há fortes indicadores de que o valor é um segredo
+func hasStrongSecretIndicators(value, context string) bool {
+	// Verifica a presença de prefixos de token comuns
+	tokenPrefixes := []string{
+		"sk_", "pk_", "ghp_", "ya29.", "gho_", "AKIA", "xox",
 	}
 	
-	config := pattern.Config
-	
-	// Always validate against length
-	if len(value) < config.MinLength {
-		return false, 0
-	}
-	
-	if config.MaxLength > 0 && len(value) > config.MaxLength {
-		return false, 0
-	}
-	
-	// In local file mode with example content, be less strict if allowed
-	if d.config.LocalFileMode && isExampleContent && d.config.AllowTestExamples {
-		// Just do basic validation for example/test content
-		return !containsCommonFalsePositive(value), 0.7
-	}
-	
-	// Check if matches exclusion keywords
-	for _, keyword := range config.KeywordExcludes {
-		if strings.Contains(value, keyword) || strings.Contains(context, keyword) {
-			return false, 0
+	for _, prefix := range tokenPrefixes {
+		if strings.HasPrefix(value, prefix) {
+			return true
 		}
 	}
 	
-	// Check code patterns that indicate false positives
-	if hasCodePattern(value) {
-		return false, 0
+	// Verifica a presença de palavras-chave de segurança no contexto próximo
+	securityKeywords := []string{
+		"api_key", "apiKey", "secret", "token", "password", "credential",
+		"authorization", "auth_token", "secret_key", "private_key",
 	}
 	
-	// Calculate confidence based on pattern-specific factors
-	confidence := calculateConfidence(patternName, value, context)
-	
-	// In local file mode, adjust confidence
-	if d.config.LocalFileMode {
-		// Slightly boost confidence for local files
-		confidence += 0.1
+	contextLower := strings.ToLower(context)
+	for _, keyword := range securityKeywords {
+		if strings.Contains(contextLower, keyword) {
+			return true
+		}
 	}
 	
-	return true, confidence
+	// Verifica por padrões de atribuição de variáveis
+	assignmentPatterns := []string{
+		`const\s+\w+\s*=\s*['"]`,
+		`let\s+\w+\s*=\s*['"]`,
+		`var\s+\w+\s*=\s*['"]`,
+		`:\s*['"]`,
+		`=\s*['"]`,
+	}
+	
+	for _, pattern := range assignmentPatterns {
+		if regexp.MustCompile(pattern).MatchString(context) {
+			// Verifica se o valor tem alta entropia e não parece código
+			if utils.CalculateEntropy(value) > 4.0 && !utils.HasCommonCodePattern(value) {
+				return true
+			}
+		}
+	}
+	
+	return false
+}
+
+// hasStrongJWTIndicators verifica se há indicadores fortes de que um JWT token é real
+func hasStrongJWTIndicators(value, context string) bool {
+    // Tokens JWT válidos têm 3 partes separadas por pontos
+    parts := strings.Split(value, ".")
+    if len(parts) != 3 {
+        return false
+    }
+    
+    // Verifica a presença de palavras-chave relacionadas a autenticação no contexto
+    authKeywords := []string{
+        "token", "jwt", "auth", "authorization", "authentication", 
+        "login", "session", "identity", "credential", "bearer",
+        "user", "account", "profile", "secure", "access",
+    }
+    
+    contextLower := strings.ToLower(context)
+    keywordCount := 0
+    
+    for _, keyword := range authKeywords {
+        if strings.Contains(contextLower, keyword) {
+            keywordCount++
+            // Se encontrar pelo menos 2 palavras-chave diferentes relacionadas a autenticação
+            if keywordCount >= 2 {
+                return true
+            }
+        }
+    }
+    
+    // Verifica por padrões de atribuição que indicam uso de token
+    assignmentPatterns := []string{
+        "token", "jwt", "idToken", "accessToken", "auth",
+    }
+    
+    for _, pattern := range assignmentPatterns {
+        if regexp.MustCompile(fmt.Sprintf(`['"]?%s['"]?\s*[=:]\s*['"]`, pattern)).MatchString(contextLower) {
+            return true
+        }
+    }
+    
+    // Verificar se a estrutura do JWT parece ser válida (header, payload, signature)
+    // Um JWT válido tem três partes e cada uma é decodificável como base64
+    if len(parts) == 3 && strings.HasPrefix(parts[0], "eyJ") {
+        // Se o token parece estruturalmente válido, é mais provável que seja real
+        if len(parts[1]) > 20 && len(parts[2]) > 16 {
+            return true
+        }
+    }
+    
+    return false
+}
+
+// hasStrongAuthContext verifica se o contexto indica realmente autenticação
+func hasStrongAuthContext(context string) bool {
+    // Palavras fortemente associadas com autenticação
+    strongAuthWords := []string{
+        "authentication", "authorization", "credentials", "login", 
+        "session", "identity", "user", "account", "password",
+        "oauth", "openid", "saml", "permission", "access",
+    }
+    
+    contextLower := strings.ToLower(context)
+    matchCount := 0
+    
+    for _, word := range strongAuthWords {
+        if strings.Contains(contextLower, word) {
+            matchCount++
+            if matchCount >= 2 {
+                return true
+            }
+        }
+    }
+    
+    return false
+}
+
+// hasSecretContext checks if the context looks like it might contain a secret
+func hasSecretContext(context string) bool {
+    secretContexts := []string{
+        "key", "token", "secret", "password", "credential", "auth",
+        "apikey", "api_key", "authorization", "private", "access",
+    }
+    
+    lowerContext := strings.ToLower(context)
+    for _, secretWord := range secretContexts {
+        if strings.Contains(lowerContext, secretWord) {
+            return true
+        }
+    }
+    
+    return false
 }
 
 // hasCodePattern checks if a string contains patterns that indicate it's part of code
@@ -246,6 +476,8 @@ func containsCommonFalsePositive(s string) bool {
 		"example", "sample", "test", "placeholder", "dummy",
 		"http://", "https://", "localhost", "127.0.0.1",
 		"node_modules", "charset=", "@example.com", 
+		"--", "css", "style", "font", "color", "background",
+		"format", "message", "label", "text", "caption",
 	}
 	
 	for _, pattern := range falsePositives {
