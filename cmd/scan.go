@@ -99,15 +99,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	<-done
 	
-	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-		timeStr,
-		color.CyanString("[INFO]"), 
-		"All processing completed successfully")
-
 	logger.Flush()
 	
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	if writer != nil {
 		secretCount := writer.GetCount()
@@ -131,13 +125,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 		"Scan completed. Exiting.")
 	
 	time.Sleep(200 * time.Millisecond)
-	
-	os.Exit(0)
-
-	if logger != nil {
-		logger.Flush()
-		time.Sleep(200 * time.Millisecond)
-	}
 
 	return nil
 }
