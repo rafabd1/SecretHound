@@ -25,8 +25,6 @@ type Scheduler struct {
 	cancel        context.CancelFunc
 	waitGroup     sync.WaitGroup
 	stats         SchedulerStats
-	domainLastAccess *utils.SafeMap[string, time.Time]
-	domainCooldown time.Duration
 }
 
 type SchedulerStats struct {
@@ -56,8 +54,6 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 		concurrency:   10,
 		ctx:           ctx,
 		cancel:        cancel,
-		domainLastAccess: utils.NewSafeMap[string, time.Time](),
-		domainCooldown: 500 * time.Millisecond,
 		stats: SchedulerStats{
 			DomainRetries: make(map[string]int),
 			StartTime:     time.Now(),
@@ -291,12 +287,9 @@ func (s *Scheduler) worker(id int) {
 			// Get next URL
 			url, hasMore := s.GetNextURL()
 			if !hasMore {
-				// If GetNextURL returns false, it means either:
-				// 1. The queue is truly empty and all work is done.
-				// 2. The queue is empty now, but remaining URLs belong to blocked domains.
-				// In either case, this worker has no more processable work currently.
+				// If GetNextURL returns false, exit the worker
 				s.logger.Debug("Worker %d: No more processable URLs available, exiting.", id)
-				return // Exit the worker goroutine
+				return
 			}
 
 			domain, err := utils.ExtractDomain(url)
@@ -305,27 +298,6 @@ func (s *Scheduler) worker(id int) {
 				s.incrementFailedURLs()
 				continue // Skip this URL
 			}
-
-			// Check if domain is explicitly blocked by the DomainManager
-			if s.domainManager.IsBlocked(domain) {
-				s.logger.Debug("Worker %d: domain %s is currently blocked, requeueing URL %s", id, domain, url)
-				s.requeueURL(url) // Put it back for later attempt
-
-				// Brief sleep to avoid immediate tight loop on the same blocked domain check by this worker
-				time.Sleep(100 * time.Millisecond) 
-				continue // Try to get a different URL in the next iteration
-			}
-
-			// Check scheduler's internal cooldown for the domain
-			lastAccess, ok := s.domainLastAccess.Get(domain)
-			if ok && time.Since(lastAccess) < s.domainCooldown {
-				s.logger.Debug("Worker %d: domain %s is on internal cooldown, requeueing URL %s", id, domain, url)
-				s.requeueURL(url) // Requeue for later attempt
-				time.Sleep(s.domainCooldown - time.Since(lastAccess)) // Wait for cooldown
-				continue
-			}
-
-			s.domainLastAccess.Set(domain, time.Now())
 
 			s.logger.Debug("Worker %d: processing URL %s", id, url)
 
@@ -339,14 +311,14 @@ func (s *Scheduler) worker(id int) {
 			if err != nil {
 				s.logger.Debug("Worker %d: error fetching %s: %v", id, url, err)
 				
-				// Handle specific errors (RateLimit, WAF, Network) and requeue if appropriate
+				// Handle specific errors (RateLimit, WAF, Network)
 				blocked := s.handleRequestError(err, domain, url, id)
-				s.domainManager.RecordURLProcessed(url, false, 0)
+				s.domainManager.RecordURLProcessed(url, false, 0) // Record failure
 				if !blocked { 
-					// If it wasn't a block error, record as failed
+					// If it wasn't a block error, record as failed (for stats, not progress)
 					s.incrementFailedURLs()
 				}
-				// No need to requeue here, handleRequestError already does if needed.
+				// handleRequestError now deals with potential requeueing
 
 				continue // Move to the next URL
 			}
@@ -368,7 +340,9 @@ func (s *Scheduler) worker(id int) {
 				s.stats.TotalSecrets += len(secrets)
 				s.mutex.Unlock()
 				for _, secret := range secrets {
+					// Log the found secret to console
 					s.logger.SecretFound(secret.Type, secret.Value, url) 
+					// Write to file if writer is configured
 					if s.writer != nil {
 						err := s.writer.WriteSecret(secret.Type, secret.Value, secret.URL, secret.Context, secret.Line)
 						if err != nil {
@@ -386,39 +360,38 @@ func (s *Scheduler) worker(id int) {
 	and determines appropriate actions like requeuing or blocking domains
 */
 func (s *Scheduler) handleRequestError(err error, domain, url string, workerId int) bool {
-	isBlockError := false
+	isBlockError := false // Flag specifically for WAF/Manual blocks
 
 	if utils.IsRateLimitError(err) {
-		s.logger.Warning("Worker %d: Rate limit detected for domain %s while fetching %s", workerId, domain, url)
+		s.logger.Warning("Worker %d: Server Rate limit detected for domain %s while fetching %s", workerId, domain, url)
 		s.mutex.Lock()
 		s.stats.RateLimitHits++
 		s.mutex.Unlock()
-		s.AddBlockedDomain(domain)
-		isBlockError = true
+		// DO NOT call s.AddBlockedDomain here. The client's NotifyRateLimitError handles adaptive slowdown.
+		// Requeueing might still happen based on policy
 	} else if utils.IsWAFError(err) {
 		s.logger.Warning("Worker %d: WAF block detected for domain %s while fetching %s", workerId, domain, url)
 		s.mutex.Lock()
 		s.stats.WAFBlockHits++
 		s.mutex.Unlock()
-		s.AddBlockedDomain(domain)
-		isBlockError = true
+		s.AddBlockedDomain(domain) // WAF errors should still block in DomainManager
+		isBlockError = true // Mark as a blocking error type
 	} else if utils.IsNetworkError(err) {
-		// Check for specific network conditions if needed, otherwise just log
 		s.logger.Warning("Worker %d: Network error for %s: %v", workerId, url, err)
-		// Decide if network errors should cause blocking - maybe not unless persistent
 	} else {
 		s.logger.Error("Worker %d: Unhandled error for %s: %v", workerId, url, err)
 	}
 
-	// Requeue only if it was a blocking error and should be retried
-	if isBlockError && s.shouldRequeueDomainURL(domain, workerId) {
+	// Requeue only if it was a *server* error (RateLimit or WAF) and policy allows
+	// isBlockError is now true only for WAF. Check original error type for requeue logic.
+	if (utils.IsRateLimitError(err) || utils.IsWAFError(err)) && s.shouldRequeueDomainURL(domain, workerId) {
 		s.requeueURL(url)
-		s.logger.Debug("Worker %d: Requeueing URL %s due to block on domain %s", workerId, url, domain)
-	} else if isBlockError {
-		s.logger.Debug("Worker %d: Domain %s blocked, but not requeueing URL %s based on policy", workerId, domain, url)
+		s.logger.Debug("Worker %d: Requeueing URL %s due to server error on domain %s", workerId, url, domain)
+	} else if utils.IsRateLimitError(err) || utils.IsWAFError(err) {
+		s.logger.Debug("Worker %d: Server error for domain %s, but not requeueing URL %s based on policy", workerId, domain, url)
 	}
 	
-	return isBlockError // Return true if the error resulted in the domain being blocked
+	return isBlockError // Return true ONLY if it resulted in DomainManager block (i.e., WAF)
 }
 
 func (s *Scheduler) getDomainRetryCount(domain string) int {
@@ -440,8 +413,9 @@ func (s *Scheduler) incrementFailedURLs() {
 }
 
 func (s *Scheduler) AddBlockedDomain(domain string) {
-	s.logger.Debug("Adding domain to blocked list: %s", domain)
-	s.domainManager.AddBlockedDomain(domain, 5*time.Minute)
+	s.logger.Debug("Scheduler adding WAF block for domain: %s", domain)
+	// Use a potentially longer duration for WAF blocks compared to temporary rate limits
+	s.domainManager.AddBlockedDomain(domain, 15*time.Minute) 
 }
 
 func (s *Scheduler) GetNextURL() (string, bool) {
