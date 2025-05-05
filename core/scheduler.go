@@ -304,10 +304,6 @@ func (s *Scheduler) worker(id int) {
 			startTime := time.Now()
 			content, err := s.client.GetJSContent(url)
 
-			s.mutex.Lock()
-			s.stats.ProcessedURLs++
-			s.mutex.Unlock()
-
 			if err != nil {
 				s.logger.Debug("Worker %d: error fetching %s: %v", id, url, err)
 				
@@ -323,7 +319,12 @@ func (s *Scheduler) worker(id int) {
 				continue // Move to the next URL
 			}
 
-			// Record success
+			// Increment processed count ONLY AFTER successful fetch attempt or handling terminal errors
+			s.mutex.Lock()
+			s.stats.ProcessedURLs++ 
+			s.mutex.Unlock()
+
+			// Record success in DomainManager
 			responseTime := time.Since(startTime)
 			s.domainManager.RecordURLProcessed(url, true, responseTime)
 
