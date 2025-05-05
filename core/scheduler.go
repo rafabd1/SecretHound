@@ -291,20 +291,12 @@ func (s *Scheduler) worker(id int) {
 			// Get next URL
 			url, hasMore := s.GetNextURL()
 			if !hasMore {
-				// Check if there are still URLs being processed or waiting
-				s.mutex.Lock()
-				activeURLs := len(s.waitingURLs) > 0 // Check if queue still has items
-				// Add check for active workers if workerPool provides such info, otherwise assume work might still be ongoing if queue emptied recently
-				s.mutex.Unlock()
-
-				if !activeURLs /* && s.workerPool.ActiveCount() == 1 */ { // Assuming workerPool has ActiveCount or similar
-					s.logger.Debug("Worker %d found no more URLs and likely no active work, exiting.", id)
-					return // No more URLs and other workers likely done too
-				}
-				// Still URLs potentially being processed by others or waiting for cooldown/unblock
-				s.logger.Debug("Worker %d found no URL, sleeping briefly.", id)
-				time.Sleep(500 * time.Millisecond) // Sleep briefly and try again
-				continue
+				// If GetNextURL returns false, it means either:
+				// 1. The queue is truly empty and all work is done.
+				// 2. The queue is empty now, but remaining URLs belong to blocked domains.
+				// In either case, this worker has no more processable work currently.
+				s.logger.Debug("Worker %d: No more processable URLs available, exiting.", id)
+				return // Exit the worker goroutine
 			}
 
 			domain, err := utils.ExtractDomain(url)
@@ -376,7 +368,13 @@ func (s *Scheduler) worker(id int) {
 				s.stats.TotalSecrets += len(secrets)
 				s.mutex.Unlock()
 				for _, secret := range secrets {
-					s.writer.WriteSecret(secret.Type, secret.Value, secret.URL, secret.Context, secret.Line)
+					s.logger.SecretFound(secret.Type, secret.Value, url) 
+					if s.writer != nil {
+						err := s.writer.WriteSecret(secret.Type, secret.Value, secret.URL, secret.Context, secret.Line)
+						if err != nil {
+							s.logger.Error("Worker %d: failed to write secret to output file: %v", id, err)
+						}
+					}
 				}
 			}
 		}
@@ -439,7 +437,6 @@ func (s *Scheduler) incrementFailedURLs() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.stats.FailedURLs++
-	s.stats.ProcessedURLs++
 }
 
 func (s *Scheduler) AddBlockedDomain(domain string) {
