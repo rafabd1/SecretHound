@@ -431,15 +431,18 @@ func (rl *RateLimiter) NotifyRateLimitError(domain string) {
 	bucket.tokens = 0
 }
 
+// GetRateLimit returns the configured fixed rate limit, or 0 if adaptive mode is active.
 func (c *Client) GetRateLimit() int {
 	c.rateLimiter.mutex.Lock()
 	defer c.rateLimiter.mutex.Unlock()
 	
-	if c.rateLimiter.globalLimit > 0 {
-		return c.rateLimiter.globalLimit
+	// If adaptive mode is ON, return 0 to signify "auto"
+	if c.rateLimiter.adaptiveMode {
+		return 0 
 	}
 	
-	return 3
+	// Otherwise, return the globally set fixed limit
+	return c.rateLimiter.globalLimit
 }
 
 func (c *Client) shouldRetryStatus(statusCode int, retryCount int, domain string) (bool, time.Duration) {

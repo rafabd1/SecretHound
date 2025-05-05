@@ -496,12 +496,19 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 			regexManager.GetPatternCount(),
 			concurrency))
 			
+	// Determine rate limit string
+	rateLimitStr := "auto"
+	currentRateLimit := client.GetRateLimit()
+	if currentRateLimit > 0 {
+		rateLimitStr = fmt.Sprintf("%d", currentRateLimit)
+	}
+			
 	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
 	fmt.Fprintf(os.Stderr, "%s %s %s\n",
 		timeStr,
 		color.CyanString("[INFO]"),
-		fmt.Sprintf("HTTP config: %d second timeout | %d max retries | %d requests per domain", 
-			timeout, maxRetries, client.GetRateLimit()))
+		fmt.Sprintf("HTTP config: %d second timeout | %d max retries | %s requests per domain", 
+			timeout, maxRetries, rateLimitStr))
 
 	if len(customHeader) > 0 {
 		headerNames := make([]string, 0, len(customHeader))
@@ -639,4 +646,12 @@ func createAndInitRegexManager(logger *output.Logger) *core.RegexManager {
 
 func init() {
 	rootCmd.AddCommand(scanCmd)
+	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	scanCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "HTTP request timeout in seconds")
+	scanCmd.Flags().IntVarP(&maxRetries, "retries", "r", 3, "Maximum retries per request")
+	scanCmd.Flags().IntVarP(&concurrency, "concurrency", "n", 20, "Number of concurrent workers")
+	scanCmd.Flags().IntVarP(&rateLimit, "rate-limit", "l", 0, "Requests per second per domain (default 0 = auto)")
+	scanCmd.Flags().StringVar(&regexFile, "regex-file", "", "Path to custom regex patterns file (optional)")
+	scanCmd.Flags().StringSliceVarP(&customHeader, "header", "H", []string{}, "Custom headers to add to requests (e.g., \"Authorization: Bearer token\")")
+	scanCmd.Flags().BoolVar(&insecureSkipVerify, "insecure", false, "Skip SSL/TLS certificate verification")
 }
