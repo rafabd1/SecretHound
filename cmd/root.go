@@ -76,7 +76,7 @@ func init() {
 	rootCmd.Flags().IntVarP(&timeout, "timeout", "t", 30, "HTTP request timeout in seconds")
 	rootCmd.Flags().IntVarP(&maxRetries, "retries", "r", 3, "maximum number of retries for HTTP requests")
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "n", 10, "number of concurrent workers")
-	rootCmd.Flags().IntVarP(&rateLimit, "rate-limit", "l", 0, "requests per second per domain (0 = auto)")
+	rootCmd.PersistentFlags().IntVarP(&rateLimit, "rate-limit", "l", 0, "Requests per second per domain (default 0 = auto)")
 	// Temporarily disable regex file support
 	// rootCmd.Flags().StringVar(&regexFile, "regex-file", "", "file containing regex patterns (optional)")
 	rootCmd.Flags().StringArrayVarP(&customHeader, "header", "H", []string{}, "custom HTTP header (format: 'Name: Value') - can be used multiple times")
