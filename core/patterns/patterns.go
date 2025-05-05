@@ -48,13 +48,6 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   39,
 			MaxLength:   39,
 		},
-		"google_oauth": {
-			Regex:       `ya29\.[0-9A-Za-z\-_]+`,
-			Description: "Google OAuth Access Token",
-			Enabled:     true,
-			MinLength:   30,
-			KeywordMatches: []string{"oauth", "google", "token"},
-		},
 		"google_cloud_platform": {
 			Regex:       `[0-9]+-[0-9A-Za-z_]{32}\.apps\.googleusercontent\.com`,
 			Description: "Google Cloud Platform API Key",
@@ -78,17 +71,17 @@ var DefaultPatterns = &PatternDefinitions{
 
 		// Authentication tokens - Universal risk
 		"jwt_token": {
-			Regex:       `eyJ[a-zA-Z0-9_\-\.=]{10,500}`,
+			Regex:       `eyJ[a-zA-Z0-9_\-]+\\.[a-zA-Z0-9_\-]+\\.[a-zA-Z0-9_\-]+`,
 			Description: "JWT Token",
 			Enabled:     true,
 			MinLength:   30,
-			KeywordExcludes: []string{"function", "example", "placeholder", "test", "demo", "origin-trial", "originTrial", "feature", "expiry", "recaptcha", "gstatic", "content=", "prepend", "minified", "compressed", "webpack", "bundle", "base64", "encoded", "data:", "source", "map", "+", "=", "==", "btoa", "atob", "encode", "padding", "charAt", "substring", "slice"},
+			KeywordExcludes: []string{"function", "example", "placeholder", "test", "demo", "origin-trial"},
 		},
 		"basic_auth": {
-			Regex:       `(?i)(?:basic\s+)(?:[a-zA-Z0-9\+\/=]{10,100})`,
+			Regex:       `(?i)(?:basic\\s+)(?:[a-zA-Z0-9\\+\\/=]{20,100}=*)`,
 			Description: "HTTP Basic Authentication",
-			Enabled:     true,
-			MinLength:   15,
+			Enabled:     false,
+			MinLength:   25,
 			KeywordExcludes: []string{
 				"example", "sample", "usage", "caption", "documentation",
 				"test", "@example", "description", "tutorial", "unicode",
@@ -98,28 +91,28 @@ var DefaultPatterns = &PatternDefinitions{
 			},
 		},
 		"bearer_token": {
-			Regex:       `(?i)bearer\s+[a-zA-Z0-9_\-\.=]{10,500}`,
+			Regex:       `(?i)bearer\\s+[a-zA-Z0-9_\\-\\.=]{10,500}`,
 			Description: "Bearer Token",
 			Enabled:     true,
 			MinLength:   20,
-			KeywordExcludes: []string{"children", "autoComplete", "placeholder"},
+			KeywordExcludes: []string{"QVO", "QUO", "YO", "accessToken:", ".accessToken", "oauth_token=", "variable", "config", "credential", "INVALID_ACCESS_TOKEN", "MISSING_ACCESS_TOKEN"},
 		},
 		"oauth_token": {
-			Regex:       `(?i)(?:oauth|access)[._-]?token[.\s\'"]*[=:][.\s\'"]*[a-zA-Z0-9_\-\.=]{10,500}`,
+			Regex:       `(?i)(?:oauth|access)[._-]?token\\s*[:=]\\s*['\"]([a-zA-Z0-9_\\-\\.=]{32,500})['\"]`,
 			Description: "OAuth Token",
 			Enabled:     true,
-			MinLength:   20,
-			KeywordExcludes: []string{"QVO", "QUO", "YO", "accessToken:", ".accessToken", "oauth_token=", "variable", "config", "credential"},
+			MinLength:   32,
+			KeywordExcludes: []string{"QVO", "QUO", "YO", "accessToken:", ".accessToken", "oauth_token=", "variable", "config", "credential", "INVALID_ACCESS_TOKEN", "MISSING_ACCESS_TOKEN", "error", "payment_widget_", "_error_", "setAuthTokens", "webhooks_"},
 		},
 
 		// Generic secrets - Universal patterns
 		"generic_password": {
-			Regex:       `(?i)(?:password|passwd|pwd|secret)[\s]*[=:]+[\s]*["']([^'"]{8,30})["']`,
+			Regex:       `(?i)(?:password|passwd|pwd|secret)[\\s]*[=:]+[\\s]*["']([^'"]{8,30})["']`,
 			Description: "Generic Password",
-			Enabled:     true,
+			Enabled:     false,
 			MinLength:   8,
 			MaxLength:   30,
-			KeywordExcludes: []string{"match", "valid", "must", "should", "hint", "help", "message", "error", "Change password", "Reset password", "Forgot password", "pseudo", "selector", "createElement", "render", "component", "input[type", "USERNAME", "PASSWORD"},
+			KeywordExcludes: []string{"match", "valid", "must", "should", "hint", "help", "message", "error", "Change password", "Reset password", "Forgot password", "pseudo", "selector", "createElement", "render", "component", "input[type", "USERNAME", "PASSWORD", "[REDACTED]", "switch_to_"},
 		},
 		
 		// Specific patterns
@@ -136,13 +129,6 @@ var DefaultPatterns = &PatternDefinitions{
 			Enabled:     true,
 			MinLength:   16,
 			KeywordExcludes: []string{"example", "sample", "placeholder", "test", "your", "xxx"},
-		},
-		"firebase_api_key": {
-			Regex:       `AIzaSy[0-9A-Za-z_-]{33}`,
-			Description: "Firebase API Key",
-			Enabled:     true,
-			MinLength:   39,
-			KeywordExcludes: []string{"googleapis.com/webfonts", "fonts.googleapis", "webfonts?key="},
 		},
 		"github_personal_token": {
 			Regex:       `gh[a-z]_[A-Za-z0-9_]{36,255}`,
@@ -336,18 +322,18 @@ var DefaultPatterns = &PatternDefinitions{
 		
 		// Payment services
 		"paypal_client_id": {
-			Regex:       `(?i)(?:paypal|braintree).{0,20}['\"][A-Za-z0-9_-]{20,64}['\"]`,
+			Regex:       `(?i)(?:paypal|braintree).{0,20}(?:[:=]\\s*)['\"]([A-Za-z0-9_-]{20,64})['\"]`,
 			Description: "PayPal Client ID",
 			Enabled:     true,
 			MinLength:   20,
-			KeywordExcludes: []string{"example", "placeholder", "user", "password", "sample"},
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "sample", "kill_"},
 		},
 		"paypal_client_secret": {
-			Regex:       `(?i)(?:paypal|braintree).{0,20}['\"][A-Za-z0-9_-]{20,64}['\"]`,
+			Regex:       `(?i)(?:paypal|braintree).{0,20}(?:[:=]\\s*)['\"]([A-Za-z0-9_-]{20,64})['\"]`,
 			Description: "PayPal Client Secret",
 			Enabled:     true,
 			MinLength:   20,
-			KeywordExcludes: []string{"example", "placeholder", "user", "password", "sample"},
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "sample", "kill_"},
 		},
 		"braintree_token": {
 			Regex:       `access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}`,
@@ -412,16 +398,9 @@ var DefaultPatterns = &PatternDefinitions{
 		},
 		
 		// JWT and OAuth improved patterns
-		"jwt_improved": {
-			Regex:       `eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+`,
-			Description: "JWT Token (Improved Pattern)",
-			Enabled:     true,
-			MinLength:   30,
-			KeywordExcludes: []string{"function", "example", "placeholder", "test", "demo", "origin-trial"},
-		},
 		"oauth2_access_token": {
-			Regex:       `ya29\.[0-9A-Za-z\-_]+`,
-			Description: "OAuth 2.0 Access Token",
+			Regex:       `ya29\\.[0-9A-Za-z\\-_]+`,
+			Description: "OAuth 2.0 Access Token (Google/Firebase)",
 			Enabled:     true,
 			MinLength:   30,
 		},
