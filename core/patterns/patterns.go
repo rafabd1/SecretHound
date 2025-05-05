@@ -264,12 +264,14 @@ var DefaultPatterns = &PatternDefinitions{
 			Description: "Mailgun API Key",
 			Enabled:     true,
 			MinLength:   36,
+			KeywordExcludes: []string{".js", ".css", ".map", "/assets/", "ace/mode"},
 		},
 		"digitalocean_access_token": {
 			Regex:       `dop_v1_[a-f0-9]{64}`,
 			Description: "DigitalOcean Personal Access Token",
 			Enabled:     true,
 			MinLength:   69,
+			KeywordExcludes: []string{"example", "placeholder", "user", "password", "sample"},
 		},
 		"digitalocean_oauth_token": {
 			Regex:       `doo_v1_[a-f0-9]{64}`,
@@ -425,6 +427,104 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   30,
 			KeywordExcludes: []string{"example", "placeholder", "user", "password", "sample"},
 		},
+		
+		// --- PII (Personally Identifiable Information) Patterns ---
+		"email_address": {
+			Regex:       `[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}`,
+			Description: "Email Address",
+			Enabled:     true,
+			MinLength:   6, // e.g., a@b.co
+			KeywordMatches: []string{"email", "mail", "address"},
+			KeywordExcludes: []string{"example", "test", "demo", "noreply", "no-reply", "@example.com", "@test.com"},
+		},
+		"phone_number": {
+			// Matches various US/International formats, requires reasonable length
+			Regex:       `(?i)(?:phone|mobile|tel(?:ephone)?)[^\n\r]{0,20}(?:[:= ]*)(\+?\d{1,3}[-.\s]?)?(\(\d{3}\)|\d{3})[-.\s]?\d{3}[-.\s]?\d{4}\b`,
+			Description: "Phone Number",
+			Enabled:     true,
+			MinLength:   10, // xxx-xxx-xxxx
+			KeywordExcludes: []string{"version", "id", "example", "test", "port"},
+		},
+		"ipv4_address": {
+			// Basic IPv4, excludes common private ranges by negative lookahead (more precise)
+			Regex:       `\b(?!10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b`,
+			Description: "IPv4 Address (Public)",
+			Enabled:     true,
+			MinLength:   7, // 1.1.1.1
+			MaxLength:   15,
+			KeywordMatches: []string{"ip", "address", "host"},
+			KeywordExcludes: []string{"0.0.0.0", "127.0.0.1", "localhost"},
+		},
+		"ipv6_address": {
+			// Standard IPv6 regex (complex but precise)
+			Regex:       `\b(?:(?:[0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?:(?::[0-9a-fA-F]{1,4}){1,6})|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(?:ffff(?::0{1,4}){0,1}:){0,1}(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\b`,
+			Description: "IPv6 Address",
+			Enabled:     true,
+			MinLength:   3, // ::1
+			KeywordMatches: []string{"ip", "address", "host"},
+			KeywordExcludes: []string{"::1", "localhost", "//", "/*", "* "},
+		},
+		"mac_address": {
+			Regex:       `\b(?:[0-9A-Fa-f]{2}[:-]){5}(?:[0-9A-Fa-f]{2})\b`,
+			Description: "MAC Address",
+			Enabled:     true,
+			MinLength:   17,
+			MaxLength:   17,
+			KeywordMatches: []string{"mac", "address", "ethernet"},
+		},
+		"us_zip_code": {
+			Regex:       `(?i)(?:zip|postal|post_?code|address)\\s*[:=]\\s*(\\d{5}(?:-\\d{4})?)\\b`,
+			Description: "US ZIP Code (Keyword Dependent)",
+			Enabled:     true,
+			MinLength:   5,
+			MaxLength:   10,
+			KeywordMatches: []string{"zip", "postal", "postcode"},
+			KeywordExcludes: []string{"version", "build", "port"},
+		},
+		"serial_number": {
+			// Requires keyword context due to generic nature
+			Regex:       `(?i)(?:serial|s\\/n)\\s*[:=]\\s*([A-Za-z0-9\\-]{8,40})\\b`,
+			Description: "Serial Number (Keyword Dependent)",
+			Enabled:     true,
+			MinLength:   8,
+			MaxLength:   40,
+			KeywordExcludes: []string{"example", "test", "uuid", "guid", "session", "request"},
+		},
+		// --- End PII Patterns ---
+
+		// --- Web3 / Blockchain Patterns ---
+		"ethereum_address": {
+			Regex:       `\b0x[a-fA-F0-9]{40}\b`,
+			Description: "Ethereum Address",
+			Enabled:     true,
+			MinLength:   42,
+			MaxLength:   42,
+			KeywordMatches: []string{"address", "ethereum", "wallet", "contract", "account"},
+			KeywordExcludes: []string{"example", "test", "null", "0x0", "0x000", "zero"},
+		},
+		"web3_private_key": {
+			Regex:       `(?i)(?:private[._-]?key|secret|wallet|mnemonic|seed|private_key_hex)\s*[:=]\s*['"]?(0x?[a-fA-F0-9]{64})['"]?`,
+			Description: "Web3 Private Key (Keyword Dependent)",
+			Enabled:     true,
+			MinLength:   64,
+			KeywordExcludes: []string{"example", "test", "placeholder", "sample"},
+		},
+		"mnemonic_phrase": {
+			// Tries to find 12 or 24 words following specific keywords
+			Regex:       `(?i)(?:mnemonic|seed|phrase|backup|recovery)(?:[^a-z\n\r]*[\s:=]+){1,5}(\b(?:[a-z]+\s+){11}[a-z]+\b|\b(?:[a-z]+\s+){23}[a-z]+\b)`,
+			Description: "Mnemonic/Seed Phrase (Keyword Dependent)",
+			Enabled:     true,
+			MinLength:   40, // Estimate for 12 short words
+			KeywordExcludes: []string{"example", "test", "placeholder", "sample", "instructions", "tutorial", "words", "wordlist"},
+		},
+		"web3_provider_key": {
+			Regex:       `(?i)(?:infura|alchemy|quicknode|moralis|ankr).{0,20}(?:api[._-]?key|project[._-]?id|app[._-]?id|secret)\s*[:=]\s*['"]?([a-zA-Z0-9_\-]{32,64})['"]?`,
+			Description: "Web3 Provider API Key/ID (Infura, Alchemy, etc.)",
+			Enabled:     true,
+			MinLength:   32,
+			KeywordExcludes: []string{"example", "test", "placeholder", "sample", "YOUR_API_KEY", "PROJECT_ID"},
+		},
+		// --- End Web3 Patterns ---
 	},
 }
 
