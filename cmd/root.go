@@ -41,9 +41,7 @@ rate limiting and WAF blocks for remote resources.`,
 }
 
 // beforeCommand executes before any command runs
-func beforeCommand(cmd *cobra.Command, args []string) {
-    fmt.Println("DEBUG: beforeCommand chamado, limpeza de estado global desativada para diagnóstico")
-    
+func beforeCommand(cmd *cobra.Command, args []string) {  
     runtime.GC()
     
     time.Sleep(100 * time.Millisecond)

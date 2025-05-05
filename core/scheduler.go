@@ -280,115 +280,105 @@ func (s *Scheduler) countPendingURLsForDomain(targetDomain string) int {
 
 func (s *Scheduler) worker(id int) {
 	defer s.waitGroup.Done()
-	
 	s.logger.Debug("Worker %d started", id)
-	
-	recentDomains := utils.NewLRUCache(5)
-	
+
 	for {
 		select {
 		case <-s.ctx.Done():
-			s.logger.Debug("Worker %d stopping due to cancellation", id)
+			s.logger.Debug("Worker %d stopping due to context cancellation", id)
 			return
 		default:
-		}
-		
-		url, ok := s.GetNextURL()
-		if (!ok) {
-			s.logger.Debug("Worker %d stopping: no more URLs to process", id)
-			return
-		}
-		
-		domain, err := utils.ExtractDomain(url)
-		if err != nil {
-			s.logger.Warning("Worker %d: failed to extract domain from URL %s: %v", id, url, err)
-			s.incrementFailedURLs()
-			continue
-		}
-		
-		if s.domainManager.IsBlocked(domain) {
-			s.logger.Debug("Worker %d: domain %s is blocked, requeueing URL %s", id, domain, url)
-			s.requeueURL(url)
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		
-		lastAccess, found := s.domainLastAccess.Get(domain)
-		if found && time.Since(lastAccess) < s.domainCooldown {
-			if s.hasAlternativeURL(domain) {
-				time.Sleep(10 * time.Millisecond)
+			// Get next URL
+			url, hasMore := s.GetNextURL()
+			if !hasMore {
+				// Check if there are still URLs being processed or waiting
+				s.mutex.Lock()
+				activeURLs := len(s.waitingURLs) > 0 // Check if queue still has items
+				// Add check for active workers if workerPool provides such info, otherwise assume work might still be ongoing if queue emptied recently
+				s.mutex.Unlock()
+
+				if !activeURLs /* && s.workerPool.ActiveCount() == 1 */ { // Assuming workerPool has ActiveCount or similar
+					s.logger.Debug("Worker %d found no more URLs and likely no active work, exiting.", id)
+					return // No more URLs and other workers likely done too
+				}
+				// Still URLs potentially being processed by others or waiting for cooldown/unblock
+				s.logger.Debug("Worker %d found no URL, sleeping briefly.", id)
+				time.Sleep(500 * time.Millisecond) // Sleep briefly and try again
+				continue
+			}
+
+			domain, err := utils.ExtractDomain(url)
+			if err != nil {
+				s.logger.Warning("Worker %d: failed to extract domain from %s: %v", id, url, err)
+				s.incrementFailedURLs()
+				continue // Skip this URL
+			}
+
+			// Check if domain is explicitly blocked by the DomainManager
+			if s.domainManager.IsBlocked(domain) {
+				s.logger.Debug("Worker %d: domain %s is currently blocked, requeueing URL %s", id, domain, url)
+				s.requeueURL(url) // Put it back for later attempt
+
+				// Brief sleep to avoid immediate tight loop on the same blocked domain check by this worker
+				time.Sleep(100 * time.Millisecond) 
+				continue // Try to get a different URL in the next iteration
+			}
+
+			// Check scheduler's internal cooldown for the domain
+			lastAccess, ok := s.domainLastAccess.Get(domain)
+			if ok && time.Since(lastAccess) < s.domainCooldown {
+				s.logger.Debug("Worker %d: domain %s is on internal cooldown, requeueing URL %s", id, domain, url)
+				s.requeueURL(url) // Requeue for later attempt
+				time.Sleep(s.domainCooldown - time.Since(lastAccess)) // Wait for cooldown
+				continue
+			}
+
+			s.domainLastAccess.Set(domain, time.Now())
+
+			s.logger.Debug("Worker %d: processing URL %s", id, url)
+
+			startTime := time.Now()
+			content, err := s.client.GetJSContent(url)
+
+			s.mutex.Lock()
+			s.stats.ProcessedURLs++
+			s.mutex.Unlock()
+
+			if err != nil {
+				s.logger.Debug("Worker %d: error fetching %s: %v", id, url, err)
 				
-				if len(s.domainManager.GetDomainList()) <= 3 {
-					wait := s.domainCooldown - time.Since(lastAccess)
-					if wait > 0 {
-						time.Sleep(wait / 2)
-					}
-				} else {
-					s.requeueURL(url)
-					continue
+				// Handle specific errors (RateLimit, WAF, Network) and requeue if appropriate
+				blocked := s.handleRequestError(err, domain, url, id)
+				s.domainManager.RecordURLProcessed(url, false, 0)
+				if !blocked { 
+					// If it wasn't a block error, record as failed
+					s.incrementFailedURLs()
 				}
-			} else {
-				wait := s.domainCooldown - time.Since(lastAccess)
-				if wait > 0 {
-					time.Sleep(wait)
-				}
+				// No need to requeue here, handleRequestError already does if needed.
+
+				continue // Move to the next URL
 			}
-		}
-		
-		if recentDomains.Contains(domain) {
-			if s.shouldRequeueDomainURL(domain, id) {
-				s.logger.Debug("Worker %d: recently accessed domain %s, requeueing URL %s", id, domain, url)
-				s.requeueURL(url)
-				time.Sleep(20 * time.Millisecond)
-				continue
+
+			// Record success
+			responseTime := time.Since(startTime)
+			s.domainManager.RecordURLProcessed(url, true, responseTime)
+
+			// Process content
+			secrets, processErr := s.processor.ProcessJSContent(content, url)
+			if processErr != nil {
+				s.logger.Warning("Worker %d: error processing content from %s: %v", id, url, processErr)
+				s.incrementFailedURLs()
+				continue // Skip to next URL if processing fails
 			}
-		}
-		
-		recentDomains.Put(domain, time.Now())
-		s.domainLastAccess.Set(domain, time.Now())
-		
-		s.logger.Debug("Worker %d: processing URL %s", id, url)
-		content, err := s.client.GetJSContent(url)
-		
-		if err != nil {
-			if s.handleRequestError(err, domain, url) {
-				continue
-			}
-			
-			s.logger.Error("Worker %d: failed to fetch content from %s: %v", id, url, err)
-			s.incrementFailedURLs()
-			continue
-		}
-		
-		secrets, err := s.processor.ProcessJSContent(content, url)
-		if err != nil {
-			s.logger.Error("Worker %d: failed to process content from %s: %v", id, url, err)
-			s.incrementFailedURLs()
-			continue
-		}
-		
-		for _, secret := range secrets {
-			s.logger.SecretFound(secret.Type, secret.Value, url)
-		}
-		
-		if s.writer != nil && len(secrets) > 0 {
-			for _, secret := range secrets {
-				err := s.writer.WriteSecret(secret.Type, secret.Value, secret.URL, secret.Context, secret.Line)
-				if err != nil {
-					s.logger.Error("Worker %d: failed to write secret to output file: %v", id, err)
+
+			if len(secrets) > 0 {
+				s.mutex.Lock()
+				s.stats.TotalSecrets += len(secrets)
+				s.mutex.Unlock()
+				for _, secret := range secrets {
+					s.writer.WriteSecret(secret.Type, secret.Value, secret.URL, secret.Context, secret.Line)
 				}
 			}
-		}
-		
-		s.mutex.Lock()
-		s.stats.ProcessedURLs++
-		s.stats.TotalSecrets += len(secrets)
-		s.mutex.Unlock()
-		
-		if len(secrets) > 0 {
-			s.logger.Debug("Worker %d: processed URL %s, found %d secrets", id, url, len(secrets))
-		} else {
-			s.logger.Debug("Worker %d: processed URL %s, found no secrets", id, url)
 		}
 	}
 }
@@ -397,50 +387,40 @@ func (s *Scheduler) worker(id int) {
 	Handles different types of request errors (timeout, rate limit, WAF, temporary)
 	and determines appropriate actions like requeuing or blocking domains
 */
-func (s *Scheduler) handleRequestError(err error, domain, url string) bool {
-	if utils.IsTimeoutError(err) {
-		s.logger.Warning("Request to %s timed out, marking as failed", url)
-		s.incrementFailedURLs()
-		return true
-	}
+func (s *Scheduler) handleRequestError(err error, domain, url string, workerId int) bool {
+	isBlockError := false
 
 	if utils.IsRateLimitError(err) {
+		s.logger.Warning("Worker %d: Rate limit detected for domain %s while fetching %s", workerId, domain, url)
 		s.mutex.Lock()
 		s.stats.RateLimitHits++
 		s.mutex.Unlock()
-		
-		s.logger.Warning("Domain %s is being rate limited, adding to blocked list", domain)
-		
-		blockDuration := time.Duration(2+s.getDomainRetryCount(domain)) * time.Minute
-		s.domainManager.AddBlockedDomain(domain, blockDuration)
-		s.incrementDomainRetry(domain)
-		
-		s.requeueURL(url)
-		return true
-	}
-	
-	if utils.IsWAFError(err) {
+		s.AddBlockedDomain(domain)
+		isBlockError = true
+	} else if utils.IsWAFError(err) {
+		s.logger.Warning("Worker %d: WAF block detected for domain %s while fetching %s", workerId, domain, url)
 		s.mutex.Lock()
 		s.stats.WAFBlockHits++
 		s.mutex.Unlock()
-		
-		s.logger.Warning("Domain %s is blocking with WAF, adding to blocked list", domain)
-		
-		blockDuration := time.Duration(5+s.getDomainRetryCount(domain)*2) * time.Minute
-		s.domainManager.AddBlockedDomain(domain, blockDuration)
-		s.incrementDomainRetry(domain)
-		
+		s.AddBlockedDomain(domain)
+		isBlockError = true
+	} else if utils.IsNetworkError(err) {
+		// Check for specific network conditions if needed, otherwise just log
+		s.logger.Warning("Worker %d: Network error for %s: %v", workerId, url, err)
+		// Decide if network errors should cause blocking - maybe not unless persistent
+	} else {
+		s.logger.Error("Worker %d: Unhandled error for %s: %v", workerId, url, err)
+	}
+
+	// Requeue only if it was a blocking error and should be retried
+	if isBlockError && s.shouldRequeueDomainURL(domain, workerId) {
 		s.requeueURL(url)
-		return true
+		s.logger.Debug("Worker %d: Requeueing URL %s due to block on domain %s", workerId, url, domain)
+	} else if isBlockError {
+		s.logger.Debug("Worker %d: Domain %s blocked, but not requeueing URL %s based on policy", workerId, domain, url)
 	}
 	
-	if utils.IsTemporaryError(err) {
-		s.logger.Debug("Temporary error for domain %s, will retry URL %s", domain, url)
-		s.requeueURL(url)
-		return true
-	}
-	
-	return false
+	return isBlockError // Return true if the error resulted in the domain being blocked
 }
 
 func (s *Scheduler) getDomainRetryCount(domain string) int {
@@ -470,14 +450,23 @@ func (s *Scheduler) AddBlockedDomain(domain string) {
 func (s *Scheduler) GetNextURL() (string, bool) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	
+
 	if len(s.waitingURLs) == 0 {
+		// Double check if all domains are done or just blocked
+		if s.domainManager.GetURLCount() > 0 && s.domainManager.GetUnblockedDomainsCount() == 0 {
+			// URLs exist, but all domains are blocked
+			s.logger.Debug("GetNextURL: No URLs in immediate queue, but remaining domains are blocked.")
+			// Returning false forces the worker to sleep and wait for unblocking or context cancel
+			return "", false 
+		}
+		// Really no more URLs
+		s.logger.Debug("GetNextURL: Queue is empty and no pending domains found.")
 		return "", false
 	}
-	
+
 	url := s.waitingURLs[0]
 	s.waitingURLs = s.waitingURLs[1:]
-	
+
 	return url, true
 }
 

@@ -276,3 +276,17 @@ func (dm *DomainManager) GetUnblockedDomains() []string {
 	
 	return domains
 }
+
+// Added function to count domains that are not blocked and still have URLs
+func (dm *DomainManager) GetUnblockedDomainsCount() int {
+	dm.mu.RLock()
+	defer dm.mu.RUnlock()
+	count := 0
+	for domain := range dm.domains {
+		// Check if not blocked AND if it still has URLs in its list
+		if !dm.isBlockedNoLock(domain) && len(dm.domains[domain]) > 0 {
+			count++
+		}
+	}
+	return count
+}
