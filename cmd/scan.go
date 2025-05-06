@@ -199,6 +199,15 @@ func runScan(cmd *cobra.Command, args []string) error {
 		if netRateLimit > 0 {
 			client.SetGlobalRateLimit(netRateLimit)
 		}
+
+		// Log domain distribution info HERE, after grouping and only if not silent
+		if !silentMode {
+		    timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
+		    fmt.Fprintf(os.Stderr, "%s %s Processing %d URLs distributed across %d domains\n",
+		        timeStrLog, color.CyanString("[INFO]"), len(remoteURLs), domainManager.GetDomainCount())
+            // Add a blank line after domain info as well
+            fmt.Fprintln(os.Stderr)
+		}
 	}
 
 	// --- Execute Scans (with corrected logic for passing patterns) ---
