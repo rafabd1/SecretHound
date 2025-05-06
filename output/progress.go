@@ -1,14 +1,14 @@
 package output
 
 import (
-    "fmt"
-    "io"
-    "os"
-    "strings"
-    "sync"
-    "time"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"sync"
+	"time"
 
-    "github.com/rafabd1/SecretHound/utils"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 type ProgressBar struct {
@@ -75,24 +75,25 @@ func (pb *ProgressBar) Start() {
         go func() {
             defer func() {
                 if r := recover(); r != nil {
-                    fmt.Fprintf(os.Stderr, "Recovered from panic in progress bar: %v\n", r)
+                    fmt.Fprintf(os.Stderr, "Recovered from panic in progress bar auto-refresh: %v\n", r)
                 }
             }()
+            
+            ticker := time.NewTicker(pb.refresh)
+            defer ticker.Stop()
             
             for {
                 select {
                 case <-pb.done:
                     return
-                case <-time.After(pb.refresh):
+                case <-ticker.C:
                     pb.mu.Lock()
-                    isActive := pb.isActive && !pb.renderPaused
+                    isGloballyActive := pb.isActive
                     pb.mu.Unlock()
                     
-                    if !isActive {
-                        return
+                    if isGloballyActive {
+                        pb.requestRender()
                     }
-                    
-                    pb.requestRender()
                 }
             }
         }()
