@@ -42,7 +42,7 @@ func (rm *RegexManager) FindSecrets(content, url string) ([]Secret, error) {
 	
 	if patternCount == 0 {
 		rm.mu.Lock()
-		err := rm.patternManager.LoadDefaultPatterns()
+		err := rm.patternManager.LoadPatterns(nil, nil)
 		patternCount = rm.patternManager.GetPatternCount()
 		rm.mu.Unlock()
 		
@@ -273,11 +273,11 @@ func (rm *RegexManager) SetLocalFileMode(enabled bool) {
 }
 
 func (rm *RegexManager) LoadPatternsFromFile(filePath string) error {
-	return rm.patternManager.LoadDefaultPatterns()
+	return rm.patternManager.LoadPatterns(nil, nil)
 }
 
 func (rm *RegexManager) LoadPredefinedPatterns() error {
-	return rm.patternManager.LoadDefaultPatterns()
+	return rm.patternManager.LoadPatterns(nil, nil)
 }
 
 func (rm *RegexManager) GetPatternCount() int {
@@ -285,7 +285,7 @@ func (rm *RegexManager) GetPatternCount() int {
 }
 
 func (rm *RegexManager) InjectDefaultPatternsDirectly() {
-	rm.patternManager.LoadDefaultPatterns()
+	_ = rm.patternManager.LoadPatterns(nil, nil)
 }
 
 func (rm *RegexManager) Reset() {
@@ -301,4 +301,11 @@ func (rm *RegexManager) Reset() {
 
 func (rm *RegexManager) CompleteReset() {
 	rm.Reset()
+}
+
+// Add a setter method for the pattern manager
+func (rm *RegexManager) SetPatternManager(pm *patterns.PatternManager) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	rm.patternManager = pm
 }

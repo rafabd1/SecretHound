@@ -4,39 +4,91 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/rafabd1/SecretHound/config"
 	"github.com/rafabd1/SecretHound/core"
+	"github.com/rafabd1/SecretHound/core/patterns"
+	"github.com/rafabd1/SecretHound/core/scanner"
 	"github.com/rafabd1/SecretHound/networking"
 	"github.com/rafabd1/SecretHound/output"
 	"github.com/rafabd1/SecretHound/utils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
-var scanCmd = &cobra.Command{
-	Hidden:  true,
-	Use:     "scan [flags] [urls/files/directories...]",
-	Short:   "Scan files for secrets",
-	Long:    `Scan files for secrets using regex patterns.`, 
-	RunE:    runScan,
-	Aliases: []string{"s"},
-}
+// Removed scanCmd definition
+// var scanCmd = &cobra.Command{...}
 
+// runScan is now called by rootCmd
 func runScan(cmd *cobra.Command, args []string) error {
+	// Use Viper to get config values bound from flags/config file
+	vip := viper.GetViper()
+
+	// Initialize Logger (using viper value)
+	logger := output.NewLogger(vip.GetBool("verbose"))
+
+	// --- List Patterns Handling ---
+	if vip.GetBool("list_patterns") {
+		printPatternList() // Assumes printPatternList is correct
+		return nil // Exit after listing
+	}
+
+	// --- Validate Category Flags ---
+	includeCats := vip.GetStringSlice("include_categories")
+	excludeCats := vip.GetStringSlice("exclude_categories")
+	if len(includeCats) > 0 && len(excludeCats) > 0 {
+		logger.Error("Error: --include-categories and --exclude-categories flags cannot be used together.")
+		os.Exit(1)
+	}
+
+	// --- Centralized Pattern Loading ---
+	pm := patterns.NewPatternManager() // Creates manager
+	err := pm.LoadPatterns(includeCats, excludeCats) // Load patterns respecting filters
+	if err != nil {
+		logger.Error("%s", fmt.Sprintf("Error loading patterns: %v", err))
+		os.Exit(1)
+	}
+	logger.Info("%s", fmt.Sprintf("Loaded %d patterns.", pm.GetPatternCount()))
+	if len(includeCats) > 0 {
+		logger.Info("%s", fmt.Sprintf("Filtering patterns to include only categories: %v", includeCats))
+	}
+	if len(excludeCats) > 0 {
+		logger.Info("%s", fmt.Sprintf("Filtering patterns to exclude categories: %v", excludeCats))
+	}
+
+	// Create RegexManager and associate the configured PatternManager
+	regexManager := core.NewRegexManager()
+	regexManager.SetPatternManager(pm)
+
+	// Create the unified Processor - MOVED inside remote scan goroutine
+	// processor := core.NewProcessor(regexManager, logger)
+
+	// --- Get other config values from Viper ---
+	inputFile := vip.GetString("input_file")
+	outputFile := vip.GetString("output_file")
+	// timeout := vip.GetInt("timeout") // Read inside processRemoteURLs
+	// maxRetries := vip.GetInt("retries") // Read inside processRemoteURLs
+	// concurrency := vip.GetInt("concurrency") // Read inside process* funcs
+	// rateLimit := vip.GetInt("rate_limit") // Read inside processRemoteURLs
+	// regexFile := vip.GetString("regex_file") // Deprecated?
+	// customHeader := vip.GetStringSlice("headers") // Used inside processRemoteURLs
+	// insecureSkipVerify := vip.GetBool("insecure") // Used inside processRemoteURLs
+
+	// Remove redundant assignments to global config.Config
+	/*
 	config.Config.InputFile = inputFile
 	config.Config.OutputFile = outputFile
-	config.Config.Verbose = verbose
+	config.Config.Verbose = vip.GetBool("verbose")
 	config.Config.Timeout = timeout
 	config.Config.MaxRetries = maxRetries
 	config.Config.Concurrency = concurrency
 	config.Config.RateLimit = rateLimit
 	config.Config.RegexFile = regexFile
-
-	logger := output.NewLogger(verbose)
+	*/
 
 	timeColor := color.New(color.FgHiBlack).SprintfFunc()
 	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
@@ -48,7 +100,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	var writer *output.Writer
 	if outputFile != "" {
-		var err error
+		// var err error // Already declared above for LoadPatterns
 		writer, err = output.NewWriter(outputFile)
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %v", err)
@@ -56,6 +108,8 @@ func runScan(cmd *cobra.Command, args []string) error {
 		defer writer.Close()
 	}
 
+	// --- Input Collection ---
+	// Pass logger to collectInputSources
 	inputs, err := collectInputSources(inputFile, args, logger)
 	if err != nil {
 		return err
@@ -69,14 +123,21 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	logInputSummary(logger, remoteURLs, localFiles)
 
+	// --- Execute Scans (with corrected logic for passing patterns) ---
 	var wg sync.WaitGroup
-	
+
 	if len(remoteURLs) > 0 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := processRemoteURLs(remoteURLs, logger, writer); err != nil {
-				logger.Error("Error processing remote URLs: %v", err)
+			// Create RegexManager & Processor specifically for remote scan
+			regexManager := core.NewRegexManager()
+			regexManager.SetPatternManager(pm) // Use the filtered pm
+			processor := core.NewProcessor(regexManager, logger) // Create processor HERE
+
+			// Pass the processor AND the pm (for logging count)
+			if err := processRemoteURLs(remoteURLs, logger, writer, processor, pm); err != nil { // Pass processor AND pm
+				logger.Error("%s", fmt.Sprintf("Error processing remote URLs: %v", err))
 			}
 		}()
 	}
@@ -85,8 +146,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := processLocalFiles(localFiles, logger, writer); err != nil {
-				logger.Error("Error processing local files: %v", err)
+			// Pass only the PatternManager (pm) to local scan function
+			if err := processLocalFiles(localFiles, logger, writer, pm); err != nil { // Pass only pm
+				logger.Error("%s", fmt.Sprintf("Error processing local files: %v", err))
 			}
 		}()
 	}
@@ -98,32 +160,32 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}()
 
 	<-done
-	
-	logger.Flush()
-	
-	time.Sleep(100 * time.Millisecond)
 
+	logger.Flush()
+
+	// Rest of the original runScan code for summary...
+	time.Sleep(100 * time.Millisecond)
 	if writer != nil {
 		secretCount := writer.GetCount()
 		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		fmt.Fprintf(os.Stderr, "%s %s %s\n",
 			timeStr,
-			color.GreenString("[SUCCESS]"), 
+			color.GreenString("[SUCCESS]"),
 			fmt.Sprintf("Found a total of %d secrets", secretCount))
-		
+
 		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		fmt.Fprintf(os.Stderr, "%s %s %s\n",
 			timeStr,
-			color.CyanString("[INFO]"), 
+			color.CyanString("[INFO]"),
 			fmt.Sprintf("Results saved to: %s", outputFile))
 	}
 
 	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-	fmt.Fprintf(os.Stderr, "\n%s %s %s\n", 
+	fmt.Fprintf(os.Stderr, "\n%s %s %s\n",
 		timeStr,
-		color.CyanString("[INFO]"), 
+		color.CyanString("[INFO]"),
 		"Scan completed. Exiting.")
-	
+
 	time.Sleep(200 * time.Millisecond)
 
 	return nil
@@ -156,11 +218,30 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 					}
 					inputs = append(inputs, dirFiles...)
 				} else {
-					inputs = append(inputs, arg)
+					// It's a file, check if it's a list of URLs/paths
+					isList, contents, listErr := isFileURLList(arg)
+					if listErr != nil {
+						// Log error from isFileURLList but proceed assuming it's a single file
+						logger.Warning("Error checking if '%s' is a list file: %v. Treating as single file.", arg, listErr)
+						inputs = append(inputs, arg) // Add the file path itself
+					} else if isList {
+						listCount := 0
+						for _, line := range contents {
+							if line != "" && !strings.HasPrefix(line, "#") {
+								inputs = append(inputs, line)
+								listCount++
+							}
+						}
+						logger.Info("Added %d sources from list file (argument): %s", listCount, arg)
+					} else {
+						// Not a list, add the file path itself
+						inputs = append(inputs, arg)
+						logger.Info("Added single file to scan (argument): %s", arg)
+					}
 				}
 			}
 		}
-		logger.Info("Added %d sources from command line arguments", len(args))
+		// logger.Info("Processed %d sources from command line arguments", len(args)) // Logged inside loop now
 	}
 
 	if inputFile != "" {
@@ -426,7 +507,7 @@ func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
 /* 
    Processes remote URLs using the web scanning logic
 */
-func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writer) error {
+func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writer, processor *core.Processor, pm *patterns.PatternManager) error {
 	validURLs := make([]string, 0, len(urls))
 	for _, url := range urls {
 		sanitizedURL := utils.SanitizeURL(url)
@@ -444,35 +525,46 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 	domainManager := networking.NewDomainManager()
 	domainManager.GroupURLsByDomain(validURLs)
 
+	// Get config from Viper
+	vip := viper.GetViper()
+	timeout := vip.GetInt("timeout")
+	maxRetries := vip.GetInt("retries")
+	insecureSkipVerify := vip.GetBool("insecure")
+	customHeader := vip.GetStringSlice("headers")
+	rateLimit := vip.GetInt("rate_limit")
+	concurrency := vip.GetInt("concurrency")
+
 	client := networking.NewClient(timeout, maxRetries)
-	
 	if insecureSkipVerify {
 		client.SetInsecureSkipVerify(true)
 		logger.Info("SSL/TLS certificate verification disabled")
 	}
-	
-	if len(customHeader) > 0 {
-		for _, header := range customHeader {
-			parts := strings.SplitN(header, ":", 2)
-			if len(parts) == 2 {
-				name := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
-				client.SetRequestHeader(name, value)
-				logger.Debug("Set custom header: %s: %s", name, value)
-			} else {
-				logger.Warning("Invalid header format (should be 'Name: Value'): %s", header)
-			}
+	// Set headers
+	headersMap := make(map[string]string)
+	for _, h := range customHeader {
+		parts := strings.SplitN(h, ":", 2)
+		if len(parts) == 2 {
+			name := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			headersMap[name] = value
+			client.SetRequestHeader(name, value)
+			logger.Debug("Set custom header: %s: %s", name, value)
+		} else {
+			logger.Warning("Invalid header format (should be 'Name: Value'): %s", h)
 		}
 	}
-	
 	if rateLimit > 0 {
 		client.SetGlobalRateLimit(rateLimit)
 	}
 
-	regexManager := createAndInitRegexManager(logger)
+	// Processor is passed in, use it
 
+	// Rest of the setup and logging...
 	timeColor := color.New(color.FgHiBlack).SprintfFunc()
 	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
+
+	// Get pattern count directly from the passed PatternManager
+	patternCount := pm.GetPatternCount()
 
 	fmt.Fprintf(os.Stderr, "%s %s %s\n",
 		timeStr,
@@ -480,42 +572,8 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 		fmt.Sprintf("Processing %d URLs across %d domains with %d regex patterns (%d workers)",
 			len(validURLs),
 			domainManager.GetDomainCount(),
-			regexManager.GetPatternCount(),
+			patternCount, // Use count from pm
 			concurrency))
-			
-	// Determine rate limit string
-	rateLimitStr := "auto"
-	currentRateLimit := client.GetRateLimit()
-	if currentRateLimit > 0 {
-		rateLimitStr = fmt.Sprintf("%d", currentRateLimit)
-	}
-			
-	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-	fmt.Fprintf(os.Stderr, "%s %s %s\n",
-		timeStr,
-		color.CyanString("[INFO]"),
-		fmt.Sprintf("HTTP config: %d second timeout | %d max retries | %s requests per domain", 
-			timeout, maxRetries, rateLimitStr))
-
-	if len(customHeader) > 0 {
-		headerNames := make([]string, 0, len(customHeader))
-		for _, header := range customHeader {
-			parts := strings.SplitN(header, ":", 2)
-			if len(parts) == 2 {
-				headerNames = append(headerNames, strings.TrimSpace(parts[0]))
-			}
-		}
-		
-		if len(headerNames) > 0 {
-			timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-			fmt.Fprintf(os.Stderr, "%s %s %s\n",
-				timeStr,
-				color.CyanString("[INFO]"),
-				fmt.Sprintf("Using custom headers: %s", strings.Join(headerNames, ", ")))
-		}
-	}
-
-	processor := core.NewProcessor(regexManager, logger)
 
 	scheduler := core.NewScheduler(domainManager, client, processor, writer, logger)
 	scheduler.SetConcurrency(concurrency)
@@ -523,122 +581,110 @@ func processRemoteURLs(urls []string, logger *output.Logger, writer *output.Writ
 	time.Sleep(100 * time.Millisecond)
 
 	err := scheduler.Schedule(validURLs)
-	
+
 	schedulerStats := scheduler.GetStats()
-	
-	timeColor = color.New(color.FgHiBlack).SprintfFunc()
-	
 	duration := schedulerStats.EndTime.Sub(schedulerStats.StartTime)
-	urlsPerSecond := float64(schedulerStats.ProcessedURLs) / duration.Seconds()
-	
+	urlsPerSecond := 0.0
+	if duration.Seconds() > 0 {
+		urlsPerSecond = float64(schedulerStats.ProcessedURLs) / duration.Seconds()
+	}
 	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
 		timeStr,
-		color.CyanString("[INFO]"), 
+		color.CyanString("[INFO]"),
 		fmt.Sprintf("Remote URL processing completed in %.2f seconds", duration.Seconds()))
-	
-	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
 		timeStr,
-		color.CyanString("[INFO]"), 
+		color.CyanString("[INFO]"),
 		fmt.Sprintf("Processed %d URLs (%.2f URLs/second)", schedulerStats.ProcessedURLs, urlsPerSecond))
-	
-	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-	fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+	fmt.Fprintf(os.Stderr, "%s %s %s\n",
 		timeStr,
-		color.CyanString("[INFO]"), 
+		color.CyanString("[INFO]"),
 		fmt.Sprintf("Failed to process %d URLs", schedulerStats.FailedURLs))
-	
 	if schedulerStats.RateLimitHits > 0 || schedulerStats.WAFBlockHits > 0 {
 		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		fmt.Fprintf(os.Stderr, "%s %s %s\n",
 			timeStr,
-			color.CyanString("[INFO]"), 
-			fmt.Sprintf("Encountered rate limiting %d times, WAF blocks %d times", 
+			color.CyanString("[INFO]"),
+			fmt.Sprintf("Encountered rate limiting %d times, WAF blocks %d times",
 				schedulerStats.RateLimitHits, schedulerStats.WAFBlockHits))
 	}
-	
 	time.Sleep(100 * time.Millisecond)
-	
 	return err
 }
 
 /* 
    Processes local files using the scanner
 */
-func processLocalFiles(files []string, logger *output.Logger, writer *output.Writer) error {
-	regexManager := core.NewRegexManager()
-	
-	err := regexManager.LoadPredefinedPatterns()
-	if err != nil {
-		return fmt.Errorf("failed to load patterns: %v", err)
-	}
-	
-	regexManager.InjectDefaultPatternsDirectly()
-	
-	processor := core.NewProcessor(regexManager, logger)
+func processLocalFiles(files []string, logger *output.Logger, writer *output.Writer, pm *patterns.PatternManager) error {
+	// Get config from Viper
+	vip := viper.GetViper()
+	concurrency := vip.GetInt("concurrency")
+	// excludeSecrets := vip.GetStringSlice("exclude_secrets") // No longer needed here
 
-	localScanner := core.NewLocalScanner(processor, writer, logger)
-	
-	localScanner.SetConcurrency(concurrency)
-	
+	// Processor is not needed here, LocalScanner uses pm directly
+
+	// Use the core/scanner/local_scanner
+	scannerCfg := scanner.LocalScannerConfig{
+		Concurrency: concurrency,
+		MaxFileSize: 10 * 1024 * 1024, // Or get from viper
+	}
+	// NewLocalScanner expects PatternManager, Writer, Logger, Config
+	localScanner := scanner.NewLocalScanner(pm, writer, logger, scannerCfg)
+
 	return localScanner.ScanFiles(files)
 }
 
-/* 
-   Creates and initializes a RegexManager with patterns
-*/
-func createAndInitRegexManager(logger *output.Logger) *core.RegexManager {
-	regexManager := core.NewRegexManager()
-	
-	if (regexFile != "") {
-		err := regexManager.LoadPatternsFromFile(regexFile)
-		if err != nil {
-			if verbose {
-				logger.Warning("Failed to load regex patterns from file: %v", err)
-				logger.Info("Loading predefined patterns instead")
-				regexManager.InjectDefaultPatternsDirectly()
-			
-				err = regexManager.LoadPredefinedPatterns()
-				if (err != nil) {
-					logger.Warning("Failed to load predefined regex patterns: %v", err)
-				}
-			}
-		} else {
-			timeColor := color.New(color.FgHiBlack).SprintfFunc()
-			timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
-			fmt.Fprintf(os.Stderr, "%s %s %s\n",
-				timeStr,
-				color.CyanString("[INFO]"),
-				fmt.Sprintf("Loaded regex patterns from file: %s", regexFile))
+// printPatternList prints available patterns
+func printPatternList() {
+	fmt.Println("Available Pattern Categories and Patterns:")
+	fmt.Println("===========================================")
+
+	categorized := make(map[string][]struct{ Name string; Config patterns.PatternConfig })
+	var categories []string
+	categoryMap := make(map[string]bool)
+
+	// Iterate over DefaultPatterns (defined in patterns package)
+	for name, config := range patterns.DefaultPatterns.Patterns {
+		if !config.Enabled {
+			continue // Optionally skip disabled ones even in list
 		}
-	} else {
-		regexManager.InjectDefaultPatternsDirectly()
-		
-		err := regexManager.LoadPredefinedPatterns()
-		if err != nil {
-			logger.Warning("Failed to load predefined regex patterns: %v", err)
+		if config.Category == "" {
+			config.Category = "uncategorized" // Assign default if missing
+		}
+		if !categoryMap[config.Category] {
+			categories = append(categories, config.Category)
+			categoryMap[config.Category] = true
+		}
+		// Store name along with config for sorting/printing
+		categorized[config.Category] = append(categorized[config.Category], struct{ Name string; Config patterns.PatternConfig }{Name: name, Config: config})
+	}
+
+	// Sort categories alphabetically
+	sort.Strings(categories)
+
+	// Print grouped patterns
+	for _, category := range categories {
+		fmt.Printf("\n[%s]\n", strings.ToUpper(category))
+		categoryPatterns := categorized[category]
+		// Sort patterns within category alphabetically by name
+		sort.Slice(categoryPatterns, func(i, j int) bool {
+			return categoryPatterns[i].Name < categoryPatterns[j].Name
+		})
+
+		for _, p := range categoryPatterns {
+			fmt.Printf("  - %-30s : %s\n", p.Name, p.Config.Description)
 		}
 	}
-	
-	patternCount := regexManager.GetPatternCount()
-	if patternCount < 50 {
-		logger.Warning("Loaded only %d regex patterns. Expected at least 50 patterns.", patternCount)
-		
-		regexManager.InjectDefaultPatternsDirectly()
-	}
-	
-	return regexManager
+	fmt.Println("===========================================")
+	fmt.Println("\nNote: Use category names with --include-categories or --exclude-categories flags.")
 }
 
+// Removed init() function as flags are defined in root.go
+/*
 func init() {
 	rootCmd.AddCommand(scanCmd)
-	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
-	scanCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "HTTP request timeout in seconds")
-	scanCmd.Flags().IntVarP(&maxRetries, "retries", "r", 3, "Maximum retries per request")
-	scanCmd.Flags().IntVarP(&concurrency, "concurrency", "n", 20, "Number of concurrent workers")
-	scanCmd.Flags().IntVarP(&rateLimit, "rate-limit", "l", 0, "Requests per second per domain (default 0 = auto)")
-	scanCmd.Flags().StringVar(&regexFile, "regex-file", "", "Path to custom regex patterns file (optional)")
-	scanCmd.Flags().StringSliceVarP(&customHeader, "header", "H", []string{}, "Custom headers to add to requests (e.g., \"Authorization: Bearer token\")")
-	scanCmd.Flags().BoolVar(&insecureSkipVerify, "insecure", false, "Skip SSL/TLS certificate verification")
+	// ... (flag definitions were here)
+	// ... (viper bindings were here)
 }
+*/
