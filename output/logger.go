@@ -1,35 +1,38 @@
 package output
 
 import (
-    "fmt"
-    "os"
-    "strings"
-    "sync"
-    "time"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"time"
 
-    "github.com/fatih/color"
-    "github.com/rafabd1/SecretHound/utils"
+	"github.com/fatih/color"
+	"github.com/rafabd1/SecretHound/utils"
 )
 
 type LogLevel int
 
 const (
-    DEBUG LogLevel = iota
-    INFO
-    WARNING
-    ERROR
-    SUCCESS
+    // Levels ordered by verbosity (lower value = more verbose)
+    LevelDebug LogLevel = iota
+    LevelInfo
+    LevelSuccess // Success messages are important, shown unless silent
+    LevelWarning
+    LevelError
+    LevelFatal // Not really a level, but used for critical errors
+    LevelSilent // A level higher than Error to suppress almost everything
 )
 
 type LogMessage struct {
     Level     LogLevel
     Message   string
     Time      time.Time
-    Critical  bool
+    Critical  bool // Keep critical for very specific errors if needed
 }
 
 type Logger struct {
-    verbose     bool
+    minLevel    LogLevel // Use a minimum level instead of just verbose/silent bools
     outputMu    sync.Mutex
     logQueue    chan LogMessage
     done        chan struct{}
@@ -48,25 +51,34 @@ type Logger struct {
     secretsMutex  sync.Mutex
 }
 
-func NewLogger(verbose bool) *Logger {
-    logger := &Logger{
-        verbose:  verbose,
-        logQueue: make(chan LogMessage, 100),
-        done:     make(chan struct{}),
+// NewLogger now accepts verbose and silent flags to determine the minimum log level
+func NewLogger(verbose, silent bool) *Logger {
+	minLogLevel := LevelSuccess // Default: Show Success, Warning, Error
+	if verbose {
+		minLogLevel = LevelDebug // Verbose: Show everything
+	}
+	if silent {
+		minLogLevel = LevelSuccess // Silent: Will be further filtered in writeLog
+	}
 
-        timeColor:    color.New(color.FgHiBlack).SprintfFunc(),
-        debugColor:   color.New(color.FgHiBlack).SprintfFunc(),
-        infoColor:    color.New(color.FgCyan).SprintfFunc(),
-        warningColor: color.New(color.FgYellow).SprintfFunc(),
-        errorColor:   color.New(color.FgRed, color.Bold).SprintfFunc(),
-        successColor: color.New(color.FgGreen, color.Bold).SprintfFunc(),
+	logger := &Logger{
+		minLevel: minLogLevel,
+		logQueue: make(chan LogMessage, 100),
+		done:     make(chan struct{}),
 
-        loggedSecrets: make(map[string]bool),
-    }
+		timeColor:    color.New(color.FgHiBlack).SprintfFunc(),
+		debugColor:   color.New(color.FgHiBlack).SprintfFunc(),
+		infoColor:    color.New(color.FgCyan).SprintfFunc(),
+		warningColor: color.New(color.FgYellow).SprintfFunc(),
+		errorColor:   color.New(color.FgRed, color.Bold).SprintfFunc(),
+		successColor: color.New(color.FgGreen, color.Bold).SprintfFunc(),
 
-    go logger.processLogs()
+		loggedSecrets: make(map[string]bool),
+	}
 
-    return logger
+	go logger.processLogs()
+
+	return logger
 }
 
 func (l *Logger) SetProgressBar(pb *ProgressBar) {
@@ -92,58 +104,61 @@ func (l *Logger) processLogs() {
 }
 
 func (l *Logger) writeLog(msg LogMessage) {
-    if !l.verbose && msg.Level == DEBUG {
-        return
-    }
-    
-    if !l.verbose && (msg.Level == INFO || msg.Level == WARNING) {
-        return
-    }
-    
-    if !l.verbose && msg.Level == ERROR && !msg.Critical {
-        return
-    }
-    
-    tc := GetTerminalController()
-    
-    l.progressMu.Lock()
-    pb := l.progressBar
-    l.progressMu.Unlock()
-    
-    if pb != nil {
-        pb.PauseRender()
-    }
-    
-    tc.CoordinateOutput(func() {
-        timestamp := l.timeColor("[%s]", msg.Time.Format("15:04:05"))
-        var prefix string
-        var formatted string
+	// Basic level check: Suppress if lower than minimum required level
+	if msg.Level < l.minLevel {
+		return
+	}
 
-        switch msg.Level {
-        case DEBUG:
-            prefix = l.debugColor("[DEBUG]")
-            formatted = l.debugColor("%s", msg.Message)
-        case INFO:
-            prefix = l.infoColor("[INFO]")
-            formatted = msg.Message
-        case WARNING:
-            prefix = l.warningColor("[WARNING]")
-            formatted = l.warningColor("%s", msg.Message)
-        case ERROR:
-            prefix = l.errorColor("[ERROR]")
-            formatted = l.errorColor("%s", msg.Message)
-        case SUCCESS:
-            prefix = l.successColor("[SUCCESS]")
-            formatted = l.successColor("%s", msg.Message)
-        }
+	// Specific check for SILENT mode: Only allow SUCCESS messages
+	// Assumes minLevel was set to LevelSuccess when silent=true
+	if l.minLevel == LevelSuccess && msg.Level != LevelSuccess {
+	    // Is this a critical error we absolutely must show despite silent?
+	    // Let's keep silent truly silent for now, only showing Success.
+	    // Fatal errors are handled separately.
+	    return // Suppress non-Success messages in silent mode
+	}
 
-        fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
-    })
-    
-    if pb != nil {
-        time.Sleep(1 * time.Millisecond)
-        pb.ResumeRender()
-    }
+	// --- Proceed with printing if not suppressed ---
+	tc := GetTerminalController()
+
+	l.progressMu.Lock()
+	pb := l.progressBar
+	l.progressMu.Unlock()
+
+	if pb != nil {
+		pb.PauseRender()
+	}
+
+	tc.CoordinateOutput(func() {
+		timestamp := l.timeColor("[%s]", msg.Time.Format("15:04:05"))
+		var prefix string
+		var formatted string
+
+		switch msg.Level {
+		case LevelDebug:
+			prefix = l.debugColor("[DEBUG]")
+			formatted = l.debugColor("%s", msg.Message)
+		case LevelInfo:
+			prefix = l.infoColor("[INFO]")
+			formatted = msg.Message
+		case LevelWarning:
+			prefix = l.warningColor("[WARNING]")
+			formatted = l.warningColor("%s", msg.Message)
+		case LevelError:
+			prefix = l.errorColor("[ERROR]")
+			formatted = l.errorColor("%s", msg.Message)
+		case LevelSuccess:
+			prefix = l.successColor("[SUCCESS]")
+			formatted = l.successColor("%s", msg.Message)
+		}
+
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
+	})
+
+	if pb != nil {
+		time.Sleep(1 * time.Millisecond)
+		pb.ResumeRender()
+	}
 }
 
 func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) {
@@ -151,7 +166,7 @@ func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) 
         Level:   level,
         Message: fmt.Sprintf(format, args...),
         Time:    time.Now(),
-        Critical: isCriticalMessage(level, format),
+        Critical: isCriticalMessage(level, format), // Determine criticality
     }
 
     select {
@@ -164,57 +179,81 @@ func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) 
 }
 
 /* 
-   Determines if a message should be shown regardless of verbose mode 
+   Determines if a message should bypass normal level filtering
+   (Used primarily for critical ERROR messages that should show even if default level is higher)
+   NOTE: This is less relevant now with the stricter silent mode logic in writeLog.
 */
 func isCriticalMessage(level LogLevel, message string) bool {
-    if level == SUCCESS {
-        return true
-    }
-    
-    if level == ERROR {
-        criticalPatterns := []string{
-            "failed to create output file",
-            "no valid input sources found",
-            "failed to access input file",
-            "failed to load regex patterns",
-            "timeout exceeded",
-            "fatal error",
-        }
-        
-        for _, pattern := range criticalPatterns {
-            if strings.Contains(strings.ToLower(message), pattern) {
-                return true
-            }
-        }
-    }
-    
-    return false
+	// SUCCESS messages are no longer automatically critical
+	if level == LevelError {
+		// Define patterns for errors that MUST be shown even if minLevel is Warning/Success
+		criticalPatterns := []string{
+			"failed to create output file",
+			"no valid input sources found",
+			"failed to access input file",
+			"error loading patterns:",
+			"fatal error",
+		}
+
+		msgLower := strings.ToLower(message)
+		for _, pattern := range criticalPatterns {
+			if strings.Contains(msgLower, pattern) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (l *Logger) Debug(format string, args ...interface{}) {
-    l.enqueueLog(DEBUG, format, args...)
+    l.enqueueLog(LevelDebug, format, args...)
 }
 
 func (l *Logger) Info(format string, args ...interface{}) {
-    l.enqueueLog(INFO, format, args...)
+    l.enqueueLog(LevelInfo, format, args...)
 }
 
 func (l *Logger) Warning(format string, args ...interface{}) {
-    l.enqueueLog(WARNING, format, args...)
+    l.enqueueLog(LevelWarning, format, args...)
 }
 
 func (l *Logger) Error(format string, args ...interface{}) {
-    l.enqueueLog(ERROR, format, args...)
+    l.enqueueLog(LevelError, format, args...)
 }
 
 func (l *Logger) Success(format string, args ...interface{}) {
-    l.enqueueLog(SUCCESS, format, args...)
+    l.enqueueLog(LevelSuccess, format, args...)
+}
+
+// Fatal logs directly to stderr and exits, bypassing queue and levels
+func (l *Logger) Fatal(format string, args ...interface{}) {
+    l.outputMu.Lock() // Ensure atomicity with other logs
+    defer l.outputMu.Unlock()
+    
+    tc := GetTerminalController()
+    pb := l.progressBar
+    if pb != nil {
+        pb.PauseRender()
+    }
+
+    timestamp := l.timeColor("[%s]", time.Now().Format("15:04:05"))
+    prefix := l.errorColor("[FATAL]")
+    formatted := l.errorColor(format, args...)
+    
+    tc.CoordinateOutput(func() {
+        fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
+    })
+    
+    l.Close() // Attempt to close gracefully
+    os.Exit(1)
 }
 
 /* 
    Logs a discovered secret while avoiding duplicates 
 */
 func (l *Logger) SecretFound(secretType string, secretValue string, url string) {
+    // This message uses Success level, it will be shown unless silent mode
+    // is configured to suppress LevelSuccess.
     key := fmt.Sprintf("%s:%s:%s", url, secretType, secretValue)
     
     l.secretsMutex.Lock()
@@ -305,12 +344,12 @@ func (l *Logger) ResetState() {
     l.progressMu.Unlock()
 }
 
-func (l *Logger) IsVerbose() bool {
-    return l.verbose
+// IsSilent returns true if the logger is configured to suppress most output
+func (l *Logger) IsSilent() bool {
+    return l.minLevel >= LevelSuccess // Or adjust based on exact silent definition
 }
 
-func (l *Logger) SetVerbose(verbose bool) {
-    l.outputMu.Lock()
-    defer l.outputMu.Unlock()
-    l.verbose = verbose
+// IsVerbose remains useful
+func (l *Logger) IsVerbose() bool {
+    return l.minLevel == LevelDebug
 }

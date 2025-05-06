@@ -20,7 +20,7 @@ func main() {
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	printBanner()
+	// printBanner() // REMOVED - Header is now printed conditionally in runScan
 	
 	setupSignalHandling()
 
@@ -38,18 +38,4 @@ func setupSignalHandling() {
 		time.Sleep(500 * time.Millisecond)
 		os.Exit(0)
 	}()
-}
-
-func printBanner() {
-	banner := `
-   _____                   __  __  __                      __
-  / ___/___  _____________/ /_/ / / /___  __  ______  ____/ /
-  \__ \/ _ \/ ___/ ___/ __/ __/ /_/ / __ \/ / / / __ \/ __  / 
- ___/ /  __/ /__/ /  / /_/ /_/ __  / /_/ / /_/ / / / / /_/ /  
-/____/\___/\___/_/   \__/\__/_/ /_/\____/\__,_/_/ /_/\__,_/   v%s
-
-Secrets Finder | Created by github.com/rafabd1
-
-`
-	fmt.Fprintf(os.Stderr, banner, cmd.Version)
 }

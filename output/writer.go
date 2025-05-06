@@ -5,39 +5,36 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
-	"time"
 )
 
 type Writer struct {
-	file     *os.File
-	mu       sync.Mutex
-	jsonMode bool
-	csvMode  bool
-	count    int
+	file               *os.File
+	mu                 sync.Mutex
+	format             string
+	rawMode            bool
+	isFirstRawJsonWrite bool
+	count              int
 }
 
-type SecretOutput struct {
-	Type      string    `json:"type"`
-	Value     string    `json:"value"`
-	URL       string    `json:"url"`
-	Context   string    `json:"context"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
-/* 
+/*
    Creates a new writer instance for outputting secrets to a file
-   with format determined by the file extension
+   Accepts rawMode flag.
 */
-func NewWriter(outputPath string) (*Writer, error) {
+func NewWriter(outputPath string, rawMode bool) (*Writer, error) {
 	dir := filepath.Dir(outputPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	ext := filepath.Ext(outputPath)
-	jsonMode := ext == ".json"
-	csvMode := ext == ".csv"
+	ext := strings.ToLower(filepath.Ext(outputPath))
+	format := "txt"
+	if ext == ".json" {
+		format = "json"
+	} else if ext == ".csv" {
+		format = "csv"
+	}
 
 	file, err := os.Create(outputPath)
 	if err != nil {
@@ -45,20 +42,21 @@ func NewWriter(outputPath string) (*Writer, error) {
 	}
 
 	writer := &Writer{
-		file:     file,
-		jsonMode: jsonMode,
-		csvMode:  csvMode,
-		count:    0,
+		file:               file,
+		format:             format,
+		rawMode:            rawMode,
+		isFirstRawJsonWrite: true,
+		count:              0,
 	}
 
-	if writer.jsonMode {
+	if format == "json" && !rawMode {
 		_, err = file.WriteString("[\n")
 		if err != nil {
 			file.Close()
 			return nil, fmt.Errorf("failed to write JSON header: %v", err)
 		}
-	} else if writer.csvMode {
-		_, err = file.WriteString("Type,Value,URL,Context,Timestamp\n")
+	} else if format == "csv" && !rawMode {
+		_, err = file.WriteString("Type,Value,URL,Context\n")
 		if err != nil {
 			file.Close()
 			return nil, fmt.Errorf("failed to write CSV header: %v", err)
@@ -75,37 +73,64 @@ func (w *Writer) WriteSecret(secretType, value, url, context string, line int) e
 	w.count++
 
 	var output string
-	if w.jsonMode {
-		secret := map[string]interface{}{
-			"type":      secretType,
-			"value":     value,
-			"url":       url,
-			"context":   context,
-			"timestamp": time.Now().Format(time.RFC3339),
-		}
+	var err error
 
-		jsonBytes, err := json.Marshal(secret)
-		if err != nil {
-			return fmt.Errorf("failed to marshal JSON: %v", err)
-		}
-
-		if w.count > 1 {
-			output = ",\n" + string(jsonBytes)
+	if w.rawMode {
+		if w.format == "json" {
+			prefix := ""
+			if w.isFirstRawJsonWrite {
+				prefix = "["
+				w.isFirstRawJsonWrite = false
+			} else {
+				prefix = ","
+			}
+			jsonValueBytes, jsonErr := json.Marshal(value)
+			if jsonErr != nil {
+				return fmt.Errorf("failed to marshal raw JSON value: %v", jsonErr)
+			}
+			output = prefix + string(jsonValueBytes)
 		} else {
-			output = string(jsonBytes)
+			output = value + "\n"
 		}
+		_, err = w.file.WriteString(output)
+
 	} else {
-		output = fmt.Sprintf("[%s] %s\nURL: %s\nContext: %s\nTimestamp: %s\n\n",
-			secretType, value, url, context, time.Now().Format(time.RFC3339))
+		if w.format == "json" {
+			secret := map[string]interface{}{
+				"type":    secretType,
+				"value":   value,
+				"url":     url,
+				"context": context,
+			}
+			jsonBytes, jsonErr := json.MarshalIndent(secret, "  ", "  ")
+			if jsonErr != nil {
+				return fmt.Errorf("failed to marshal standard JSON: %v", jsonErr)
+			}
+			if w.count > 1 {
+				output = ",\n  " + string(jsonBytes)
+			} else {
+				output = "  " + string(jsonBytes)
+			}
+			_, err = w.file.WriteString(output)
+
+		} else if w.format == "csv" {
+			output = fmt.Sprintf("%s,\"%s\",\"%s\",\"%s\"\n",
+				secretType, escapeCsv(value), escapeCsv(url), escapeCsv(context))
+			_, err = w.file.WriteString(output)
+
+		} else {
+			output = fmt.Sprintf("[%s] %s\nURL: %s\nContext: %s\n\n",
+				secretType, value, url, context)
+			_, err = w.file.WriteString(output)
+		}
 	}
-	
-	_, err := fmt.Fprintln(w.file, output)
+
 	return err
 }
 
-/* 
-   Finalizes and closes the output file, properly terminating 
-   JSON format if needed
+/*
+   Finalizes and closes the output file, properly terminating
+   JSON formats if needed.
 */
 func (w *Writer) Close() error {
 	w.mu.Lock()
@@ -115,16 +140,30 @@ func (w *Writer) Close() error {
 		return nil
 	}
 
-	if w.jsonMode {
-		_, err := w.file.WriteString("\n]")
-		if err != nil {
-			return fmt.Errorf("failed to finalize JSON file: %v", err)
+	var finalWriteErr error
+	if w.format == "json" {
+		if w.rawMode {
+			if !w.isFirstRawJsonWrite {
+				_, finalWriteErr = w.file.WriteString("]")
+			} else {
+				_, finalWriteErr = w.file.WriteString("[]")
+			}
+		} else {
+			_, finalWriteErr = w.file.WriteString("\n]")
 		}
 	}
 
-	err := w.file.Close()
+	closeErr := w.file.Close()
 	w.file = nil
-	return err
+
+	if finalWriteErr != nil {
+		return fmt.Errorf("failed to finalize output file: %v", finalWriteErr)
+	}
+	return closeErr
+}
+
+func escapeCsv(field string) string {
+	return strings.ReplaceAll(field, "\"", "\"\"")
 }
 
 func (w *Writer) GetCount() int {

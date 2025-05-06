@@ -94,7 +94,7 @@ func NewClient(timeout int, maxRetries int) *Client {
 		},
 		stats:    ClientStats{},
 		insecure: false,
-		logger:   output.NewLogger(false),
+		logger:   output.NewLogger(false, false),
 	}
 
 	return client
