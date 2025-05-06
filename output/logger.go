@@ -281,45 +281,42 @@ func (l *Logger) SecretFound(secretType string, secretValue string, url string) 
    Flushes all queued log messages and ensures they are processed 
 */
 func (l *Logger) Flush() {
-    startTime := time.Now()
-    maxWaitTime := 1000 * time.Millisecond
-    
-    for len(l.logQueue) > 0 {
-        if time.Since(startTime) > maxWaitTime {
-            break
-        }
-    
-        time.Sleep(20 * time.Millisecond)
-    }
-    
-    time.Sleep(200 * time.Millisecond)
-    
-    l.progressMu.Lock()
-    if l.progressBar != nil {
-        l.progressBar.Stop()
-        l.progressBar.Finalize()
-        l.progressBar = nil
-    }
-    l.progressMu.Unlock()
-    
-    tc := GetTerminalController()
-    if tc.IsTerminal() {
-        tc.ClearLine()
-    }
+	startTime := time.Now()
+	maxWaitTime := 500 * time.Millisecond // Reduced max wait time
+
+	// Wait for the queue to empty or timeout
+	for len(l.logQueue) > 0 {
+		if time.Since(startTime) > maxWaitTime {
+		    // Log a warning if we couldn't flush everything?
+		    // fmt.Fprintf(os.Stderr, "Warning: Logger flush timed out, %d messages remaining\n", len(l.logQueue))
+			break
+		}
+		time.Sleep(10 * time.Millisecond) // Shorter sleep interval
+	}
+
+	// Short sleep to allow the last message to potentially print
+	time.Sleep(50 * time.Millisecond)
+
+	// Progress bar handling removed from here, should be done by caller
+	// tc := GetTerminalController()
+	// if tc.IsTerminal() {
+	// 	tc.ClearLine()
+	// }
 }
 
 func (l *Logger) Close() {
-    l.Flush()
-    
-    close(l.done)
-    
-    l.progressMu.Lock()
-    if l.progressBar != nil {
-        l.progressBar.Stop()
-        l.progressBar.Finalize()
-        l.progressBar = nil
-    }
-    l.progressMu.Unlock()
+	l.Flush() // Flush first
+
+	close(l.done) // Signal processing goroutine to stop
+
+	// Ensure progress bar is stopped if logger owns it (caller should handle this ideally)
+	l.progressMu.Lock()
+	if l.progressBar != nil {
+		l.progressBar.Stop()
+		l.progressBar.Finalize()
+		l.progressBar = nil
+	}
+	l.progressMu.Unlock()
 }
 
 /* 
