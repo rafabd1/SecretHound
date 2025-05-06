@@ -70,7 +70,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	rateLimit := vip.GetInt("rate_limit")
 	concurrency := vip.GetInt("concurrency")
 	inputFile := vip.GetString("input_file")
-	outputFile := vip.GetString("output_file")
+	outputFile := vip.GetString("output")
 
 	// --- Log Initial Configuration Summary ---
 	rateLimitStr := "auto"
@@ -95,6 +95,18 @@ func runScan(cmd *cobra.Command, args []string) error {
 		timeStrLog,
 		color.CyanString("[INFO]"),
 		concurrency, patternInfo)
+
+	// Log output file status
+	if outputFile != "" {
+		fmt.Fprintf(os.Stderr, "%s %s Output: Results will be saved to %s\n",
+			timeStrLog, // Reuse timestamp
+			color.CyanString("[INFO]"),
+			outputFile)
+	} else {
+		fmt.Fprintf(os.Stderr, "%s %s Output: Results will be printed to standard output\n",
+			timeStrLog, // Reuse timestamp
+			color.CyanString("[INFO]"))
+	}
 
 	timeColor := color.New(color.FgHiBlack).SprintfFunc()
 	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
