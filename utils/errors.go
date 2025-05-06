@@ -4,7 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
+	"os"
 	"strings"
+	"syscall"
 )
 
 var (
@@ -31,6 +34,7 @@ type AppError struct {
 	Type    ErrorType
 	Message string
 	Err     error
+	StatusCode int
 }
 
 func NewError(errType ErrorType, message string, err error) *AppError {
@@ -64,13 +68,50 @@ func (e *AppError) Unwrap() error {
    Checks if the provided error is a network-related error
 */
 func IsNetworkError(err error) bool {
-	var appErr *AppError
-	if errors.As(err, &appErr) {
-		return appErr.Type == NetworkError
+	if err == nil {
+		return false
+	}
+
+	// Check for url.Error type, common for network issues
+	if _, ok := err.(*url.Error); ok {
+		return true
+	}
+
+	// Check for specific syscall errors (more robust)
+	if opError, ok := err.(*net.OpError); ok {
+		if sysErr, ok := opError.Err.(*os.SyscallError); ok {
+			syscallName := strings.ToLower(sysErr.Syscall)
+			// Common network-related syscalls
+			if syscallName == "connect" || syscallName == "read" || syscallName == "write" {
+				// Check for specific network errors within the syscall error
+				switch sysErr.Err {
+				case syscall.ECONNREFUSED,
+					syscall.ECONNRESET,
+					syscall.ETIMEDOUT,
+					syscall.ENETUNREACH,
+					syscall.EHOSTUNREACH:
+					return true
+				}
+			}
+		}
+		// Also consider general net.OpError as network error if not syscall specific
+		return true 
 	}
 	
-	var netErr net.Error
-	return errors.As(err, &netErr)
+	// Check for AppError indicating a network problem (e.g., timeout)
+	if appErr, ok := err.(*AppError); ok {
+		if appErr.StatusCode == 0 && strings.Contains(strings.ToLower(appErr.Message), "timeout") {
+            return true
+        }
+	}
+
+	// Generic checks for common network error messages
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "connection refused") ||
+		strings.Contains(errMsg, "connection reset") ||
+		strings.Contains(errMsg, "timeout") ||
+		strings.Contains(errMsg, "no such host") ||
+		strings.Contains(errMsg, "network is unreachable")
 }
 
 /* 
@@ -259,4 +300,10 @@ func IsCertificateError(err error) bool {
 	}
 	
 	return false
+}
+
+// IsNotFoundError checks if an error indicates a 404 status code.
+func IsNotFoundError(err error) bool {
+	appErr, ok := err.(*AppError)
+	return ok && appErr.StatusCode == 404
 }

@@ -125,7 +125,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		if outputFile != "" {
 			fmt.Fprintf(os.Stderr, "%s %s Output: Results will be saved to %s\n",
 				timeStrLog, // Reuse timestamp
-				color.CyanString("[INFO]"),
+		color.CyanString("[INFO]"),
 				outputFile)
 		} else {
 			fmt.Fprintf(os.Stderr, "%s %s Output: Results will be printed to standard output\n",
@@ -217,7 +217,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	var mu sync.Mutex // Mutex to protect totalSecretsFound and finalErr
 
 	scanConcurrency := vip.GetInt("concurrency")
-
+	
 	if len(remoteURLs) > 0 {
 		wg.Add(1)
 		go func() {
@@ -278,7 +278,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	<-done
 
 	logger.Flush()
-
+	
 	// --- Summary Logging (Conditionally) ---
 	time.Sleep(100 * time.Millisecond)
 
@@ -289,21 +289,21 @@ func runScan(cmd *cobra.Command, args []string) error {
 			
 			// Define timeStrLog here for the 'Results saved' message
 			timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
-			fmt.Fprintf(os.Stderr, "%s %s %s\n", 
+		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
 			    timeStrLog, 
-			    color.CyanString("[INFO]"), 
-			    fmt.Sprintf("Results saved to: %s", outputFile))
+			color.CyanString("[INFO]"), 
+			fmt.Sprintf("Results saved to: %s", outputFile))
 		} else {
 			// For stdout, just the Success log is probably enough
 			logger.Success("Found a total of %d secrets", totalSecretsFound)
-		}
+	}
 
 		// Define timeStrLog again for the completion message
 		timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "\n%s %s %s\n",
+	fmt.Fprintf(os.Stderr, "\n%s %s %s\n", 
 			timeStrLog,
-			color.CyanString("[INFO]"),
-			"Scan completed. Exiting.")
+		color.CyanString("[INFO]"), 
+		"Scan completed. Exiting.")
 		time.Sleep(200 * time.Millisecond)
 	}
 
@@ -354,7 +354,7 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 						logger.Info("Added %d sources from list file (argument): %s", listCount, arg)
 					} else {
 						// Not a list, add the file path itself
-						inputs = append(inputs, arg)
+					inputs = append(inputs, arg)
 						logger.Info("Added single file to scan (argument): %s", arg)
 					}
 				}
