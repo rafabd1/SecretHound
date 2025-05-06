@@ -53,12 +53,12 @@ type Logger struct {
 
 // NewLogger now accepts verbose and silent flags to determine the minimum log level
 func NewLogger(verbose, silent bool) *Logger {
-	minLogLevel := LevelSuccess // Default: Show Success, Warning, Error
+	minLogLevel := LevelInfo // Default level back to INFO
 	if verbose {
 		minLogLevel = LevelDebug // Verbose: Show everything
 	}
 	if silent {
-		minLogLevel = LevelSuccess // Silent: Will be further filtered in writeLog
+		minLogLevel = LevelSuccess // Silent: Filtered further in writeLog
 	}
 
 	logger := &Logger{
@@ -104,21 +104,25 @@ func (l *Logger) processLogs() {
 }
 
 func (l *Logger) writeLog(msg LogMessage) {
-	// Basic level check: Suppress if lower than minimum required level
-	if msg.Level < l.minLevel {
-		return
+	// Determine the current operational mode based on minLevel
+	isSilent := l.minLevel == LevelSuccess
+	// isVerbose := l.minLevel == LevelDebug // Removed as it wasn't used for filtering
+	isDefault := l.minLevel == LevelInfo // Assumes default level is INFO
+
+	// 1. Filter based on Silent mode
+	if isSilent {
+		if msg.Level != LevelSuccess {
+			return // Only SUCCESS messages allowed in silent mode
+		}
+	// 2. Filter based on Default mode
+	} else if isDefault {
+		if msg.Level != LevelInfo && msg.Level != LevelSuccess {
+			return // Only INFO and SUCCESS messages allowed in default mode
+		}
+	// 3. Verbose mode implicitly allows all levels to pass this point
 	}
 
-	// Specific check for SILENT mode: Only allow SUCCESS messages
-	// Assumes minLevel was set to LevelSuccess when silent=true
-	if l.minLevel == LevelSuccess && msg.Level != LevelSuccess {
-	    // Is this a critical error we absolutely must show despite silent?
-	    // Let's keep silent truly silent for now, only showing Success.
-	    // Fatal errors are handled separately.
-	    return // Suppress non-Success messages in silent mode
-	}
-
-	// --- Proceed with printing if not suppressed ---
+	// --- Proceed with printing if the message wasn't filtered out by mode logic ---
 	tc := GetTerminalController()
 
 	l.progressMu.Lock()
