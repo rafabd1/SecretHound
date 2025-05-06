@@ -64,31 +64,37 @@ func runScan(cmd *cobra.Command, args []string) error {
 	regexManager := core.NewRegexManager()
 	regexManager.SetPatternManager(pm)
 
-	// Create the unified Processor - MOVED inside remote scan goroutine
-	// processor := core.NewProcessor(regexManager, logger)
-
-	// --- Get other config values from Viper ---
+	// --- Get other config values from Viper (needed for logging) ---
+	timeout := vip.GetInt("timeout")
+	maxRetries := vip.GetInt("retries")
+	rateLimit := vip.GetInt("rate_limit")
+	concurrency := vip.GetInt("concurrency")
 	inputFile := vip.GetString("input_file")
 	outputFile := vip.GetString("output_file")
-	// timeout := vip.GetInt("timeout") // Read inside processRemoteURLs
-	// maxRetries := vip.GetInt("retries") // Read inside processRemoteURLs
-	// concurrency := vip.GetInt("concurrency") // Read inside process* funcs
-	// rateLimit := vip.GetInt("rate_limit") // Read inside processRemoteURLs
-	// regexFile := vip.GetString("regex_file") // Deprecated?
-	// customHeader := vip.GetStringSlice("headers") // Used inside processRemoteURLs
-	// insecureSkipVerify := vip.GetBool("insecure") // Used inside processRemoteURLs
 
-	// Remove redundant assignments to global config.Config
-	/*
-	config.Config.InputFile = inputFile
-	config.Config.OutputFile = outputFile
-	config.Config.Verbose = vip.GetBool("verbose")
-	config.Config.Timeout = timeout
-	config.Config.MaxRetries = maxRetries
-	config.Config.Concurrency = concurrency
-	config.Config.RateLimit = rateLimit
-	config.Config.RegexFile = regexFile
-	*/
+	// --- Log Initial Configuration Summary ---
+	rateLimitStr := "auto"
+	if rateLimit > 0 {
+		rateLimitStr = fmt.Sprintf("%d req/s per domain", rateLimit)
+	}
+	patternInfo := fmt.Sprintf("%d patterns loaded", pm.GetPatternCount())
+	if len(includeCats) > 0 {
+		patternInfo = fmt.Sprintf("%d patterns from categories: %v", pm.GetPatternCount(), includeCats)
+	} else if len(excludeCats) > 0 {
+		patternInfo = fmt.Sprintf("%d patterns excluding categories: %v", pm.GetPatternCount(), excludeCats)
+	}
+
+	// Use fmt.Fprintf to ensure these lines always print, like the "Starting..." message
+	timeColorLog := color.New(color.FgHiBlack).SprintfFunc() // Need timeColor here as well
+	timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
+	fmt.Fprintf(os.Stderr, "%s %s HTTP config: %d sec timeout | %d max retries | %s\n",
+		timeStrLog,
+		color.CyanString("[INFO]"),
+		timeout, maxRetries, rateLimitStr)
+	fmt.Fprintf(os.Stderr, "%s %s Concurrency: %d workers | Patterns: %s\n",
+		timeStrLog,
+		color.CyanString("[INFO]"),
+		concurrency, patternInfo)
 
 	timeColor := color.New(color.FgHiBlack).SprintfFunc()
 	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
