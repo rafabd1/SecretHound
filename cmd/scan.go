@@ -108,14 +108,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 			color.CyanString("[INFO]"))
 	}
 
-	timeColor := color.New(color.FgHiBlack).SprintfFunc()
-	timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
-
-	fmt.Fprintf(os.Stderr, "%s %s %s\n",
-		timeStr,
-		color.CyanString("[INFO]"),
-		"Starting SecretHound scan")
-
 	var writer *output.Writer
 	if outputFile != "" {
 		// var err error // Already declared above for LoadPatterns
@@ -185,22 +177,22 @@ func runScan(cmd *cobra.Command, args []string) error {
 	time.Sleep(100 * time.Millisecond)
 	if writer != nil {
 		secretCount := writer.GetCount()
-		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		timeStrLog = timeColorLog("[%s]", time.Now().Format("15:04:05"))
 		fmt.Fprintf(os.Stderr, "%s %s %s\n",
-			timeStr,
+			timeStrLog,
 			color.GreenString("[SUCCESS]"),
 			fmt.Sprintf("Found a total of %d secrets", secretCount))
 
-		timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+		timeStrLog = timeColorLog("[%s]", time.Now().Format("15:04:05"))
 		fmt.Fprintf(os.Stderr, "%s %s %s\n",
-			timeStr,
+			timeStrLog,
 			color.CyanString("[INFO]"),
 			fmt.Sprintf("Results saved to: %s", outputFile))
 	}
 
-	timeStr = timeColor("[%s]", time.Now().Format("15:04:05"))
+	timeStrLog = timeColorLog("[%s]", time.Now().Format("15:04:05"))
 	fmt.Fprintf(os.Stderr, "\n%s %s %s\n",
-		timeStr,
+		timeStrLog,
 		color.CyanString("[INFO]"),
 		"Scan completed. Exiting.")
 
@@ -698,11 +690,3 @@ func printPatternList() {
 	fmt.Println("\nNote: Use category names with --include-categories or --exclude-categories flags.")
 }
 
-// Removed init() function as flags are defined in root.go
-/*
-func init() {
-	rootCmd.AddCommand(scanCmd)
-	// ... (flag definitions were here)
-	// ... (viper bindings were here)
-}
-*/
