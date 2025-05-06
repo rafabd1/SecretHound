@@ -91,15 +91,15 @@ func Execute() {
 	originalPreRun := rootCmd.PreRun
 	rootCmd.PreRun = func(cmd *cobra.Command, args []string) {
 		beforeCommand()
-		if originalPreRun != nil {
-			originalPreRun(cmd, args)
-		}
-	}
-
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+            if originalPreRun != nil {
+                originalPreRun(cmd, args)
+        }
+    }
+    
+    if err := rootCmd.Execute(); err != nil {
+        fmt.Println(err)
+        os.Exit(1)
+    }
 }
 
 func init() {

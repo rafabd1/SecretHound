@@ -82,7 +82,7 @@ func (s *Scheduler) Schedule(urls []string) error {
 	if !s.noProgress && !s.silent {
 		progressBar = output.NewProgressBar(len(urls), 40)
 		progressBar.SetPrefix("Processing URLs: ")
-		s.logger.SetProgressBar(progressBar)
+	s.logger.SetProgressBar(progressBar)
 		progressBar.Start()
 		progressBar.SetSuffix("Secrets: 0 | Rate: 0.0/s")
 	}
@@ -92,16 +92,16 @@ func (s *Scheduler) Schedule(urls []string) error {
 	done := make(chan struct{})
 
 	if progressBar != nil {
-		go func() {
-			for {
-				select {
-				case <-ticker.C:
-					s.mutex.Lock()
-					processedCount := s.stats.ProcessedURLs
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				s.mutex.Lock()
+				processedCount := s.stats.ProcessedURLs
 					failedCount := s.stats.FailedURLs
-					secretsFound := s.stats.TotalSecrets
+				secretsFound := s.stats.TotalSecrets
 					startTime := s.stats.StartTime
-					s.mutex.Unlock()
+				s.mutex.Unlock()
 
 					totalCompleted := processedCount + failedCount
 					progressBar.Update(totalCompleted)
@@ -111,8 +111,8 @@ func (s *Scheduler) Schedule(urls []string) error {
 					if elapsedSeconds > 0 {
 						rate = float64(totalCompleted) / elapsedSeconds
 					}
-					progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
-						secretsFound,
+				progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
+					secretsFound,
 						rate))
 				case <-done:
 					return
@@ -158,7 +158,7 @@ func (s *Scheduler) Schedule(urls []string) error {
 
 	if progressBar != nil {
 		close(done)
-		progressBar.Stop()
+	progressBar.Stop()
 		progressBar.Finalize()
 		s.logger.SetProgressBar(nil)
 	}
@@ -286,7 +286,7 @@ func (s *Scheduler) shuffleWithDomainAwareness(urls []string) {
 func (s *Scheduler) worker(id int) {
 	defer s.waitGroup.Done()
 	s.logger.Debug("Worker %d started", id)
-
+	
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -294,25 +294,25 @@ func (s *Scheduler) worker(id int) {
 			return
 		default:
 			url, hasMore := s.GetNextURL()
-
+		
 			if !hasMore {
 				s.logger.Debug("Worker %d: Queue empty and context likely canceled. Exiting.", id)
-				return
-			}
-
+			return
+		}
+		
 			if url == "" {
 				s.logger.Debug("Worker %d: Queue temporarily empty, sleeping.", id)
 				time.Sleep(time.Duration(150+utils.RandomInt(0, 100)) * time.Millisecond)
-				continue
-			}
-
+			continue
+		}
+		
 			domain, err := utils.ExtractDomain(url)
 			if err != nil {
 				s.logger.Warning("Worker %d: failed to extract domain from %s: %v", id, url, err)
 				s.incrementFailedURLs(domain)
-				continue
-			}
-
+			continue
+		}
+		
 			s.logger.Debug("Worker %d: Requesting URL %s", id, url)
 			startTime := time.Now()
 
@@ -330,13 +330,13 @@ func (s *Scheduler) worker(id int) {
 			secrets, processErr := s.processor.ProcessJSContent(content, url)
 			processingDuration := time.Since(processStartTime)
 			totalDuration := time.Since(startTime)
-
+		
 			if processErr != nil {
 				s.logger.Warning("Worker %d: Failed to process content from %s: %v", id, url, processErr)
 				s.incrementFailedURLs(domain)
 				continue
 			}
-
+			
 			s.incrementProcessedURLs(domain, totalDuration)
 
 			if len(secrets) > 0 {
@@ -344,15 +344,15 @@ func (s *Scheduler) worker(id int) {
 				s.stats.TotalSecrets += len(secrets)
 				s.mutex.Unlock()
 				s.logger.Debug("Worker %d found %d secrets in %s (Process took %v)", id, len(secrets), url, processingDuration)
-				for _, secret := range secrets {
-					s.logger.SecretFound(secret.Type, secret.Value, url) 
+		for _, secret := range secrets {
+			s.logger.SecretFound(secret.Type, secret.Value, url)
 					if s.writer != nil {
 						writeErr := s.writer.WriteSecret(secret.Type, secret.Value, secret.URL, secret.Context, secret.Line)
 						if writeErr != nil {
 							s.logger.Error("Worker %d: failed to write secret to output file: %v", id, writeErr)
-						}
-					}
 				}
+			}
+		}
 			} else {
 				s.logger.Debug("Worker %d found 0 secrets in %s (Process took %v)", id, url, processingDuration)
 			}
@@ -376,14 +376,14 @@ func (s *Scheduler) incrementProcessedURLs(domain string, duration time.Duration
 
 func (s *Scheduler) GetNextURL() (string, bool) {
 	s.mutex.Lock()
-
-	if len(s.waitingURLs) > 0 {
-		url := s.waitingURLs[0]
-		s.waitingURLs = s.waitingURLs[1:]
-		s.mutex.Unlock()
-		return url, true
-	}
 	
+	if len(s.waitingURLs) > 0 {
+	url := s.waitingURLs[0]
+	s.waitingURLs = s.waitingURLs[1:]
+		s.mutex.Unlock()
+	return url, true
+}
+
 	select {
 	case <-s.ctx.Done():
 		s.mutex.Unlock()

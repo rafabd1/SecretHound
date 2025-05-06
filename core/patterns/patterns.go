@@ -109,7 +109,7 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordExcludes: []string{"QVO", "QUO", "YO", "accessToken:", ".accessToken", "oauth_token=", "variable", "config", "credential", "INVALID_ACCESS_TOKEN", "MISSING_ACCESS_TOKEN"},
 		},
 		"oauth_token": {
-			Regex:       `(?i)(?:oauth|access)[._-]?token\\s*[:=]\\s*['"]([a-zA-Z0-9_\\-\\.=]{32,500})['"]`,
+			Regex:       `(?i)(?:oauth|access)[._-]?token\\s*[:=]\\s*['"]([a-zA-Z0-9_\\-\.]{32,500})['"]`,
 			Description: "OAuth Token",
 			Enabled:     true,
 			Category:    "auth",
@@ -146,11 +146,12 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordExcludes: []string{"example", "sample", "placeholder", "test", "your", "xxx"},
 		},
 		"github_personal_token": {
-			Regex:       `gh[a-z]_[A-Za-z0-9_]{36,255}`,
-			Description: "GitHub Personal Token",
+			Regex:       `(?:ghp|ghu|ghs|ghr)_[0-9a-zA-Z]{36,251}`,
+			Description: "GitHub Personal Token (Classic & Fine-Grained)",
 			Enabled:     true,
 			Category:    "code",
 			MinLength:   40,
+			KeywordExcludes: []string{"_white_", "_template_", "_ng_", ".svg", ".png"},
 		},
 		"slack_token": {
 			Regex:       `xox[pbar]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-zA-Z0-9]{32}`,
@@ -489,13 +490,13 @@ var DefaultPatterns = &PatternDefinitions{
 
 		// --- PII (Personally Identifiable Information) Patterns ---
 		"email_address": {
-			Regex:       `[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`,
+			Regex:       `\b[a-zA-Z0-9._%+-]+@(?![^.]*\.(?:png|jpg|jpeg|gif|svg|webp)\b)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b`,
 			Description: "Email Address",
 			Enabled:     true,
 			Category:    "pii",
 			MinLength:   6,
 			KeywordMatches: []string{"email", "mail", "address"},
-			KeywordExcludes: []string{"example", "test", "demo", "noreply", "no-reply", "@example.com", "@test.com"},
+			KeywordExcludes: []string{"example", "test", "demo", "noreply", "no-reply", "@example.com", "@test.com", ".png", "@2x", "@3x", "verification-card-", "name@email.com", "name@domain.com", "@author"},
 		},
 		"phone_number": {
 			Regex:       `(?i)(?:phone|mobile|tel(?:ephone)?)[^\n\r]{0,20}(?:[:= ]*)(\+?\d{1,3}[-.\s]?)?(\(\d{3}\)|\d{3})[-.\s]?\d{3}[-.\s]?\d{4}\b`,
@@ -503,7 +504,7 @@ var DefaultPatterns = &PatternDefinitions{
 			Enabled:     true,
 			Category:    "pii",
 			MinLength:   10,
-			KeywordExcludes: []string{"version", "id", "example", "test", "port"},
+			KeywordExcludes: []string{"version", "id", "example", "test", "port", "e.g.", "_filter", "className", "jsx-"},
 		},
 		"ipv4_address": {
 			Regex:       `\b(?!10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b`,
@@ -520,9 +521,9 @@ var DefaultPatterns = &PatternDefinitions{
 			Description: "IPv6 Address",
 			Enabled:     true,
 			Category:    "pii",
-			MinLength:   3,
+			MinLength:   7,
 			KeywordMatches: []string{"ip", "address", "host"},
-			KeywordExcludes: []string{"::1", "localhost", "//", "/*", "* "},
+			KeywordExcludes: []string{"::1", "localhost", "//", "/*", "* ", "EPSG::", "urn:ogc:def:crs:", "fab::", "cdk-keyboard-focused"},
 		},
 		"mac_address": {
 			Regex:       `\b(?:[0-9A-Fa-f]{2}[:-]){5}(?:[0-9A-Fa-f]{2})\b`,
@@ -574,12 +575,12 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordExcludes: []string{"example", "test", "placeholder", "sample"},
 		},
 		"mnemonic_phrase": {
-			Regex:       `(?i)(?:mnemonic|seed|phrase|backup|recovery)(?:[^a-z\n\r]*[\s:=]+){1,5}(\b(?:[a-z]+\s+){11}[a-z]+\b|\b(?:[a-z]+\s+){23}[a-z]+\b)`,
+			Regex:       `(?i)(?:mnemonic|seed|phrase|backup|recovery)(?:[^a-z\n\r<]*[\s:=]+){1,5}(\b(?:[a-z]+\s+){11}[a-z]+(?!\s*power outage|\s*business internet)\b|\b(?:[a-z]+\s+){23}[a-z]+(?!\s*power outage|\s*business internet)\b)`,
 			Description: "Mnemonic/Seed Phrase (Keyword Dependent)",
 			Enabled:     true,
 			Category:    "web3",
 			MinLength:   40,
-			KeywordExcludes: []string{"example", "test", "placeholder", "sample", "instructions", "tutorial", "words", "wordlist"},
+			KeywordExcludes: []string{"example", "test", "placeholder", "sample", "instructions", "tutorial", "words", "wordlist", "power outage", "business internet"},
 		},
 		"web3_provider_key": {
 			Regex:       `(?i)(?:infura|alchemy|quicknode|moralis|ankr).{0,20}(?:api[._-]?key|project[._-]?id|app[._-]?id|secret)\s*[:=]\s*['"]?([a-zA-Z0-9_\-]{32,64})['"]?`,
@@ -590,6 +591,38 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordExcludes: []string{"example", "test", "placeholder", "sample", "YOUR_API_KEY", "PROJECT_ID"},
 		},
 		// --- End Web3 Patterns ---
+
+		// --- Session and Credit Card Patterns ---
+		"session_token": {
+			Regex:       `(?i)(?:session[_-]?(?:id|token|key)|sid|jsessionid|auth[_-]token|bearer)[^\n\r]{0,10}(?:[:=]|(?:\s*:\s*['"])|(?:\s*=\s*['"]))[^\n\r]{0,5}['"]([a-zA-Z0-9_\-\.]{40,128})['"]`,
+			Description: "Session ID/Token",
+			Enabled:     true,
+			Category:    "auth",
+			MinLength:   40,
+			MaxLength:   128,
+			KeywordMatches: []string{"session", "sid", "token", "auth"},
+			KeywordExcludes: []string{
+				"example", "test", "sample", "placeholder", "YOUR_SESSION_ID", 
+				"getSessionId", "eventTrackData", "amazonCheckoutSessionId", 
+				"sharedStrings", "localStorage", "getItem", "validresponse", 
+				"AssetSearch", "countryCodeobj", "checkout-session-id",
+				"accessToken:", ".accessToken", "oauth_token=", "variable", 
+				"config", "credential", "INVALID_ACCESS_TOKEN", "MISSING_ACCESS_TOKEN",
+				"function", "return", "method", "get", "set", "add", "remove", "data",
+				"angular", "_angular_", "ɵɵ", "ng_template", "this.",
+			},
+		},
+		"credit_card_number": {
+			Regex:       `(?i)(?:card_?number|cc-number|credit_?card|pan|cc_num)\s*[:=]\s*['"]?(\b(?:\d[ -]*?){13,19}\b|\b\d{4}[ -]?\*{4}[ -]?\*{4}[ -]?\d{4}\b|\b\d{6}[ -]?\*{6}[ -]?\d{4}\b)['"]?`,
+			Description: "Credit Card Number (PAN)",
+			Enabled:     true,
+			Category:    "payment",
+			MinLength:   13,
+			MaxLength:   23, // Allows for spaces/hyphens
+			KeywordMatches: []string{"card", "credit", "cc", "pan"},
+			KeywordExcludes: []string{"example", "test", "sample", "placeholder", "1234", "XXXX", "visa", "mastercard", "amex", "dummy", "fake", "test_card", "card-number-input", "card-expiry-input", "card-cvc-input"},
+		},
+		// --- End Session and Credit Card Patterns ---
 
 		// --- URL / Endpoint Patterns (Disabled by default) ---
 		"url_generic": {
