@@ -42,5 +42,6 @@ go.work.sum
 dev/
 
 output.*
+output_*
 
 .cursor

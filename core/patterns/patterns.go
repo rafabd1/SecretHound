@@ -496,15 +496,15 @@ var DefaultPatterns = &PatternDefinitions{
 			Category:    "pii",
 			MinLength:   6,
 			KeywordMatches: []string{"email", "mail", "address"},
-			KeywordExcludes: []string{"example", "test", "demo", "noreply", "no-reply", "@example.com", "@test.com", ".png", "@2x", "@3x", "verification-card-", "name@email.com", "name@domain.com", "@author"},
+			KeywordExcludes: []string{"example", "test", "demo", "noreply", "no-reply", "@example.com", "@test.com", "verification-card-", "name@email.com", "name@domain.com", "@author"},
 		},
 		"phone_number": {
-			Regex:       `(?i)(?:phone|mobile|tel(?:ephone)?)[^\n\r]{0,20}(?:[:= ]*)(\+?\d{1,3}[-.\s]?)?(\(\d{3}\)|\d{3})[-.\s]?\d{3}[-.\s]?\d{4}\b`,
+			Regex:       `(?i)(?:(?:\\b(?:phone|mobile|tel(?:ephone)?)\\b(?:[^\\w\\d\\n\\r<]{0,10}(?:[:= ]{1,3}|\\s+(?:to|at|us\\s+at)\\s+))(\\+?\\d{1,3}[-.\s]?)?(\\(\\d{3}\\)|\\d{3})[-.\s]?\\d{3}[-.\s]?\\d{4})|(?:(\\+?\\d{1,3}[-.\s]?)?(?:\\(\\d{3}\\)[-.\s]?\\d{3}[-.\s]?\\d{4}|\\d{3}[-.\s]+\\d{3}[-.\s]+\\d{4}|\\d{3}[-.\s]+\\d{7}|\\d{6}[-.\s]+\\d{4})))\\b`,
 			Description: "Phone Number",
 			Enabled:     true,
 			Category:    "pii",
 			MinLength:   10,
-			KeywordExcludes: []string{"version", "id", "example", "test", "port", "e.g.", "_filter", "className", "jsx-"},
+			KeywordExcludes: []string{"version", "id", "example", "test", "port", "e.g.", "_filter", "className", "jsx-", "mask", "000-000-0000", "prod", "phones/", "watermark", "123-456-7890", "tel:", "adobe_mc", "TS=", "gtag", "AW-", "DC-", "Lg(e,"},
 		},
 		"ipv4_address": {
 			Regex:       `\b(?!10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b`,
@@ -533,6 +533,7 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   17,
 			MaxLength:   17,
 			KeywordMatches: []string{"mac", "address", "ethernet"},
+			KeywordExcludes: []string{"path", "svg", "translate", "d=\"", "d='", "stroke", "fill", "points"},
 		},
 		"us_zip_code": {
 			Regex:       `(?i)(?:zip|postal|post_?code|address)\\s*[:=]\\s*(\\d{5}(?:-\\d{4})?)\\b`,
@@ -565,6 +566,16 @@ var DefaultPatterns = &PatternDefinitions{
 			MaxLength:   42,
 			KeywordMatches: []string{"address", "ethereum", "wallet", "contract", "account"},
 			KeywordExcludes: []string{"example", "test", "null", "0x0", "0x000", "zero"},
+		},
+		"bitcoin_address": {
+			Regex:       `\b([13][a-km-zA-HJ-NP-Z1-9]{25,34})\b`,
+			Description: "Bitcoin Address",
+			Enabled:     true,
+			Category:    "web3",
+			MinLength:   26,
+			MaxLength:   35,
+			KeywordMatches: []string{"address", "bitcoin", "wallet", "transaction", "blockchain"},
+			KeywordExcludes: []string{"example", "test", "null", "0x0", "0x000", "zero", "ak.ak", "=="},
 		},
 		"web3_private_key": {
 			Regex:       `(?i)(?:private[._-]?key|secret|wallet|mnemonic|seed|private_key_hex)\s*[:=]\s*['"]?(0x?[a-fA-F0-9]{64})['"]?`,
