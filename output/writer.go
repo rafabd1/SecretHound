@@ -18,7 +18,7 @@ type Writer struct {
 	count              int
 }
 
-/*
+/* 
    Creates a new writer instance for outputting secrets to a file
    Accepts rawMode flag.
 */
@@ -87,7 +87,7 @@ func (w *Writer) WriteSecret(secretType, value, url, context string, line int) e
 			jsonValueBytes, jsonErr := json.Marshal(value)
 			if jsonErr != nil {
 				return fmt.Errorf("failed to marshal raw JSON value: %v", jsonErr)
-			}
+		}
 			output = prefix + string(jsonValueBytes)
 		} else {
 			output = value + "\n"
@@ -128,8 +128,8 @@ func (w *Writer) WriteSecret(secretType, value, url, context string, line int) e
 	return err
 }
 
-/*
-   Finalizes and closes the output file, properly terminating
+/* 
+   Finalizes and closes the output file, properly terminating 
    JSON formats if needed.
 */
 func (w *Writer) Close() error {
