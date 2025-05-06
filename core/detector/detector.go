@@ -76,8 +76,6 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 	
 	var secrets []secret.Secret
 	
-	isExampleContent := d.isExampleContent(content)
-	
 	for _, pattern := range patterns {
 		matches := pattern.Regex.FindAllStringSubmatch(content, -1)
 		
@@ -95,7 +93,7 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 			
 			line := utils.FindLineNumber(content, value)
 			
-			valid, confidence := d.validateSecret(pattern.Name, value, ctx, isExampleContent)
+			valid, confidence := d.validateSecret(pattern.Name, value, ctx)
 			
 			if valid && confidence >= d.config.MinConfidence {
 				s := secret.NewSecret(pattern.Name, value, ctx, url, line)
@@ -125,78 +123,55 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 }
 
 /* 
-   Checks if content appears to be test/example content based on keywords
-*/
-func (d *Detector) isExampleContent(content string) bool {
-	exampleKeywords := []string{
-		"example", "EXAMPLE", "sample", "SAMPLE", "test", "TEST",
-		"DO NOT COMMIT", "do not commit", "don't commit", "demo", "DEMO",
-	}
-	
-	for _, keyword := range exampleKeywords {
-		if strings.Contains(content, keyword) {
-			return true
-		}
-	}
-	
-	return false
-}
-
-/* 
    Validates a potential secret and returns validity and confidence score
 */
 func (d *Detector) validateSecret(
-	patternName, value, context string, 
-	isExampleContent bool,
+	patternName, value, context string,
 ) (bool, float64) {
 	patterns := d.patternManager.GetCompiledPatterns()
 	pattern, exists := patterns[patternName]
-	if (!exists) {
+	if !exists {
 		return false, 0
 	}
-	
+
 	config := pattern.Config
-	
+
 	if len(value) < config.MinLength {
 		return false, 0
 	}
-	
+
 	if config.MaxLength > 0 && len(value) > config.MaxLength {
 		return false, 0
 	}
-	
-	if isExampleContent && !d.config.AllowTestExamples {
-		if !d.logger.IsVerbose() {
-			return false, 0
-		}
-	}
-	
+
+	// Remaining validation logic...
 	if patternName == "jwt_token" || patternName == "generic_password" {
 		if utils.IsJavaScriptConstant(value) || utils.IsJavaScriptFunction(value) {
 			return false, 0
 		}
 	}
-	
+
 	for _, keyword := range config.KeywordExcludes {
-		if strings.Contains(value, keyword) {
+		if strings.Contains(value, keyword) || strings.Contains(strings.ToLower(context), keyword) {
 			return false, 0
 		}
 	}
-	
+
 	if utils.IsUUID(value) || (utils.HasCommonCodePattern(value) && len(value) < 40) {
 		return false, 0
 	}
-	
+
 	confidence := calculateConfidence(patternName, value, context)
-	
+
 	if d.config.LocalFileMode {
 		confidence += 0.1
 	}
-	
-	if d.logger.IsVerbose() && confidence >= 0.4 {
-		confidence = 0.6
-	}
-	
+
+	// This verbose check is no longer needed here for example content filtering
+	// if d.logger.IsVerbose() && confidence >= 0.4 {
+	// 	confidence = 0.6
+	// }
+
 	return true, confidence
 }
 
