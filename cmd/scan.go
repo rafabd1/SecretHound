@@ -33,32 +33,48 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// --- List Patterns Handling ---
 	if vip.GetBool("list_patterns") {
-		printPatternList() // Assumes printPatternList is correct
+		printPatternList()
 		return nil // Exit after listing
 	}
 
-	// --- Validate Category Flags ---
+	// --- Validate Category Flags & Determine Final Filters ---
 	includeCats := vip.GetStringSlice("include_categories")
 	excludeCats := vip.GetStringSlice("exclude_categories")
-	if len(includeCats) > 0 && len(excludeCats) > 0 {
-		logger.Error("Error: --include-categories and --exclude-categories flags cannot be used together.")
-		os.Exit(1)
+	scanUrlsFlag := vip.GetBool("scan_urls")
+
+	var finalIncludeCategories []string
+	var finalExcludeCategories []string // Need a separate variable for final excludes
+
+	if scanUrlsFlag {
+		// --scan-urls Mode: Use ONLY 'url' category, ignore others
+		finalIncludeCategories = []string{"url"}
+		finalExcludeCategories = []string{} // Ensure no excludes apply in this mode
+		logger.Info("URL Extraction Mode active (--scan-urls). Scanning only for URL/Endpoint patterns.")
+
+		// Warn if other category flags were used, as they are ignored
+		if len(includeCats) > 0 || len(excludeCats) > 0 {
+			logger.Warning("--scan-urls overrides --include-categories and --exclude-categories.")
+		}
+	} else {
+		// Default Mode: Use include/exclude flags
+		if len(includeCats) > 0 && len(excludeCats) > 0 {
+			logger.Error("Error: --include-categories and --exclude-categories flags cannot be used together.")
+			os.Exit(1)
+		}
+		finalIncludeCategories = includeCats
+		finalExcludeCategories = excludeCats
 	}
 
 	// --- Centralized Pattern Loading ---
-	pm := patterns.NewPatternManager() // Creates manager
-	err := pm.LoadPatterns(includeCats, excludeCats) // Load patterns respecting filters
+	pm := patterns.NewPatternManager()
+
+	// Load patterns respecting final filters determined above
+	err := pm.LoadPatterns(finalIncludeCategories, finalExcludeCategories) // Use final lists
 	if err != nil {
 		logger.Error("%s", fmt.Sprintf("Error loading patterns: %v", err))
 		os.Exit(1)
 	}
-	logger.Info("%s", fmt.Sprintf("Loaded %d patterns.", pm.GetPatternCount()))
-	if len(includeCats) > 0 {
-		logger.Info("%s", fmt.Sprintf("Filtering patterns to include only categories: %v", includeCats))
-	}
-	if len(excludeCats) > 0 {
-		logger.Info("%s", fmt.Sprintf("Filtering patterns to exclude categories: %v", excludeCats))
-	}
+	// Pattern loading logging happens later
 
 	// Create RegexManager and associate the configured PatternManager
 	regexManager := core.NewRegexManager()
@@ -77,15 +93,17 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if rateLimit > 0 {
 		rateLimitStr = fmt.Sprintf("%d req/s per domain", rateLimit)
 	}
+	// Update pattern info based on final include/exclude lists
 	patternInfo := fmt.Sprintf("%d patterns loaded", pm.GetPatternCount())
-	if len(includeCats) > 0 {
-		patternInfo = fmt.Sprintf("%d patterns from categories: %v", pm.GetPatternCount(), includeCats)
-	} else if len(excludeCats) > 0 {
-		patternInfo = fmt.Sprintf("%d patterns excluding categories: %v", pm.GetPatternCount(), excludeCats)
+	if scanUrlsFlag { // Special message for URL mode
+	    patternInfo = fmt.Sprintf("%d URL patterns loaded", pm.GetPatternCount())
+	} else if len(finalIncludeCategories) > 0 {
+		patternInfo = fmt.Sprintf("%d patterns from categories: %v", pm.GetPatternCount(), finalIncludeCategories)
+	} else if len(finalExcludeCategories) > 0 {
+		patternInfo = fmt.Sprintf("%d patterns excluding categories: %v", pm.GetPatternCount(), finalExcludeCategories)
 	}
 
-	// Use fmt.Fprintf to ensure these lines always print, like the "Starting..." message
-	timeColorLog := color.New(color.FgHiBlack).SprintfFunc() // Need timeColor here as well
+	timeColorLog := color.New(color.FgHiBlack).SprintfFunc()
 	timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
 	fmt.Fprintf(os.Stderr, "%s %s HTTP config: %d sec timeout | %d max retries | %s\n",
 		timeStrLog,
@@ -689,4 +707,69 @@ func printPatternList() {
 	fmt.Println("===========================================")
 	fmt.Println("\nNote: Use category names with --include-categories or --exclude-categories flags.")
 }
+
+// Initialization function (called by Cobra/Viper)
+func initScanCmd(cmd *cobra.Command) {
+	vip := viper.GetViper()
+
+	// --- Input Sources ---
+	cmd.Flags().StringP("input", "i", "", "Input local file or directory path to scan")
+	cmd.Flags().StringP("url-file", "f", "", "Input file containing URLs to scan (one per line)")
+	// Note: URLs/files/dirs as direct args are handled by `args` in runScan
+	vip.BindPFlag("input_file", cmd.Flags().Lookup("input"))
+	vip.BindPFlag("url_file", cmd.Flags().Lookup("url-file"))
+
+	// --- Output ---
+	cmd.Flags().StringP("output", "o", "", "Output file to save results (default: stdout)")
+	vip.BindPFlag("output", cmd.Flags().Lookup("output"))
+
+	// --- Performance ---
+	cmd.Flags().IntP("concurrency", "c", 50, "Number of concurrent workers")
+	cmd.Flags().IntP("rate-limit", "l", 0, "Max requests per second per domain (0 for auto/unlimited)")
+	vip.BindPFlag("concurrency", cmd.Flags().Lookup("concurrency"))
+	vip.BindPFlag("rate_limit", cmd.Flags().Lookup("rate-limit"))
+
+	// --- Networking ---
+	cmd.Flags().IntP("timeout", "t", 10, "HTTP request timeout in seconds")
+	cmd.Flags().IntP("retries", "r", 2, "Maximum number of retries for failed HTTP requests")
+	cmd.Flags().StringP("proxy", "p", "", "Proxy URL (e.g., http://127.0.0.1:8080)")
+	cmd.Flags().StringSliceP("header", "H", []string{}, "Custom headers to include in requests (e.g., 'Cookie: session=...')")
+	cmd.Flags().Bool("insecure", false, "Disable TLS certificate verification")
+	vip.BindPFlag("timeout", cmd.Flags().Lookup("timeout"))
+	vip.BindPFlag("retries", cmd.Flags().Lookup("retries"))
+	vip.BindPFlag("proxy", cmd.Flags().Lookup("proxy"))
+	vip.BindPFlag("headers", cmd.Flags().Lookup("header"))
+	vip.BindPFlag("insecure", cmd.Flags().Lookup("insecure"))
+
+	// --- Pattern Control ---
+	cmd.Flags().StringSlice("include-categories", []string{}, "Comma-separated list of pattern categories to include (e.g., aws,gcp)")
+	cmd.Flags().StringSlice("exclude-categories", []string{}, "Comma-separated list of pattern categories to exclude (e.g., pii,generic)")
+	cmd.Flags().Bool("scan-urls", false, "URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters)") // Updated description
+	cmd.Flags().Bool("list-patterns", false, "List available pattern categories and exit")
+	vip.BindPFlag("include_categories", cmd.Flags().Lookup("include-categories"))
+	vip.BindPFlag("exclude_categories", cmd.Flags().Lookup("exclude-categories"))
+	vip.BindPFlag("scan_urls", cmd.Flags().Lookup("scan-urls"))
+	vip.BindPFlag("list_patterns", cmd.Flags().Lookup("list-patterns"))
+
+	// --- General Behavior ---
+	cmd.Flags().BoolP("verbose", "v", false, "Enable verbose logging output")
+	cmd.Flags().BoolP("no-progress", "n", false, "Disable the progress bar display")
+	vip.BindPFlag("verbose", cmd.Flags().Lookup("verbose"))
+	vip.BindPFlag("no_progress", cmd.Flags().Lookup("no-progress"))
+}
+
+// Helper function defined locally within the package
+func stringSliceContains(slice []string, item string) bool {
+	set := make(map[string]struct{}, len(slice))
+	for _, s := range slice {
+		set[strings.ToLower(s)] = struct{}{}
+	}
+	_, ok := set[strings.ToLower(item)]
+	return ok
+}
+
+// Make sure initScanCmd is called appropriately, likely from root.go or where scanCmd is defined/added.
+// Example (if scanCmd is defined in root.go):
+// var scanCmd = &cobra.Command{ Use: "scan", ..., RunE: runScan }
+// func init() { rootCmd.AddCommand(scanCmd); initScanCmd(scanCmd) }
 

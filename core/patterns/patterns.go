@@ -2,6 +2,7 @@ package patterns
 
 import (
 	"regexp"
+	"strings"
 	"sync"
 )
 
@@ -589,6 +590,37 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordExcludes: []string{"example", "test", "placeholder", "sample", "YOUR_API_KEY", "PROJECT_ID"},
 		},
 		// --- End Web3 Patterns ---
+
+		// --- URL / Endpoint Patterns (Disabled by default) ---
+		"url_generic": {
+			// Matches common schemes (http, https, ftp, etc.) followed by URL structure
+			Regex:       `(?i)(?:https?|ftp|sftp|file|git|ws|wss):\/\/(?:[\w\.-]+(?:[:\w\.-]*@)?[\w\.-]+)?(?:\.[\w\.-]+)+[\w\-\_.~:\/?#[\]@!\$&'\(\)\*\+,;=.]+`,
+			Description: "Full URL with protocol (http, ftp, file, etc.)",
+			Enabled:     false, // Disabled by default
+			Category:    "url",
+			MinLength:   8, // Adjusted min length slightly
+			KeywordExcludes: []string{
+				"example.com", "localhost", "127.0.0.1", "::1",
+				"javascript:", "mailto:", // Keep excluding script/mail links
+				".png", ".jpg", ".jpeg", ".gif", ".css", ".js", ".svg", ".woff", ".ttf", // Exclude direct links to common assets
+				"schemas.android.com", "schemas.microsoft.com", "schemas.openxmlformats.org", // Common XML namespaces
+				"localhost:3000", "localhost:8080", // Common local dev URLs often in examples
+			},
+		},
+		"url_path": {
+			// Matches quoted strings starting with / followed by typical path characters, including parameters
+			Regex:       `['"](\/([\w\-\.~%]+(?:\/[\w\-\.~%]*)*)(?:\?[\w\-\.~=&%+]*)?(?:#[\w\-\.~]*)?)['"]`,
+			Description: "Quoted URL Path/Endpoint with Parameters",
+			Enabled:     false, // Disabled by default
+			Category:    "url",
+			MinLength:   2, // Allow short paths like "/"
+			KeywordExcludes: []string{
+				"/dist/", "/build/", "/node_modules/", "/assets/", "/static/", // Common build/asset paths
+				".js", ".css", ".html", ".md", ".txt", ".json", ".xml", ".png", ".jpg", // File extensions in paths are often not endpoints
+				"placeholder", "example", "/path/to/",
+			},
+		},
+		// --- End URL Patterns ---
 	},
 }
 
@@ -680,6 +712,7 @@ func NewPatternManager() *PatternManager {
 /* 
    Loads and compiles patterns based on category filters.
    Accepts include/exclude category lists. Only one should be non-empty.
+   If a category is explicitly included, its patterns are loaded even if Enabled=false.
 */
 func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []string) error {
 	pm.mu.Lock()
@@ -689,12 +722,12 @@ func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []st
 
 	includeMap := make(map[string]bool)
 	for _, cat := range includeCategories {
-		includeMap[cat] = true
+		includeMap[strings.ToLower(cat)] = true // Use lower case for matching
 	}
 
 	excludeMap := make(map[string]bool)
 	for _, cat := range excludeCategories {
-		excludeMap[cat] = true
+		excludeMap[strings.ToLower(cat)] = true // Use lower case for matching
 	}
 
 	useInclude := len(includeCategories) > 0
@@ -703,35 +736,38 @@ func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []st
 	enabledPatterns := 0
 
 	for name, config := range DefaultPatterns.Patterns {
-		if !config.Enabled {
-			continue
+		categoryLower := strings.ToLower(config.Category)
+
+		isIncluded := useInclude && includeMap[categoryLower]
+		isExcluded := useExclude && excludeMap[categoryLower]
+		isEnabledByDefault := config.Enabled
+
+		loadPattern := false
+		if isIncluded {
+			// Rule 1: Explicitly included by category, load it (ignores Enabled flag).
+			loadPattern = true
+		} else if !useInclude && !isExcluded && isEnabledByDefault {
+			// Rule 2: Not using include filter, not excluded by exclude filter,
+			// and enabled by default. Load it.
+			loadPattern = true
 		}
 
-		// Apply category filtering
-		if useInclude {
-			if !includeMap[config.Category] {
-				continue // Skip if not in the include list
+		if loadPattern {
+			enabledPatterns++
+
+			re, err := regexp.Compile(config.Regex)
+			if err != nil {
+				// Log this error? For now, just skip the pattern
+				// Consider adding logging here if pattern compilation fails
+				continue
 			}
-		} else if useExclude {
-			if excludeMap[config.Category] {
-				continue // Skip if in the exclude list
+
+			pm.compiledPatterns[name] = &CompiledPattern{
+				Name:        name,
+				Description: config.Description,
+				Regex:       re,
+				Config:      config,
 			}
-		}
-		// If no filters or passed filters, proceed
-
-		enabledPatterns++
-
-		re, err := regexp.Compile(config.Regex)
-		if err != nil {
-			// Log this error? For now, just skip the pattern
-			continue
-		}
-
-		pm.compiledPatterns[name] = &CompiledPattern{
-			Name:        name,
-			Description: config.Description,
-			Regex:       re,
-			Config:      config, // Includes the Category now
 		}
 	}
 
