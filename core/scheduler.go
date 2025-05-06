@@ -25,6 +25,8 @@ type Scheduler struct {
 	cancel        context.CancelFunc
 	waitGroup     sync.WaitGroup
 	stats         SchedulerStats
+	noProgress    bool
+	silent        bool
 }
 
 type SchedulerStats struct {
@@ -41,7 +43,7 @@ type SchedulerStats struct {
 }
 
 func NewScheduler(domainManager *networking.DomainManager, client *networking.Client, 
-	processor *Processor, writer *output.Writer, logger *output.Logger) *Scheduler {
+	processor *Processor, writer *output.Writer, logger *output.Logger, concurrency int, noProgress bool, silent bool) (*Scheduler, error) {
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	
@@ -51,14 +53,16 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 		processor:     processor,
 		writer:        writer,
 		logger:        logger,
-		concurrency:   10,
+		concurrency:   concurrency,
+		noProgress:    noProgress,
+		silent:        silent,
 		ctx:           ctx,
 		cancel:        cancel,
 		stats: SchedulerStats{
 			DomainRetries: make(map[string]int),
 			StartTime:     time.Now(),
 		},
-	}
+	}, nil
 }
 
 func (s *Scheduler) Schedule(urls []string) error {
@@ -74,35 +78,39 @@ func (s *Scheduler) Schedule(urls []string) error {
 
 	time.Sleep(200 * time.Millisecond)
 
-	progressBar := output.NewProgressBar(len(urls), 40)
-	progressBar.SetPrefix("Processing: ")
-
-	s.logger.SetProgressBar(progressBar)
+	var progressBar *output.ProgressBar
+	if !s.noProgress && !s.silent {
+		progressBar = output.NewProgressBar(len(urls), 40)
+		progressBar.SetPrefix("Processing URLs: ")
+		s.logger.SetProgressBar(progressBar)
+		progressBar.Start()
+		progressBar.SetSuffix("Secrets: 0 | Rate: 0.0/s")
+	}
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
+	done := make(chan struct{})
 
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				s.mutex.Lock()
-				processedCount := s.stats.ProcessedURLs
-				secretsFound := s.stats.TotalSecrets
-				s.mutex.Unlock()
+	if progressBar != nil {
+		go func() {
+			for {
+				select {
+				case <-ticker.C:
+					s.mutex.Lock()
+					processedCount := s.stats.ProcessedURLs
+					secretsFound := s.stats.TotalSecrets
+					s.mutex.Unlock()
 
-				progressBar.Update(processedCount)
-
-				progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
-					secretsFound,
-					float64(processedCount)/time.Since(s.stats.StartTime).Seconds()))
-			case <-s.ctx.Done():
-				return
+					progressBar.Update(processedCount)
+					progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
+						secretsFound,
+						float64(processedCount)/time.Since(s.stats.StartTime).Seconds()))
+				case <-done:
+					return
+				}
 			}
-		}
-	}()
-	
-	progressBar.Start()
+		}()
+	}
 
 	s.workerPool = utils.NewWorkerPool(s.concurrency, len(urls))
 
@@ -113,12 +121,19 @@ func (s *Scheduler) Schedule(urls []string) error {
 
 	s.waitGroup.Wait()
 
-	progressBar.Stop()
+	if progressBar != nil {
+		close(done)
+		progressBar.Stop()
+		s.logger.SetProgressBar(nil)
+	}
 
 	s.mutex.Lock()
 	s.stats.EndTime = time.Now()
 	duration := s.stats.EndTime.Sub(s.stats.StartTime)
-	urlsPerSecond := float64(s.stats.ProcessedURLs) / duration.Seconds()
+	urlsPerSecond := 0.0
+	if duration.Seconds() > 0 {
+		urlsPerSecond = float64(s.stats.ProcessedURLs) / duration.Seconds()
+	}
 	s.mutex.Unlock()
 
 	s.logger.Info("Processing completed in %.2f seconds", duration.Seconds())
