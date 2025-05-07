@@ -282,7 +282,7 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 		s.mu.Unlock()
 		if s.writer != nil {
 			for _, sec := range secrets {
-				if err := s.writer.WriteSecret(sec.Type, sec.Value, sec.URL, sec.Context, sec.Line); err != nil {
+				if err := s.writer.WriteSecret(sec.URL, sec.Type, sec.Value, sec.URL, sec.Context, sec.Description, sec.Line); err != nil {
 					s.logger.Error("Failed to write secret to output: %v", err)
 				}
 			}

@@ -347,7 +347,7 @@ func (s *Scheduler) worker(id int) {
 		for _, secret := range secrets {
 			s.logger.SecretFound(secret.Type, secret.Value, url)
 					if s.writer != nil {
-						writeErr := s.writer.WriteSecret(secret.Type, secret.Value, secret.URL, secret.Context, secret.Line)
+						writeErr := s.writer.WriteSecret(url, secret.Type, secret.Value, url, secret.Context, "", secret.Line)
 						if writeErr != nil {
 							s.logger.Error("Worker %d: failed to write secret to output file: %v", id, writeErr)
 				}
