@@ -129,11 +129,11 @@ func (c *Client) SetGlobalRateLimit(requestsPerSecond int) {
 			bucket.refillRate = float64(DefaultAdaptiveRate)
 			bucket.maxTokens = float64(DefaultAdaptiveRate)
 			bucket.currentRate = float64(DefaultAdaptiveRate)
-			bucket.isAdapting = false // Reset adaptation state
+			bucket.isAdapting = false
 		} else {
 			bucket.refillRate = float64(c.rateLimiter.globalLimit)
 			bucket.maxTokens = float64(c.rateLimiter.globalLimit)
-			bucket.currentRate = float64(c.rateLimiter.globalLimit) // Fixed rate
+			bucket.currentRate = float64(c.rateLimiter.globalLimit) 
 			bucket.isAdapting = false
 		}
 		// Reset tokens to max for simplicity when changing modes/rates

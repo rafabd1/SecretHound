@@ -1,6 +1,8 @@
 package patterns
 
 import (
+	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -22,6 +24,12 @@ type PatternDefinitions struct {
 	Patterns map[string]PatternConfig
 }
 
+/**
+	IMPORTANT:
+		The Regex patterns must be in the accepted format for GoLang Regex Engine.
+		Please refer to the following link for more information:
+		https://github.com/google/re2/wiki/Syntax
+**/
 var DefaultPatterns = &PatternDefinitions{
 	Patterns: map[string]PatternConfig{
 		// AWS - Critical cloud credentials
@@ -109,7 +117,7 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordExcludes: []string{"QVO", "QUO", "YO", "accessToken:", ".accessToken", "oauth_token=", "variable", "config", "credential", "INVALID_ACCESS_TOKEN", "MISSING_ACCESS_TOKEN"},
 		},
 		"oauth_token": {
-			Regex:       `(?i)(?:oauth|access)[._-]?token\\s*[:=]\\s*['"]([a-zA-Z0-9_\\-\.]{32,500})['"]`,
+			Regex:       `(?i)(?:oauth|access)[._-]?token\\s*[:=]\\s*['"]([a-zA-Z0-9_.-]{32,500})['"]`,
 			Description: "OAuth Token",
 			Enabled:     true,
 			Category:    "auth",
@@ -490,13 +498,13 @@ var DefaultPatterns = &PatternDefinitions{
 
 		// --- PII (Personally Identifiable Information) Patterns ---
 		"email_address": {
-			Regex:       `\b[a-zA-Z0-9._%+-]+@(?![^.]*\.(?:png|jpg|jpeg|gif|svg|webp)\b)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b`,
+			Regex:       `\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b`,
 			Description: "Email Address",
 			Enabled:     true,
 			Category:    "pii",
 			MinLength:   6,
 			KeywordMatches: []string{"email", "mail", "address"},
-			KeywordExcludes: []string{"example", "test", "demo", "noreply", "no-reply", "@example.com", "@test.com", "verification-card-", "name@email.com", "name@domain.com", "@author"},
+			KeywordExcludes: []string{"example", "test", "demo", "noreply", "no-reply", "@example.com", "@test.com", "verification-card-", "name@email.com", "name@domain.com", "@author", "license", "(c)", "copyright", "author:", "maintainer:", "created by", "contact:", "<", "first.last@company.com", ".png')", ".jpg')", ".gif')", ".svg')", ".webp')", ".png\"')", ".jpg\"')", ".gif\"')", ".svg\"')", ".webp\"')", "@2x.png", "@3x.png"},
 		},
 		"phone_number": {
 			Regex:       `(?i)(?:(?:\\b(?:phone|mobile|tel(?:ephone)?)\\b(?:[^\\w\\d\\n\\r<]{0,10}(?:[:= ]{1,3}|\\s+(?:to|at|us\\s+at)\\s+))(\\+?\\d{1,3}[-.\s]?)?(\\(\\d{3}\\)|\\d{3})[-.\s]?\\d{3}[-.\s]?\\d{4})|(?:(\\+?\\d{1,3}[-.\s]?)?(?:\\(\\d{3}\\)[-.\s]?\\d{3}[-.\s]?\\d{4}|\\d{3}[-.\s]+\\d{3}[-.\s]+\\d{4}|\\d{3}[-.\s]+\\d{7}|\\d{6}[-.\s]+\\d{4})))\\b`,
@@ -507,14 +515,14 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordExcludes: []string{"version", "id", "example", "test", "port", "e.g.", "_filter", "className", "jsx-", "mask", "000-000-0000", "prod", "phones/", "watermark", "123-456-7890", "tel:", "adobe_mc", "TS=", "gtag", "AW-", "DC-", "Lg(e,"},
 		},
 		"ipv4_address": {
-			Regex:       `\b(?!10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b`,
-			Description: "IPv4 Address (Public)",
+			Regex:       `(?i)(?:[a-zA-Z0-9._-]*?(?:ip|address|host|server)[a-zA-Z0-9._-]*?\s*[:=]\s*['"]?)\s*(\b(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\b)`,
+			Description: "IPv4 Address (associated with a keyworded key, e.g., server_ip: 1.2.3.4)",
 			Enabled:     true,
 			Category:    "pii",
 			MinLength:   7,
 			MaxLength:   15,
 			KeywordMatches: []string{"ip", "address", "host"},
-			KeywordExcludes: []string{"0.0.0.0", "127.0.0.1", "localhost"},
+			KeywordExcludes: []string{"0.0.0.0", "127.0.0.1", "localhost", "firefox/", "version", "rfc", "section-", "webpack_require__", "module", "/***/", "/*", "javascript/", "// ", "Symbol(", "RegExp.prototype", ",.", "c0 .", "M.exports={", "c-id=", "{\"2.16.840.", "@see Recommendation", "ITU-T H.", "Section "},
 		},
 		"ipv6_address": {
 			Regex:       `\b(?:(?:[0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?:(?::[0-9a-fA-F]{1,4}){1,6})|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(?:ffff(?::0{1,4}){0,1}:){0,1}(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])|(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\b`,
@@ -567,16 +575,17 @@ var DefaultPatterns = &PatternDefinitions{
 			KeywordMatches: []string{"address", "ethereum", "wallet", "contract", "account"},
 			KeywordExcludes: []string{"example", "test", "null", "0x0", "0x000", "zero"},
 		},
-		"bitcoin_address": {
-			Regex:       `\b([13][a-km-zA-HJ-NP-Z1-9]{25,34})\b`,
-			Description: "Bitcoin Address",
-			Enabled:     true,
-			Category:    "web3",
-			MinLength:   26,
-			MaxLength:   35,
-			KeywordMatches: []string{"address", "bitcoin", "wallet", "transaction", "blockchain"},
-			KeywordExcludes: []string{"example", "test", "null", "0x0", "0x000", "zero", "ak.ak", "=="},
-		},
+		// TODO: Implement a new filtering system for context analysis
+		// "bitcoin_address": {
+		// 	Regex:       `\b([13][a-km-zA-HJ-NP-Z1-9]{25,34})\b`,
+		// 	Description: "Bitcoin Address",
+		// 	Enabled:     true,
+		// 	Category:    "web3",
+		// 	MinLength:   26,
+		// 	MaxLength:   35,
+		// 	KeywordMatches: []string{"address", "bitcoin", "wallet", "transaction", "blockchain"},
+		// 	KeywordExcludes: []string{"example", "test", "null", "0x0", "0x000", "zero", "ak.ak", "==", ":\"", "nl:", "pt-BR:", "it:", "zh-Hans:", "+/", "/\"","\\", "fill=\"", "d=\"", "lLU-", "ANYA2mH", "AcfD", "F4U2buu-r6VC4C9d", "AQAbBAP"},
+		// },
 		"web3_private_key": {
 			Regex:       `(?i)(?:private[._-]?key|secret|wallet|mnemonic|seed|private_key_hex)\s*[:=]\s*['"]?(0x?[a-fA-F0-9]{64})['"]?`,
 			Description: "Web3 Private Key (Keyword Dependent)",
@@ -585,14 +594,15 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   64,
 			KeywordExcludes: []string{"example", "test", "placeholder", "sample"},
 		},
-		"mnemonic_phrase": {
-			Regex:       `(?i)(?:mnemonic|seed|phrase|backup|recovery)(?:[^a-z\n\r<]*[\s:=]+){1,5}(\b(?:[a-z]+\s+){11}[a-z]+(?!\s*power outage|\s*business internet)\b|\b(?:[a-z]+\s+){23}[a-z]+(?!\s*power outage|\s*business internet)\b)`,
-			Description: "Mnemonic/Seed Phrase (Keyword Dependent)",
-			Enabled:     true,
-			Category:    "web3",
-			MinLength:   40,
-			KeywordExcludes: []string{"example", "test", "placeholder", "sample", "instructions", "tutorial", "words", "wordlist", "power outage", "business internet"},
-		},
+		// TODO:
+		// "mnemonic_phrase": {
+		// 	Regex:       `(?i)(?:mnemonic|seed|phrase|backup|recovery)(?:[^a-z\n\r<]*[\s:=]+){1,5}(\b(?:[a-z]+\s+){11}[a-z]+\b|\b(?:[a-z]+\s+){23}[a-z]+\b)`,
+		// 	Description: "Mnemonic/Seed Phrase (Keyword Dependent)",
+		// 	Enabled:     true,
+		// 	Category:    "web3",
+		// 	MinLength:   40,
+		// 	KeywordExcludes: []string{"example", "test", "placeholder", "sample", "instructions", "tutorial", "words", "wordlist", "power outage", "business internet"},
+		// },
 		"web3_provider_key": {
 			Regex:       `(?i)(?:infura|alchemy|quicknode|moralis|ankr).{0,20}(?:api[._-]?key|project[._-]?id|app[._-]?id|secret)\s*[:=]\s*['"]?([a-zA-Z0-9_\-]{32,64})['"]?`,
 			Description: "Web3 Provider API Key/ID (Infura, Alchemy, etc.)",
@@ -637,31 +647,88 @@ var DefaultPatterns = &PatternDefinitions{
 
 		// --- URL / Endpoint Patterns (Disabled by default) ---
 		"url_generic": {
-			// Matches common schemes (http, https, ftp, etc.) followed by URL structure
 			Regex:       `(?i)(?:https?|ftp|sftp|file|git|ws|wss):\/\/(?:[\w\.-]+(?:[:\w\.-]*@)?[\w\.-]+)?(?:\.[\w\.-]+)+[\w\-\_.~:\/?#[\]@!\$&'\(\)\*\+,;=.]+`,
 			Description: "Full URL with protocol (http, ftp, file, etc.)",
-			Enabled:     false, // Disabled by default
+			Enabled:     false,
 			Category:    "url",
-			MinLength:   8, // Adjusted min length slightly
+			MinLength:   8, 
 			KeywordExcludes: []string{
 				"example.com", "localhost", "127.0.0.1", "::1",
-				"javascript:", "mailto:", // Keep excluding script/mail links
-				".png", ".jpg", ".jpeg", ".gif", ".css", ".js", ".svg", ".woff", ".ttf", // Exclude direct links to common assets
-				"schemas.android.com", "schemas.microsoft.com", "schemas.openxmlformats.org", // Common XML namespaces
-				"localhost:3000", "localhost:8080", // Common local dev URLs often in examples
+				"javascript:", "mailto:",
+				".png", ".jpg", ".jpeg", ".gif", ".css", ".js", ".svg", ".woff", ".ttf", 
+				"schemas.android.com", "schemas.microsoft.com", "schemas.openxmlformats.org",
+				"localhost:3000", "localhost:8080", 
 			},
 		},
 		"url_path": {
-			// Matches quoted strings starting with / followed by typical path characters, including parameters
 			Regex:       `['"](\/([\w\-\.~%]+(?:\/[\w\-\.~%]*)*)(?:\?[\w\-\.~=&%+]*)?(?:#[\w\-\.~]*)?)['"]`,
 			Description: "Quoted URL Path/Endpoint with Parameters",
-			Enabled:     false, // Disabled by default
+			Enabled:     false,
 			Category:    "url",
-			MinLength:   2, // Allow short paths like "/"
+			MinLength:   2,
 			KeywordExcludes: []string{
-				"/dist/", "/build/", "/node_modules/", "/assets/", "/static/", // Common build/asset paths
-				".js", ".css", ".html", ".md", ".txt", ".json", ".xml", ".png", ".jpg", // File extensions in paths are often not endpoints
+				"/dist/", "/build/", "/node_modules/", "/assets/", "/static/", 
+				".js", ".css", ".html", ".md", ".txt", ".json", ".xml", ".png", ".jpg",
 				"placeholder", "example", "/path/to/",
+			},
+		},
+		"generic_domain_name": {
+			Regex:       `\b((?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*(?:www|s3|cdn|api|ftp|mail|blog|shop|assets|static|files|cloud|storage|dev|prod|stage|test|admin|auth|login|metrics|grafana|kibana|jenkins|gitlab|jira)\.(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)+(?:[a-zA-Z]{2,10})|(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)+(?:com|org|net|io|co|dev|app|ai|tech|info|biz|site|online|me|cloud|gov|edu|mil|ca|uk|de|fr|jp|au|br|cn|ru|tv))\b`,
+			Description: "Domain name with common indicators (e.g., example.com, www.example.org, api.example.service)",
+			Enabled:     false,
+			Category:    "url",
+			MinLength:   4,
+			MaxLength:   253,
+			KeywordExcludes: []string{
+				// Common file extensions
+				".js", ".css", ".json", ".xml", ".html", ".md", ".txt",
+				".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp",
+				".go", ".py", ".java", ".ts", ".cs", ".php", ".rb",
+				".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf",
+				".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+				".zip", ".tar", ".gz", ".rar", ".7z",
+				// Common code keywords that might prefix a false positive TLD
+				"this.", "self.", "window.", "document.", "console.",
+				"process.env", "module.exports", "System.out", "Math.",
+				"angular.", "react.", "vue.", "jquery.", "d3.",
+				// JavaScript object properties and methods that look like TLDs
+				"prototype", "call", "apply", "bind", "constructor",
+				"handler", "length", "name", "message", "stack", // "name" also added as a common property
+				"push", "pop", "shift", "unshift", "slice", "splice", "join", "concat", "reverse", "sort", "map", "filter", "reduce", "forEach",
+				"getElementById", "getElementsByTagName", "getElementsByClassName", "querySelector", "querySelectorAll",
+				"addEventListener", "removeEventListener", "dispatchEvent",
+				"preventDefault", "stopPropagation", "stopImmediatePropagation",
+				"toString", "valueOf", "hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable",
+				"toUpperCase", "toLowerCase", "charAt", "charCodeAt", "indexOf", "lastIndexOf", "substring", "substr", "trim", "replace", "split", "match", "search",
+				"parse", "stringify", "now", "UTC", "isArray", "keys", "values", "entries",
+				"parents", "children", "parent", "child", "next", "prev", "siblings",
+				"addClass", "removeClass", "toggleClass", "hasClass",
+				"attr", "removeAttr", "prop", "removeProp", "val", "text", "html", "css",
+				"data", "removeData", "on", "off", "trigger", "triggerHandler",
+				"append", "prepend", "before", "after", "remove", "empty", "clone",
+				"show", "hide", "toggle", "fadeIn", "fadeOut", "fadeTo", "slideDown", "slideUp", "slideToggle",
+				"animate", "stop", "delay", "promise", "then", "catch", "finally",
+				"headers", "body", "status", "statusText", "ok", "redirected", "type", "url", // "type" and "url" are also common properties
+				"error", "json", "formData", "blob", "arrayBuffer", // "error" as a property
+				"response", "request", "target", "currentTarget", "relatedTarget", "eventPhase", "bubbles", "cancelable", "defaultPrevented", "isTrusted", "timeStamp",
+				"innerHTML", "outerHTML", "innerText", "textContent", "className", "id", "style", "title", "lang", "dir", "dataset", "attributes",
+				"nodeName", "nodeValue", "nodeType", "parentNode", "childNodes", "firstChild", "lastChild", "previousSibling", "nextSibling",
+				"src", "href", "alt", "width", "height", "rel", "checked", "disabled", "selected", "readonly", "multiple", "placeholder", "action", "method", // Removed "value" as it could be part of a legit domain like company.value, but added other common attrs
+				// Common generic words that might appear as the last part of an object path or are TLD-like
+				"version", "config", "options", "settings", "params", "query", "payload", "content", "result", "results", "count", "success", "info", "warning", "debug", "state", "context", "user", "item", "items", "key", // Removed "value" from here too
+				"detail", "details", "summary", "build", "env", "prod", "dev", "stage", "local", "default", "main", "core", "lib", "util", "utils", "helper", "helpers", "service", "services", "api", "app",
+				"controller", "model", "view", "component", "module", "plugin", "widget", "template", "layout", "theme", "props", "element", "elements", "instance", "manager", "loader", "parser", "formatter", "validator", "router", "route", "store", "actions", "reducer", "reducers", "effect", "effects", "events", "listener", "listeners",
+				"stream", "buffer", "file", "files", "path", "size", "date", "time", "uid", "guid", "auth", "login", "logout", "account", "profile", "session", "cart", "order", "product", "customer", "client", "admin", "dashboard", "report", "analytics", "stats", "log", "logs", "messages", "notification", "notifications", "alerts", "modal", "dialog", "popup", "dropdown", "menu", "nav", "sidebar", "header", "footer", "section", "article", "aside", "figure", "figcaption", "image", "img", "picture", "audio", "video", "track", "canvas", "form", "input", "textarea", "button", "select", "option", "label", "fieldset", "legend",
+				"table", "thead", "tbody", "tfoot", "tr", "th", "td", "col", "colgroup", "ul", "ol", "li", "dl", "dt", "dd", "p", "span", "h1", "h2", "h3", "h4", "h5", "h6", "br", "hr", "em", "strong", "b", "i", "u", "s", "strike", "del", "ins", "mark", "small", "sub", "sup", "code", "pre", "samp", "kbd", "var", "q", "blockquote", "cite", "abbr", "address", "dfn", "progress", "meter", "wbr", "base", "head", "link", "meta", "script", "noscript",
+				// Placeholders and common test domains
+				"example.com", "yourdomain.com", "mydomain.com", "test.com",
+				"localhost",
+				"*.example.com", "*.test.com",
+				// Common schema/namespace URLs
+				"schemas.android.com", "schemas.microsoft.com", "schemas.openxmlformats.org",
+				"xmlns.jcp.org", "www.w3.org", "purl.org", "jquery.com",
+				"angular.io", "reactjs.org", "vuejs.org", "npmjs.com",
+				"github.com", "gitlab.com", "bitbucket.org",
 			},
 		},
 		// --- End URL Patterns ---
@@ -672,7 +739,7 @@ var DefaultPatterns = &PatternDefinitions{
 var GlobalExclusions = []string{
 	// Common code patterns
 	"function", "return", "import", "export", "require",
-	"console.log", "window.", "document.", "getElementById",
+	"window.", "document.", "getElementById",
 	"querySelector", "addEventListener", "module.exports",
 	
 	// Common file paths
@@ -686,10 +753,10 @@ var GlobalExclusions = []string{
 
 	// CSS variables and documentation
 	"--", "css", "style", "class", "border-radius", "margin", "padding",
-	"tooltip", "shadow", "background-color", "font-size", "wiki", "github",
+	"tooltip", "shadow", "background-color", "font-size", "wiki",
 	"example", "usage", "documentation", "tutorial", "sample", "@caption",
-	"origin-trial", ".com/", "hover", "distance", "basic usage", "basic example",
-	"freshchat_", "min_", "max_", "login", "uuid", "component", "module",
+	"origin-trial", "hover", "distance", "basic usage", "basic example",
+	"freshchat_", "min_", "max_", "component", "module",
 	"transition", "transform", "position", "display", "overflow", "align",
 	"container", "wrapper", "element", "selector", "pattern", "template",
 	
@@ -702,7 +769,7 @@ var GlobalExclusions = []string{
 	"fallback", "message", "prefix", "suffix", "handle", "callback",
 	
 	// Specific terms for false positives
-	"Basic authorization", "Basic authentication", "Basic configuration", "Basic setup",
+	"Basic configuration", "Basic setup",
 	"Basic usage", "Basic example", "Basic security", "Basic settings",
 	"<h1", "<h2", "<h3", "<h4", "<h5", "<h6", "createElement",
 	
@@ -714,7 +781,7 @@ var GlobalExclusions = []string{
 
 	// Code minified with base64 strings
 	"data:image", "data:application", "sourceMappingURL", 
-	"base64,", "/base64", "btoa(", "atob(", "encode(",
+	"base64,", "/base64", "encode(",
 	"charAt(", "substring(", "slice(", "map(", "join(",
 	"replace(", "split(", "charCode", "fromCharCode",
 }
@@ -801,8 +868,8 @@ func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []st
 
 			re, err := regexp.Compile(config.Regex)
 			if err != nil {
-				// Log this error? For now, just skip the pattern
-				// Consider adding logging here if pattern compilation fails
+				// Log error to stderr for easier debugging of pattern issues
+				fmt.Fprintf(os.Stderr, "[ERROR] Failed to compile regex for pattern '%s': %v\nRegex: %s\n", name, err, config.Regex)
 				continue
 			}
 

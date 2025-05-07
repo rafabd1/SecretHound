@@ -17,22 +17,22 @@ const (
     // Levels ordered by verbosity (lower value = more verbose)
     LevelDebug LogLevel = iota
     LevelInfo
-    LevelSuccess // Success messages are important, shown unless silent
+    LevelSuccess
     LevelWarning
     LevelError
-    LevelFatal // Not really a level, but used for critical errors
-    LevelSilent // A level higher than Error to suppress almost everything
+    LevelFatal 
+    LevelSilent 
 )
 
 type LogMessage struct {
     Level     LogLevel
     Message   string
     Time      time.Time
-    Critical  bool // Keep critical for very specific errors if needed
+    Critical  bool 
 }
 
 type Logger struct {
-    minLevel    LogLevel // Use a minimum level instead of just verbose/silent bools
+    minLevel    LogLevel 
     outputMu    sync.Mutex
     logQueue    chan LogMessage
     done        chan struct{}
