@@ -14,7 +14,6 @@ var (
 	verbose bool
 )
 
-// rootCmd now IS the scan command
 var rootCmd = &cobra.Command{
 	Use:   "secrethound [flags] [target]",
 	Short: "Scan targets (URLs or local files/dirs) for secrets or URLs",
@@ -48,30 +47,25 @@ Flag Categories:
 		// --- List Patterns Check --- 
 		lp, _ := cmd.Flags().GetBool("list-patterns")
 		if lp {
-			if len(args) != 0 { // Still check args for list-patterns
+			if len(args) != 0 { 
 				return fmt.Errorf("accepts 0 arguments when --list-patterns is used, received %d", len(args))
 			}
-			return nil // OK if --list-patterns and 0 args
+			return nil
 		}
 
 		// --- Input Source Check --- 
 		inputFileUsed, _ := cmd.Flags().GetString("input-file")
 		hasInputFile := inputFileUsed != ""
 
-		// If -i is used, the primary input source is determined.
-		// We don't need to strictly enforce zero positional args here;
-		// runScan will prioritize the -i flag value anyway.
 		if hasInputFile {
-			return nil // Allow any number of args if -i is specified, runScan handles it
+			return nil 
 		}
 
-		// If -i is NOT used, we NEED exactly one positional argument.
 		if len(args) != 1 {
-			 return fmt.Errorf("requires exactly one target argument (URL, file, or directory) if --input-file is not used, received %d", len(args))
-		 }
+			return fmt.Errorf("requires exactly one target argument (URL, file, or directory) if --input-file is not used, received %d", len(args))
+		}
 
-		 // Exactly one arg and no -i flag is OK.
-		 return nil
+		return nil
 	},
 	DisableFlagsInUseLine: true,
 	CompletionOptions: cobra.CompletionOptions{
@@ -146,7 +140,7 @@ func init() {
 	rootCmd.Flags().Bool("list-patterns", false, "List available pattern categories and patterns, then exit")
 	vip.BindPFlag("include_categories", rootCmd.Flags().Lookup("include-categories"))
 	vip.BindPFlag("exclude_categories", rootCmd.Flags().Lookup("exclude-categories"))
-	vip.BindPFlag("scan_urls", rootCmd.Flags().Lookup("scan-urls")) // Bind the new flag
+	vip.BindPFlag("scan_urls", rootCmd.Flags().Lookup("scan-urls"))
 	vip.BindPFlag("list_patterns", rootCmd.Flags().Lookup("list-patterns"))
 
 	// Group: General Behavior
@@ -157,4 +151,3 @@ func init() {
 
 }
 
-// ---- Keep only Execute, init, beforeCommand, rootCmd definition ----

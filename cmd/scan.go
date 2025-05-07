@@ -20,28 +20,22 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Removed scanCmd definition
-// var scanCmd = &cobra.Command{...}
-
-// runScan is now called by rootCmd
 func runScan(cmd *cobra.Command, args []string) error {
 	vip := viper.GetViper()
 	logger := output.NewLogger(vip.GetBool("verbose"), vip.GetBool("silent"))
 	silentMode := vip.GetBool("silent")
 	rawMode := vip.GetBool("raw")
 
-	// Define timeColorLog here so it's available later
 	timeColorLog := color.New(color.FgHiBlack).SprintfFunc()
 
-	// Conditionally print header
 	if !silentMode {
-		printHeader() // Assuming printHeader exists or replace with direct print
+		printHeader()
 	}
 
 	// --- List Patterns Handling ---
 	if vip.GetBool("list_patterns") {
 		printPatternList()
-		return nil // Exit after listing
+		return nil
 	}
 
 	// --- Validate Category Flags & Determine Final Filters ---
@@ -50,7 +44,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	scanUrlsFlag := vip.GetBool("scan_urls")
 
 	var finalIncludeCategories []string
-	var finalExcludeCategories []string // Need a separate variable for final excludes
+	var finalExcludeCategories []string 
 
 	if scanUrlsFlag {
 		// --scan-urls Mode: Use ONLY 'url' category, ignore others
@@ -76,18 +70,15 @@ func runScan(cmd *cobra.Command, args []string) error {
 	pm := patterns.NewPatternManager()
 
 	// Load patterns respecting final filters determined above
-	err := pm.LoadPatterns(finalIncludeCategories, finalExcludeCategories) // Use final lists
+	err := pm.LoadPatterns(finalIncludeCategories, finalExcludeCategories) 
 	if err != nil {
 		logger.Error("%s", fmt.Sprintf("Error loading patterns: %v", err))
 		os.Exit(1)
 	}
-	// Pattern loading logging happens later
 
-	// Create RegexManager and associate the configured PatternManager
 	regexManager := core.NewRegexManager()
 	regexManager.SetPatternManager(pm)
 
-	// --- Get other config values from Viper (needed for logging) ---
 	timeout := vip.GetInt("timeout")
 	maxRetries := vip.GetInt("retries")
 	rateLimit := vip.GetInt("rate_limit")
@@ -101,9 +92,21 @@ func runScan(cmd *cobra.Command, args []string) error {
 		if rateLimit > 0 {
 			rateLimitStr = fmt.Sprintf("%d req/s per domain", rateLimit)
 		}
+
+		// Build HTTP config log message
+		httpConfigLog := fmt.Sprintf("HTTP config: %d sec timeout | %d max retries | %s", timeout, maxRetries, rateLimitStr)
+		netHeaders := vip.GetStringSlice("headers")
+		if len(netHeaders) > 0 {
+			if len(netHeaders) == 1 {
+				httpConfigLog += fmt.Sprintf(" | Custom Header: %s", netHeaders[0])
+			} else {
+				httpConfigLog += fmt.Sprintf(" | Custom Headers: %d configured", len(netHeaders))
+			}
+		}
+
 		// Update pattern info based on final include/exclude lists
 		patternInfo := fmt.Sprintf("%d patterns loaded", pm.GetPatternCount())
-		if scanUrlsFlag { // Special message for URL mode
+		if scanUrlsFlag { 
 			patternInfo = fmt.Sprintf("%d URL patterns loaded", pm.GetPatternCount())
 		} else if len(finalIncludeCategories) > 0 {
 			patternInfo = fmt.Sprintf("%d patterns from categories: %v", pm.GetPatternCount(), finalIncludeCategories)
@@ -112,27 +115,25 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 
 		timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s HTTP config: %d sec timeout | %d max retries | %s\n",
+		fmt.Fprintf(os.Stderr, "%s %s %s\n",
 			timeStrLog,
 			color.CyanString("[INFO]"),
-			timeout, maxRetries, rateLimitStr)
+			httpConfigLog) 
 		fmt.Fprintf(os.Stderr, "%s %s Concurrency: %d workers | Patterns: %s\n",
 			timeStrLog,
 			color.CyanString("[INFO]"),
 			concurrency, patternInfo)
 
-		// Log output file status
 		if outputFile != "" {
 			fmt.Fprintf(os.Stderr, "%s %s Output: Results will be saved to %s\n",
-				timeStrLog, // Reuse timestamp
+				timeStrLog,
 		color.CyanString("[INFO]"),
 				outputFile)
 		} else {
 			fmt.Fprintf(os.Stderr, "%s %s Output: Results will be printed to standard output\n",
-				timeStrLog, // Reuse timestamp
+				timeStrLog, 
 				color.CyanString("[INFO]"))
 		}
-		// Add a blank line for separation before progress/results
 		fmt.Fprintln(os.Stderr)
 	}
 
@@ -149,7 +150,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	// --- Input Collection ---
-	// Pass logger to collectInputSources
 	inputs, err := collectInputSources(inputFile, args, logger)
 	if err != nil {
 		return err
@@ -171,7 +171,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		domainManager.GroupURLsByDomain(remoteURLs)
 
 		// Get networking config directly from viper
-		netTimeoutSeconds := vip.GetInt("timeout") // Get timeout as int (seconds)
+		netTimeoutSeconds := vip.GetInt("timeout")
 		netRetries := vip.GetInt("retries")
 		netInsecure := vip.GetBool("insecure")
 		netHeaders := vip.GetStringSlice("header")
@@ -195,7 +195,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 				logger.Warning("Invalid header format (should be 'Name: Value'): %s", h)
 			}
 		}
-		// Set rate limit (if needed, get from cfg or viper)
 		if netRateLimit > 0 {
 			client.SetGlobalRateLimit(netRateLimit)
 		}
@@ -205,14 +204,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 		    timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
 		    fmt.Fprintf(os.Stderr, "%s %s Processing %d URLs distributed across %d domains\n",
 		        timeStrLog, color.CyanString("[INFO]"), len(remoteURLs), domainManager.GetDomainCount())
-            // Add a blank line after domain info as well
             fmt.Fprintln(os.Stderr)
 		}
 	}
 
 	// --- Execute Scans (with corrected logic for passing patterns) ---
 	var wg sync.WaitGroup
-	var totalSecretsFound int32 // Use atomic later if needed, or simple int with mutex
+	var totalSecretsFound int32 
 	var finalErr error
 	var mu sync.Mutex // Mutex to protect totalSecretsFound and finalErr
 
@@ -224,15 +222,14 @@ func runScan(cmd *cobra.Command, args []string) error {
 			defer wg.Done()
 			// Create RegexManager & Processor specifically for remote scan
 			regexManager := core.NewRegexManager()
-			regexManager.SetPatternManager(pm) // Use the filtered pm
-			processor := core.NewProcessor(regexManager, logger) // Create processor HERE
+			regexManager.SetPatternManager(pm) 
+			processor := core.NewProcessor(regexManager, logger) 
 
-			// Pass flags directly from viper to NewScheduler
 			scheduler, err := core.NewScheduler(domainManager, client, processor, writer, logger, scanConcurrency, vip.GetBool("no_progress"), silentMode)
 			if err != nil {
 				logger.Error("Failed to create URL scheduler: %v", err)
 				mu.Lock()
-				if finalErr == nil { finalErr = err } // Store first error
+				if finalErr == nil { finalErr = err } 
 				mu.Unlock()
 				return
 			}
@@ -243,7 +240,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 				if finalErr == nil { finalErr = err }
 				mu.Unlock()
 			}
-			// Update total secrets from scheduler stats
 			stats := scheduler.GetStats()
 			mu.Lock()
 			totalSecretsFound += int32(stats.TotalSecrets) 
@@ -255,7 +251,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// Pass flags directly from viper to processLocalFiles
 			secrets, err := processLocalFiles(localFiles, logger, writer, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode) 
 			if err != nil {
 				logger.Error("Error processing local files: %v", err)
@@ -282,23 +277,19 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// --- Summary Logging (Conditionally) ---
 	time.Sleep(100 * time.Millisecond)
 
-	if !silentMode { // Only print final summary if not silent
+	if !silentMode { 
 		if outputFile != "" { 
-			// logger.Success handles its own formatting
 			logger.Success("Found a total of %d secrets", totalSecretsFound)
 			
-			// Define timeStrLog here for the 'Results saved' message
 			timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
 		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
 			    timeStrLog, 
 			color.CyanString("[INFO]"), 
 			fmt.Sprintf("Results saved to: %s", outputFile))
 		} else {
-			// For stdout, just the Success log is probably enough
 			logger.Success("Found a total of %d secrets", totalSecretsFound)
 	}
 
-		// Define timeStrLog again for the completion message
 		timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
 	fmt.Fprintf(os.Stderr, "\n%s %s %s\n", 
 			timeStrLog,
@@ -337,12 +328,11 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 					}
 					inputs = append(inputs, dirFiles...)
 				} else {
-					// It's a file, check if it's a list of URLs/paths
 					isList, contents, listErr := isFileURLList(arg)
 					if listErr != nil {
 						// Log error from isFileURLList but proceed assuming it's a single file
 						logger.Warning("Error checking if '%s' is a list file: %v. Treating as single file.", arg, listErr)
-						inputs = append(inputs, arg) // Add the file path itself
+						inputs = append(inputs, arg) 
 					} else if isList {
 						listCount := 0
 						for _, line := range contents {
@@ -360,7 +350,6 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 				}
 			}
 		}
-		// logger.Info("Processed %d sources from command line arguments", len(args)) // Logged inside loop now
 	}
 
 	if inputFile != "" {
@@ -661,30 +650,25 @@ func printPatternList() {
 	var categories []string
 	categoryMap := make(map[string]bool)
 
-	// Iterate over DefaultPatterns (defined in patterns package)
 	for name, config := range patterns.DefaultPatterns.Patterns {
 		if !config.Enabled {
-			continue // Optionally skip disabled ones even in list
+			continue 
 		}
 		if config.Category == "" {
-			config.Category = "uncategorized" // Assign default if missing
+			config.Category = "uncategorized" 
 		}
 		if !categoryMap[config.Category] {
 			categories = append(categories, config.Category)
 			categoryMap[config.Category] = true
 		}
-		// Store name along with config for sorting/printing
 		categorized[config.Category] = append(categorized[config.Category], struct{ Name string; Config patterns.PatternConfig }{Name: name, Config: config})
 	}
 
-	// Sort categories alphabetically
 	sort.Strings(categories)
 
-	// Print grouped patterns
 	for _, category := range categories {
 		fmt.Printf("\n[%s]\n", strings.ToUpper(category))
 		categoryPatterns := categorized[category]
-		// Sort patterns within category alphabetically by name
 		sort.Slice(categoryPatterns, func(i, j int) bool {
 			return categoryPatterns[i].Name < categoryPatterns[j].Name
 		})
@@ -747,21 +731,6 @@ func initScanCmd(cmd *cobra.Command) {
 	vip.BindPFlag("no_progress", cmd.Flags().Lookup("no-progress"))
 }
 
-// Helper function defined locally within the package
-func stringSliceContains(slice []string, item string) bool {
-	set := make(map[string]struct{}, len(slice))
-	for _, s := range slice {
-		set[strings.ToLower(s)] = struct{}{}
-	}
-	_, ok := set[strings.ToLower(item)]
-	return ok
-}
-
-// Make sure initScanCmd is called appropriately, likely from root.go or where scanCmd is defined/added.
-// Example (if scanCmd is defined in root.go):
-// var scanCmd = &cobra.Command{ Use: "scan", ..., RunE: runScan }
-// func init() { rootCmd.AddCommand(scanCmd); initScanCmd(scanCmd) }
-
 // Helper function to print the header
 func printHeader() {
 	// ANSI Shadow font from patorjk.com or similar
@@ -773,12 +742,11 @@ func printHeader() {
   \__ \/ _ \/ ___/ ___/ __/ __/ /_/ / __ \/ / / / __ \/ __  /
  ___/ /  __/ /__/ /  / /_/ /_/ __  / /_/ / /_/ / / / / /_/ /
 /____/\___/\___/_/   \__\/\__/_/ /_/\____/\__,_/_/ /_/\__,_/   v%s
-`, Version) // Add version directly
+`, Version)
 	
 	authorLine := `
 Secrets Finder | Created by github.com/rafabd1
 `
-
 	// Print header (ASCII + Version)
 	fmt.Fprint(os.Stderr, color.CyanString(header))
 	// Print author line
