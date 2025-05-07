@@ -136,12 +136,16 @@ func init() {
 	// Group: Pattern Control
 	rootCmd.Flags().StringSlice("include-categories", []string{}, "Comma-separated list of pattern categories to include (e.g., aws,gcp)")
 	rootCmd.Flags().StringSlice("exclude-categories", []string{}, "Comma-separated list of pattern categories to exclude (e.g., pii,generic)")
-	rootCmd.Flags().Bool("scan-urls", false, "URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters)") // Added flag
+	rootCmd.Flags().Bool("scan-urls", false, "URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters)")
 	rootCmd.Flags().Bool("list-patterns", false, "List available pattern categories and patterns, then exit")
 	vip.BindPFlag("include_categories", rootCmd.Flags().Lookup("include-categories"))
 	vip.BindPFlag("exclude_categories", rootCmd.Flags().Lookup("exclude-categories"))
 	vip.BindPFlag("scan_urls", rootCmd.Flags().Lookup("scan-urls"))
 	vip.BindPFlag("list_patterns", rootCmd.Flags().Lookup("list-patterns"))
+
+	// Group: Output Format (Adicionando a nova flag aqui)
+	rootCmd.Flags().Bool("group-by-source", false, "Group secrets by source URL/file in the output")
+	vip.BindPFlag("group_by_source", rootCmd.Flags().Lookup("group-by-source"))
 
 	// Group: General Behavior
 	rootCmd.Flags().BoolP("no-progress", "n", false, "Disable the progress bar display") // Added based on scan.go

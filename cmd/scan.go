@@ -25,6 +25,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	logger := output.NewLogger(vip.GetBool("verbose"), vip.GetBool("silent"))
 	silentMode := vip.GetBool("silent")
 	rawMode := vip.GetBool("raw")
+	groupedMode := vip.GetBool("group_by_source")
 
 	timeColorLog := color.New(color.FgHiBlack).SprintfFunc()
 
@@ -138,15 +139,18 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	var writer *output.Writer
-	if outputFile != "" {
+	if outputFile != "" || groupedMode {
 		var err error
-		writer, err = output.NewWriter(outputFile, rawMode)
+		writer, err = output.NewWriter(outputFile, rawMode, groupedMode)
 		if err != nil {
-			return fmt.Errorf("failed to create output file: %v", err)
+			return fmt.Errorf("failed to create output writer: %v", err)
 		}
-		defer writer.Close()
-	} else {
+	} else if !groupedMode && outputFile == "" {
 		writer = nil
+	}
+
+	if writer != nil {
+		defer writer.Close()
 	}
 
 	// --- Input Collection ---
