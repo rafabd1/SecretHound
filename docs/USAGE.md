@@ -243,3 +243,123 @@ secrethound completion powershell > secrethound.ps1
 6. Monitor Resources: Watch memory and CPU usage with large scans.
 
 7. Backup Results: Save important findings securely.
+
+## Advanced Usage
+
+### Filtering by Pattern Category
+
+You can control which types of secrets are scanned by specifying categories.
+
+List available categories and patterns:
+```bash
+secrethound --list-patterns
+```
+
+Scan only for AWS and Google Cloud secrets:
+```bash
+secrethound --include-categories aws,gcp -i <target>
+```
+
+Scan for all secrets except Personal Identifiable Information (PII):
+```bash
+secrethound --exclude-categories pii -i <target>
+```
+
+### URL/Domain Extraction Mode
+
+If you only want to find URLs and domains within files/sources:
+```bash
+secrethound --scan-urls -i <target>
+```
+
+### Grouping Output by Source
+
+For scans with many sources, you can group the findings by the source URL or file path. This affects TXT and JSON output.
+
+```bash
+secrethound --group-by-source -i url-list.txt -o results_grouped.txt
+secrethound --group-by-source -i url-list.txt -o results_grouped.json
+```
+
+**Example Grouped TXT Output (`results_grouped.txt`):**
+```text
+https://example.com/file1.js:
+	[api-key] S3CR3T_K3Y_V4LU3_F1L31
+	URL: https://example.com/file1.js
+	Line: 42
+	Context: var apiKey = "S3CR3T_K3Y_V4LU3_F1L31";
+	Description: Generic API Key pattern
+
+	[jwt-token] eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+	URL: https://example.com/file1.js
+	Line: 101
+	Context: const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+	Description: JSON Web Token
+
+https://example.com/another/script.js:
+	[aws-secret-key] wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+	URL: https://example.com/another/script.js
+	Line: 12
+	Context: aws.secretAccessKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+	Description: AWS Secret Access Key
+
+```
+
+**Example Grouped JSON Output (`results_grouped.json`):**
+```json
+{
+  "https://example.com/another/script.js": [
+    {
+      "type": "aws-secret-key",
+      "value": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      "source_url": "https://example.com/another/script.js",
+      "line_number": 12,
+      "context": "aws.secretAccessKey = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\";",
+      "description": "AWS Secret Access Key"
+    }
+  ],
+  "https://example.com/file1.js": [
+    {
+      "type": "api-key",
+      "value": "S3CR3T_K3Y_V4LU3_F1L31",
+      "source_url": "https://example.com/file1.js",
+      "line_number": 42,
+      "context": "var apiKey = \"S3CR3T_K3Y_V4LU3_F1L31\";",
+      "description": "Generic API Key pattern"
+    },
+    {
+      "type": "jwt-token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+      "source_url": "https://example.com/file1.js",
+      "line_number": 101,
+      "context": "const token = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c\";",
+      "description": "JSON Web Token"
+    }
+  ]
+}
+```
+
+### Using Raw Output Mode
+
+To output only the raw secret values (one per line for TXT, or an array of strings for JSON if not grouped, or map source -> []string for grouped JSON):
+
+```bash
+secrethound --raw -i <target>
+# Example output (TXT or stdout):
+# S3CR3T_K3Y_V4LU3_F1L31
+# wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+```
+
+```bash
+secrethound --raw --group-by-source -i <target> -o results_raw_grouped.json
+# Example output (results_raw_grouped.json):
+# {
+#   "https://example.com/file1.js": [
+#     "S3CR3T_K3Y_V4LU3_F1L31",
+#     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+#   ],
+#   "https://example.com/another/script.js": [
+#     "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+#   ]
+# }
+```

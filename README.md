@@ -17,14 +17,16 @@
 
 ## Features
 
-- **Multi-Source Scanning**: Process remote URLs, local files, and entire directories
-- **Intelligent Detection**: 50+ regex patterns to identify different types of secrets
-- **Concurrent Processing**: Fast multi-threaded architecture for efficient scanning
-- **Domain-Aware Scheduling**: Smart distribution of requests to avoid rate limiting
-- **WAF/Rate Limit Evasion**: Automatic detection and handling of security measures
-- **Context Analysis**: Reduces false positives by analyzing surrounding code
-- **Real-Time Progress**: Live updates with progress bar and statistics
-- **Multiple Output Formats**: Output to formatted text
+- **Multi-Source Scanning**: Process remote URLs, local files, and entire directories.
+- **Extensive Pattern Library**: Over 60 meticulously crafted regex patterns to identify a wide range of secrets, including API keys (AWS, Google Cloud, Stripe, etc.), authentication tokens (JWT, OAuth, Bearer), database credentials, private keys, PII (email, phone), Web3 secrets (crypto addresses, private keys), and more.
+- **URL/Domain Extraction Mode**: Dedicated mode (`--scan-urls`) to efficiently extract only URL and domain patterns from sources.
+- **Flexible Pattern Control**: Fine-tune scans by including or excluding specific pattern categories (e.g., `--include-categories aws,pii`).
+- **Concurrent Processing**: Fast multi-threaded architecture for efficient scanning.
+- **Domain-Aware Scheduling**: Smart distribution of requests to avoid rate limiting when scanning remote URLs.
+- **WAF/Rate Limit Evasion**: Strategies for handling common web security measures.
+- **Context Analysis**: Reduces false positives by analyzing surrounding code and context.
+- **Real-Time Progress**: Live updates with progress bar and statistics (can be disabled with `--no-progress` or in `--silent` mode).
+- **Multiple Output Formats**: Output results in standard text, JSON, or raw values. Supports a new grouped format (`--group-by-source`) for TXT and JSON, organizing findings by their source URL/file.
 
 ## Installation
 
@@ -102,15 +104,23 @@ SecretHound supports the following options:
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `-i, --input` | Input file, directory, or URL list | - |
-| `-o, --output` | Output file for results | - |
-| `-t, --timeout` | HTTP request timeout in seconds | 30 |
-| `-r, --retries` | Maximum number of retry attempts | 3 |
-| `-n, --concurrency` | Number of concurrent workers | 10 |
-| `-l, --rate-limit` | Requests per second per domain (0 = auto) | 0 |
-| `-H, --header` | Custom HTTP header (format: 'Name: Value') | - |
-| `--insecure` | Disable SSL/TLS certificate verification | false |
-| `-v, --verbose` | Enable verbose output | false |
+| `-i, --input-file` | Input file (URLs/paths), directory, or a single URL/file path as a target argument. | - |
+| `-o, --output` | Output file for results (default: stdout). Format (txt, json) inferred from extension. | - |
+| `--raw` | Output only raw secret values (affects TXT and grouped JSON file output). | false |
+| `--group-by-source` | Group secrets by source URL/file in TXT and JSON output. | false |
+| `-t, --timeout` | HTTP request timeout in seconds. | 10 |
+| `-r, --retries` | Maximum number of retry attempts for HTTP requests. | 2 |
+| `-c, --concurrency` | Number of concurrent workers. | 50 |
+| `-l, --rate-limit` | Max requests per second per domain (0 for auto/unlimited). | 0 |
+| `-H, --header` | Custom HTTP header to add (e.g., "Authorization: Bearer token"). Can be used multiple times. | - |
+| `--insecure` | Disable SSL/TLS certificate verification. | false |
+| `--include-categories` | Comma-separated list of pattern categories to include (e.g., aws,gcp). | all enabled |
+| `--exclude-categories` | Comma-separated list of pattern categories to exclude (e.g., pii,url). | none |
+| `--scan-urls` | URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters). | false |
+| `--list-patterns` | List available pattern categories and patterns, then exit. | false |
+| `-v, --verbose` | Enable verbose logging output. | false |
+| `-n, --no-progress` | Disable the progress bar display. | false |
+| `-s, --silent` | Silent mode (suppress progress bar and info logs). | false |
 
 ## Documentation
 
@@ -139,13 +149,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Built with [Go](https://golang.org/)
 - Uses [Cobra](https://github.com/spf13/cobra) for CLI functionality
-- Special thanks to all [contributors](https://github.com/rafabd1/SecretHound/graphs/contributors)
+<!-- - Special thanks to all [contributors](https://github.com/rafabd1/SecretHound/graphs/contributors) -->
 
 <p align="center">
     <sub>Made with 🖤 by Rafael (github.com/rafabd1)</sub>
 </p>
-<!--
+
 <p align="center">
     <a href="https://ko-fi.com/rafabd1" target="_blank"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Buy Me A Coffee" style="height: 60px !important;"></a>
 </p>
--->
+

@@ -92,6 +92,14 @@ Results can be output in multiple formats:
 1. **Text Format**: Human-readable format with contextual information
 2. **JSON Format**: Structured format for programmatic processing
 
+### Output Handling
+
+SecretHound provides flexible output options. Findings can be presented in plain text, structured JSON, or raw values.
+
+A significant update includes the `--group-by-source` mode. When enabled, secrets are not written immediately but are collected in memory. The `Writer` component then aggregates these findings, grouped by their originating URL or file path, and writes them out in a consolidated format (TXT or JSON) when the scan completes and the `Close()` method is called. This is particularly useful for managing results from scans across numerous sources, offering a more organized and readable report.
+
+The standard, non-grouped output mode writes each secret as it's found, which can be beneficial for immediate feedback during long-running scans, though it might interleave findings from different sources if the output is directed to a single stream/file.
+
 ## Extension Points
 
 SecretHound can be extended in several ways:
