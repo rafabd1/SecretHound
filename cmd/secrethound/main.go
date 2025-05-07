@@ -19,8 +19,6 @@ func main() {
     resetGlobalState()
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	// printBanner() // REMOVED - Header is now printed conditionally in runScan
 	
 	setupSignalHandling()
 

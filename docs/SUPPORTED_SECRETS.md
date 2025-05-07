@@ -1,6 +1,72 @@
 # Supported Secret Types
 
-SecretHound can detect over 50 different types of secrets and sensitive information across a wide range of platforms and services. This document provides a comprehensive list of the types of secrets that SecretHound can identify.
+SecretHound is equipped with **over 60 patterns** to detect a wide variety of secrets. These patterns are organized into categories, allowing for more targeted scanning when using the `--include-categories` or `--exclude-categories` flags.
+
+Below is a list of supported categories and examples of the types of secrets detected within them. For a complete and up-to-date list of all individual patterns and their details, you can use the command:
+
+```bash
+secrethound --list-patterns
+```
+
+## Pattern Categories
+
+### Cloud Provider Keys & Tokens
+- **AWS**: Access Keys, Secret Keys, S3 URLs (pre-signed, etc.)
+- **Google Cloud (GCP)**: API Keys, Service Account Credentials (JSON)
+- **Azure**: Service Principal Secrets, Storage Keys
+- **Alibaba Cloud**: AccessKey ID, AccessKey Secret
+
+### API Keys (General & SaaS)
+- General API Keys (various common formats)
+- Stripe API Keys
+- Twilio API Keys
+- SendGrid API Keys
+- Slack Tokens (Bot, User, Webhook)
+- GitHub Tokens (Personal Access Tokens, OAuth tokens)
+- ... and more SaaS provider keys.
+
+### Authentication & Session Tokens
+- Bearer Tokens
+- JSON Web Tokens (JWT)
+- OAuth Access Tokens
+- Basic Auth Credentials (in URLs or headers)
+- Session IDs (common patterns)
+
+### Database Credentials
+- Database Connection Strings (various formats including user/pass)
+- Private Keys often associated with DB auth (e.g., PEM in config)
+
+### Cryptographic Keys
+- Generic Private Keys (PEM, OpenSSH format)
+- PGP Private Keys
+- SSH Private Keys
+
+### Personally Identifiable Information (PII) - *New Category*
+- Email Addresses
+- Phone Numbers (various international formats)
+- Credit Card Numbers (heuristic based, common prefixes)
+- Social Security Numbers (SSN - US format, heuristic)
+
+### Web3 & Cryptocurrency - *New Category*
+- Ethereum Addresses
+- Ethereum Private Keys
+- Bitcoin Addresses (P2PKH, P2SH, Bech32)
+- Bitcoin Private Keys (WIF format)
+- Generic Cryptocurrency Private Keys (common hex patterns)
+
+### Network & Infrastructure
+- IP Addresses (IPv4, IPv6)
+- MAC Addresses
+- Generic Domain Names / Hostnames
+- URLs with potentially sensitive parameters or paths
+
+### Generic & Miscellaneous
+- Generic High Entropy Strings (potential secrets)
+- Passwords in URLs or common config contexts
+- Artifactory Credentials
+- npm Tokens
+
+This list is continuously updated. Always refer to `secrethound --list-patterns` for the most current set of patterns and their categories.
 
 ## API Keys and Tokens
 

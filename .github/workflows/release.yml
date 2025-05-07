@@ -54,34 +54,29 @@ jobs:
             secrethound-${{ env.VERSION }}-darwin-amd64
           body: |
                 # SecretHound v${{ env.VERSION }}
-                
+
+                ## New Features
+                - **Expanded Pattern Library**: Introduced new pattern categories including PII (Personally Identifiable Information) and Web3 (e.g., Ethereum/Bitcoin addresses, private keys), increasing total patterns to over 60.
+                - **URL/Domain Extraction Mode**: Added `--scan-urls` flag to exclusively scan for URL and domain patterns, overriding other category filters.
+                - **Grouped Output Format**: Introduced `--group-by-source` flag to group found secrets by their source URL/file in TXT and JSON output formats, improving readability for large scans.
+                - **Pattern Category Control**: Implemented `--include-categories` and `--exclude-categories` flags to allow users to specify which pattern categories to use or ignore during scans.
+
                 ## Improvements
-                
-                - Added support for ignoring SSL/TLS certificate verification with `--insecure`
-                - Complete overhaul of the regex pattern system
-                - Added support for custom HTTP headers with `-H/--header`
-                - Fixed timeout and concurrency issues
-                - Fixed `-r/--retries` parameter that wasn't being applied
-                - Reorganized patterns package for better maintenance
-                - Redesigned error handling system
-                - Temporarily disabled `--regex-file` option
-                
+                - **Enhanced Pattern Accuracy**: Iteratively refined numerous existing patterns (IPv4, Bitcoin Address, Email Address, MAC Address, Generic Domain, Session Token) to significantly reduce false positives and improve detection of legitimate secrets based on extensive real-world test cases.
+                - **Log Custom Headers**: Initial configuration log now indicates if custom HTTP headers (`-H`) are being used.
+                - **Queue Logic & Rate Limiting**: Improved URL processing queue logic and refined the auto mode for rate limiting for more efficient and considerate scanning.
+                - **CLI Options Refinement**: Corrected and improved behavior of `--silent` and `--no-progress` flags.
+                - **Regex Engine Compatibility**: Added internal logging for regex compilation errors and refactored incompatible regex syntax (e.g., unsupported lookaheads) to ensure all patterns load correctly with Go's standard regex engine.
+
                 ## Bug Fixes
-                
-                - Fixed issue with URLs having invalid certificates
-                - Resolved timeout problems in large scans
-                - Improved synchronization between threads to prevent resource leaks
-                - Fixed false positive issues in certain regex patterns
-                
+                - **JSON Output Formatting**: Addressed issues to ensure valid JSON output, especially when no secrets are found or in raw mode.
+                - **Progress Bar Rendering**: Fixed a bug where the progress bar would sometimes only update when new logs were printed, ensuring it now refreshes independently and consistently.
+                - **Execution Deadlocks**: Resolved potential deadlocks and improved goroutine management for more stable execution during long scans.
+                - **Pattern Loading**: Fixed an issue where the incorrect number of loaded patterns was reported when using category filters, ensuring accurate reflection of active patterns.
+
                 ## Installation
                 
                 Download the appropriate binary for your platform and make it executable.
-                
-                For Linux/macOS:
-                ```
-                chmod +x secrethound-${{ env.VERSION }}-linux-amd64
-                ./secrethound-${{ env.VERSION }}-linux-amd64
-                ```
                 
                 For Go users:
                 ```
