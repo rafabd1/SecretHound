@@ -244,7 +244,7 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 		return 0, nil
 	}
 	
-	if fi.Size() > s.config.MaxFileSize {
+	if s.config.MaxFileSize > 0 && fi.Size() > s.config.MaxFileSize {
 		s.incrementSkippedFiles()
 		if !s.config.Silent {
 			s.logger.Debug("Skipping large file: %s (%d bytes)", filePath, fi.Size())
