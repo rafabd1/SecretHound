@@ -176,11 +176,11 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   70,
 		},
 		"private_key_content": {
-			Regex:       `-----BEGIN (?:RSA|OPENSSH|DSA|EC|PGP) PRIVATE KEY( BLOCK)?-----`,
-			Description: "Private Key Content (BEGIN Block)",
+			Regex:       `-----BEGIN (?:RSA |OPENSSH |DSA |EC |PGP |ENCRYPTED )?PRIVATE KEY(?:\sBLOCK)?-----[\s]*[A-Za-z0-9+/=]{20,}`,
+			Description: "Private Key Content (with actual key data)",
 			Enabled:     true,
 			Category:    "crypto",
-			MinLength:   30,
+			MinLength:   60,
 		},
 		"square_access_token": {
 			Regex:       `sq0atp-[0-9A-Za-z\-_]{22}`,
