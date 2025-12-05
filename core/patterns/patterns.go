@@ -375,6 +375,16 @@ var DefaultPatterns = &PatternDefinitions{
 			MinLength:   64,
 		},
 
+		"netlify_access_token": {
+			Regex:       `nf[pcfub]_[a-zA-Z0-9_\\-]{36}`,
+			Description: "Netlify Access Token",
+			Enabled:     true,
+			Category:    "cloud",
+			MinLength:   40,
+			MaxLength:   40,
+			KeywordMatches: []string{"netlify"},
+		},
+
 		// Payment services
 		"paypal_client_id": {
 			Regex:       `(?i)(?:paypal|braintree).{0,20}(?:[:=]\s*)['"]([A-Za-z0-9_-]{20,64})['"]`,

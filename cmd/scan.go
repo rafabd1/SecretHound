@@ -255,7 +255,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			secrets, err := processLocalFiles(localFiles, logger, writer, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode) 
+			secrets, err := processLocalFiles(localFiles, logger, writer, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, vip.GetInt64("max_file_size")) 
 			if err != nil {
 				logger.Error("Error processing local files: %v", err)
 				mu.Lock()
@@ -556,15 +556,7 @@ func collectFilesFromDirectory(dirPath string, logger *output.Logger) ([]string,
 			return nil
 		}
 
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext == ".js" || ext == ".jsx" || ext == ".ts" ||
-		   ext == ".html" || ext == ".css" || ext == ".json" ||
-		   ext == ".txt" || ext == ".xml" || ext == ".yml" ||
-		   ext == ".yaml" || ext == ".md" || ext == ".csv" ||
-		   ext == ".config" || ext == ".ini" || ext == ".conf" ||
-		   ext == "" {
-			files = append(files, path)
-		}
+		files = append(files, path)
 
 		return nil
 	})
@@ -620,10 +612,10 @@ func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
    Processes local files using the scanner
    Signature updated to accept silent bool
 */
-func processLocalFiles(files []string, logger *output.Logger, writer *output.Writer, pm *patterns.PatternManager, concurrency int, noProgress bool, silent bool) (int, error) {
+func processLocalFiles(files []string, logger *output.Logger, writer *output.Writer, pm *patterns.PatternManager, concurrency int, noProgress bool, silent bool, maxFileSizeMB int64) (int, error) {
 	scannerCfg := scanner.LocalScannerConfig{
 		Concurrency: concurrency,
-		MaxFileSize: 10 * 1024 * 1024,
+		MaxFileSize: maxFileSizeMB * 1024 * 1024,
 		NoProgress:  noProgress,
 		Silent:      silent,
 	}

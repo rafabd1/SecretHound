@@ -150,8 +150,9 @@ func init() {
 	// Group: General Behavior
 	rootCmd.Flags().BoolP("no-progress", "n", false, "Disable the progress bar display") // Added based on scan.go
 	rootCmd.Flags().BoolP("silent", "s", false, "Silent mode (suppress progress bar and info logs)") // Kept, might conflict with no-progress? Review needed.
+	rootCmd.Flags().Int64("max-file-size", 10, "Maximum file size to scan in MB (0 for no limit)")
 	vip.BindPFlag("no_progress", rootCmd.Flags().Lookup("no-progress"))
 	vip.BindPFlag("silent", rootCmd.Flags().Lookup("silent"))
-
+	vip.BindPFlag("max_file_size", rootCmd.Flags().Lookup("max-file-size"))
 }
 
