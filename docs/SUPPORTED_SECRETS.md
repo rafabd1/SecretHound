@@ -41,13 +41,15 @@ secrethound --list-patterns
 - PGP Private Keys
 - SSH Private Keys
 
-### Personally Identifiable Information (PII) - *New Category*
-- Email Addresses
-- Phone Numbers (various international formats)
-- Credit Card Numbers (heuristic based, common prefixes)
-- Social Security Numbers (SSN - US format, heuristic)
+### Personally Identifiable Information (PII)
+- Email Addresses (keyword-dependent)
+- Phone Numbers (US format, keyword-dependent)
+- IP Addresses (IPv4/IPv6, keyword-dependent with OID exclusions)
+- MAC Addresses (keyword-dependent, colon format only)
+- US ZIP Codes (keyword-dependent)
+- Serial Numbers (keyword-dependent)
 
-### Web3 & Cryptocurrency - *New Category*
+### Web3 & Cryptocurrency
 - Ethereum Addresses
 - Ethereum Private Keys
 - Bitcoin Addresses (P2PKH, P2SH, Bech32)
@@ -55,10 +57,9 @@ secrethound --list-patterns
 - Generic Cryptocurrency Private Keys (common hex patterns)
 
 ### Network & Infrastructure
-- IP Addresses (IPv4, IPv6)
-- MAC Addresses
 - Generic Domain Names / Hostnames
 - URLs with potentially sensitive parameters or paths
+- Netlify Access Tokens
 
 ### Generic & Miscellaneous
 - Generic High Entropy Strings (potential secrets)
@@ -67,6 +68,8 @@ secrethound --list-patterns
 - npm Tokens
 
 This list is continuously updated. Always refer to `secrethound --list-patterns` for the most current set of patterns and their categories.
+
+> **Note**: Many patterns are now "keyword-dependent", meaning they only match when specific keywords (like `ip_addr`, `mac_address`, `phone`, etc.) are found near the value. This significantly reduces false positives.
 
 ## API Keys and Tokens
 
@@ -90,7 +93,7 @@ This list is continuously updated. Always refer to `secrethound --list-patterns`
 | Stripe Test Publishable Key | Stripe test publishable key | `pk_test_[0-9a-zA-Z]{24,34}` |
 | Square Access Token | Square OAuth token | `sq0atp-[0-9A-Za-z\-_]{22}` |
 | Square OAuth Secret | Square OAuth secret | `sq0csp-[0-9A-Za-z\-_]{43}` |
-| PayPal/Braintree | PayPal/Braintree credentials | `(?i)(?:paypal\|braintree).{0,20}['\"][A-Za-z0-9_-]{20,64}['\"]` |
+| PayPal/Braintree Client ID | PayPal/Braintree Client ID (keyword-dependent) | `(?i)(?:paypal\|braintree)[_-]?(?:client[_-]?)?(?:id\|key\|secret)\s*[:=]\s*['"](...)['"` |
 | Braintree Token | Braintree access token | `access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}` |
 
 ## Email and Communication Services
@@ -138,7 +141,7 @@ This list is continuously updated. Always refer to `secrethound --list-patterns`
 | OAuth 2.0 Access Token | OAuth 2.0 access token | `ya29\.[0-9A-Za-z\-_]+` |
 | Generic Password | Password in configuration | `(?i)(?:password\|passwd\|pwd\|secret)[\s]*[=:]+[\s]*["']([^'"]{8,30})["']` |
 | Authentication Token | Authentication token with comment | `['"]?([a-zA-Z0-9_\-\.]{32,64})['"]?\s*[,;]?\s*\/\/\s*[Aa]uth(?:entication)?\s+[Tt]oken` |
-| Private Key Variable | Private key variable | `['"]?(?:private_?key\|secret_?key)['"]?\s*[:=]\s*['"]([^'"]{20,})['"]` |
+| Private Key Variable | Private key variable (excludes tracking events) | `['"?(?:private_?key\|secret_?key)['"?\s*[:=]\s*['"(...)['"]` |
 | Encryption Key | Encryption key | `(?i)['"]?enc(?:ryption)?[_-]?key['"]?\s*[=:]\s*['"]([a-zA-Z0-9+/]{16,64})['"]` |
 | Signing Key | Signing key/secret | `(?i)['"]?sign(?:ing)?[_-]?(?:secret\|key)['"]?\s*[=:]\s*['"]([a-zA-Z0-9+/]{16,64})['"]` |
 
@@ -159,17 +162,18 @@ This list is continuously updated. Always refer to `secrethound --list-patterns`
 
 | Secret Type | Description | Example Pattern |
 |-------------|-------------|-----------------|
-| Private Key Content | Private key content | `-----BEGIN (?:RSA\|OPENSSH\|DSA\|EC\|PGP) PRIVATE KEY( BLOCK)?-----` |
+| Private Key Content | Private key with actual key data | `-----BEGIN (?:RSA \|OPENSSH \|...) PRIVATE KEY-----[\s]*[A-Za-z0-9+/=]{20,}` |
 
 ## CI/CD and DevOps
 
 | Secret Type | Description | Example Pattern |
 |-------------|-------------|-----------------|
-| Jenkins API Token | Jenkins API token | `(?i)(?:jenkins\|hudson).{0,5}(?:api)?.{0,5}(?:token).{0,5}['\"]([0-9a-zA-Z]{30,})['\"]` |
+| Jenkins API Token | Jenkins API token | `(?i)(?:jenkins\|hudson).{0,5}(?:api)?.{0,5}(?:token).{0,5}['"]([0-9a-zA-Z]{30,})['"]` |
 | NPM Access Token | NPM access token | `npm_[A-Za-z0-9]{36}` |
 | Docker Hub Personal Access Token | Docker Hub personal access token | `dckr_pat_[A-Za-z0-9_-]{56}` |
 | GitLab Runner Token | GitLab runner registration token | `glrt-[0-9a-zA-Z_\-]{20,}` |
 | GitLab Personal Token | GitLab personal access token | `glpat-[0-9a-zA-Z_\-]{20,}` |
+| Netlify Access Token | Netlify personal access token | `nf[pcfub]_[a-zA-Z0-9_\-]{36}` |
 
 ## Generic Secret Patterns
 
@@ -177,3 +181,14 @@ This list is continuously updated. Always refer to `secrethound --list-patterns`
 |-------------|-------------|-----------------|
 | Generic API Key | Generic API key format | `['"]?(?:api_?key\|api_?secret\|app_?key\|app_?secret)['"]?\s*[=:]\s*['"]([a-zA-Z0-9_\-\.]{16,64})['"]` |
 | API Key Assignment | API key assignment | `['"]?(?:api_?key\|api_?secret\|app_?key\|app_?secret)['"]?\s*[=:]\s*['"]([a-zA-Z0-9_\-\.]{16,64})['"]` |
+
+## PII (Personally Identifiable Information)
+
+| Secret Type | Description | Example Pattern |
+|-------------|-------------|-----------------|
+| Email Address | Email address (keyword-dependent) | `[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}` |
+| Phone Number | Phone number (US format, keyword-dependent) | Requires keywords like `phone`, `mobile`, `tel` |
+| IPv4 Address | IPv4 address (keyword-dependent) | Requires keywords like `ip_addr`, `host_addr`, `server_ip` |
+| IPv6 Address | IPv6 address (keyword-dependent) | Requires keywords like `ipv6`, `ip6` |
+| MAC Address | MAC address (keyword-dependent, colon format) | Requires keywords like `mac_address`, `ethernet_addr`, `hw_addr` |
+| US ZIP Code | US ZIP code (keyword-dependent) | Requires keywords like `zip`, `postal`, `postcode` |

@@ -1,5 +1,28 @@
 # SecretHound Changelog
 
+## v1.0.1 (2025-12-05)
+
+### New Features
+- **Max File Size Flag**: Added `--max-file-size` flag to set the maximum file size for local file scanning, allowing users to skip large files that may slow down scans.
+- **Netlify Access Token Pattern**: Added new detection pattern for Netlify Access Tokens.
+
+### Improvements
+- **Enhanced Pattern Accuracy**: Refined multiple regex patterns to significantly reduce false positives:
+  - **MAC Address**: Now requires explicit keywords (`mac_address`, `ethernet_addr`, `hw_addr`) and only matches colon-separated format to avoid false positives from SVG paths.
+  - **IPv4 Address**: More restrictive pattern requiring explicit keywords (`ip_addr`, `host_addr`, `server_ip`). Added exclusions for OIDs (`1.3.6.1`, `2.16.840`).
+  - **IPv6 Address**: Simplified regex requiring `ipv6` or `ip6` keywords. Added exclusions for SHA-256 fingerprints.
+  - **PayPal/Braintree**: Now requires specific keywords (`paypal_client_id`, `braintree_secret`) instead of loose matching. Added exclusions for CSS class names.
+  - **Private Key Variable**: Added exclusions for tracking/event patterns (`click_`, `export_`, `track_`).
+  - **Phone Number**: More restrictive US format pattern, now keyword-dependent.
+
+### Bug Fixes
+- Fixed false positives where SVG path data was being detected as MAC addresses.
+- Fixed false positives where OIDs (Object Identifiers) were being detected as IPv4 addresses.
+- Fixed false positives where SHA-256 fingerprints were being detected as IPv6 addresses.
+- Fixed false positives where CSS class names containing "paypal" were being detected as PayPal credentials.
+- Fixed false positives where event tracking strings were being detected as private keys.
+- Fixed Private Key Content pattern to require actual key data after the BEGIN header, preventing false positives from standalone headers.
+
 ## v1.0.0 (2025-05-06)
 
 ### New Features

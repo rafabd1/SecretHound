@@ -117,6 +117,7 @@ SecretHound supports the following options:
 | `--include-categories` | Comma-separated list of pattern categories to include (e.g., aws,gcp). | all enabled |
 | `--exclude-categories` | Comma-separated list of pattern categories to exclude (e.g., pii,url). | none |
 | `--scan-urls` | URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters). | false |
+| `--max-file-size` | Maximum file size to scan in MB (0 for no limit). | 10 |
 | `--list-patterns` | List available pattern categories and patterns, then exit. | false |
 | `-v, --verbose` | Enable verbose logging output. | false |
 | `-n, --no-progress` | Disable the progress bar display. | false |

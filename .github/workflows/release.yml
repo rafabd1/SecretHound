@@ -56,23 +56,19 @@ jobs:
                 # SecretHound v${{ env.VERSION }}
 
                 ## New Features
-                - **Expanded Pattern Library**: Introduced new pattern categories including PII (Personally Identifiable Information) and Web3 (e.g., Ethereum/Bitcoin addresses, private keys), increasing total patterns to over 60.
-                - **URL/Domain Extraction Mode**: Added `--scan-urls` flag to exclusively scan for URL and domain patterns, overriding other category filters.
-                - **Grouped Output Format**: Introduced `--group-by-source` flag to group found secrets by their source URL/file in TXT and JSON output formats, improving readability for large scans.
-                - **Pattern Category Control**: Implemented `--include-categories` and `--exclude-categories` flags to allow users to specify which pattern categories to use or ignore during scans.
+                - **Max File Size Flag**: Added `--max-file-size` flag to set the maximum file size for local file scanning.
+                - **Netlify Access Token Pattern**: Added new detection pattern for Netlify Access Tokens.
 
                 ## Improvements
-                - **Enhanced Pattern Accuracy**: Iteratively refined numerous existing patterns (IPv4, Bitcoin Address, Email Address, MAC Address, Generic Domain, Session Token) to significantly reduce false positives and improve detection of legitimate secrets based on extensive real-world test cases.
-                - **Log Custom Headers**: Initial configuration log now indicates if custom HTTP headers (`-H`) are being used.
-                - **Queue Logic & Rate Limiting**: Improved URL processing queue logic and refined the auto mode for rate limiting for more efficient and considerate scanning.
-                - **CLI Options Refinement**: Corrected and improved behavior of `--silent` and `--no-progress` flags.
-                - **Regex Engine Compatibility**: Added internal logging for regex compilation errors and refactored incompatible regex syntax (e.g., unsupported lookaheads) to ensure all patterns load correctly with Go's standard regex engine.
+                - **Enhanced Pattern Accuracy**: Refined multiple regex patterns (MAC Address, IPv4, IPv6, PayPal, Private Key, Phone Number) to significantly reduce false positives based on real-world testing.
 
                 ## Bug Fixes
-                - **JSON Output Formatting**: Addressed issues to ensure valid JSON output, especially when no secrets are found or in raw mode.
-                - **Progress Bar Rendering**: Fixed a bug where the progress bar would sometimes only update when new logs were printed, ensuring it now refreshes independently and consistently.
-                - **Execution Deadlocks**: Resolved potential deadlocks and improved goroutine management for more stable execution during long scans.
-                - **Pattern Loading**: Fixed an issue where the incorrect number of loaded patterns was reported when using category filters, ensuring accurate reflection of active patterns.
+                - Fixed false positives where SVG path data was detected as MAC addresses.
+                - Fixed false positives where OIDs were detected as IPv4 addresses.
+                - Fixed false positives where SHA-256 fingerprints were detected as IPv6 addresses.
+                - Fixed false positives where CSS class names were detected as PayPal credentials.
+                - Fixed false positives where event tracking strings were detected as private keys.
+                - Fixed Private Key Content pattern to require actual key data after BEGIN header.
 
                 ## Installation
                 
