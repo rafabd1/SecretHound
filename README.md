@@ -7,9 +7,6 @@
 ![GitHub stars](https://img.shields.io/github/stars/rafabd1/SecretHound?style=social)
 ![Go Report Card](https://goreportcard.com/badge/github.com/rafabd1/SecretHound)
 
-<!-- <p align="center">
-    <img src="https://raw.githubusercontent.com/rafabd1/SecretHound/main/docs/banner.png" alt="SecretHound Banner" width="600">
-</p> -->
 
 <p align="center">
     <b>A powerful CLI tool designed to find secrets in JavaScript files, web pages, and other text sources.</b>
@@ -145,16 +142,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgements
-
-- Built with [Go](https://golang.org/)
-- Uses [Cobra](https://github.com/spf13/cobra) for CLI functionality
-<!-- - Special thanks to all [contributors](https://github.com/rafabd1/SecretHound/graphs/contributors) -->
-
-<p align="center">
-    <sub>Made with 🖤 by Rafael (github.com/rafabd1)</sub>
-</p>
 
 <p align="center">
     <a href="https://ko-fi.com/rafabd1" target="_blank"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Buy Me A Coffee" style="height: 60px !important;"></a>
