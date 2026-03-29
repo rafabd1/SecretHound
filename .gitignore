@@ -45,3 +45,5 @@ output.*
 output_*
 
 .cursor
+
+mailmap.txt
