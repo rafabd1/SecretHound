@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/rafabd1/SecretHound/core/patterns"
+	"github.com/rafabd1/SecretHound/core/validation"
 	"github.com/rafabd1/SecretHound/utils"
 )
 
@@ -33,7 +34,7 @@ func NewRegexManager() *RegexManager {
 }
 
 /*
-   Searches for secrets in content using configured regex patterns
+Searches for secrets in content using configured regex patterns
 */
 func (rm *RegexManager) FindSecrets(content, url string) ([]Secret, error) {
 	rm.mu.RLock()
@@ -85,11 +86,14 @@ func (rm *RegexManager) FindSecrets(content, url string) ([]Secret, error) {
 
 				context := extractContext(content, value)
 
-				if rm.isExcluded(value, patternName, context) {
+				if rm.isExcluded(value) {
 					continue
 				}
 
-				if rm.shouldExcludeByEntropy(pattern.Config, patternName, value) {
+				decision := validation.EvaluateCandidate(patternName, pattern, value, context, validation.Options{
+					LocalMode: rm.isLocalFileMode || strings.HasPrefix(url, "file://"),
+				})
+				if !decision.Valid {
 					continue
 				}
 
@@ -108,20 +112,11 @@ func (rm *RegexManager) FindSecrets(content, url string) ([]Secret, error) {
 }
 
 /*
-   Determines if a value should be excluded based on specific criteria
+Determines if a value should be excluded based on specific criteria
 */
-func (rm *RegexManager) isExcluded(value, patternName, context string) bool {
+func (rm *RegexManager) isExcluded(value string) bool {
 	if utils.HasCommonCodePattern(value) {
 		return true
-	}
-
-	compiledPatterns := rm.patternManager.GetCompiledPatterns()
-	if pattern, exists := compiledPatterns[patternName]; exists {
-		for _, keyword := range pattern.Config.KeywordExcludes {
-			if strings.Contains(value, keyword) || strings.Contains(context, keyword) {
-				return true
-			}
-		}
 	}
 
 	if utils.IsLikelyFilePath(value) {
@@ -135,31 +130,9 @@ func (rm *RegexManager) isExcluded(value, patternName, context string) bool {
 	return false
 }
 
-func (rm *RegexManager) shouldExcludeByEntropy(cfg patterns.PatternConfig, patternName, value string) bool {
-	useEntropy := cfg.UseEntropy || strings.Contains(strings.ToLower(patternName), "password") || strings.Contains(strings.ToLower(patternName), "session_token")
-	if !useEntropy {
-		return false
-	}
-
-	minEntropy := cfg.MinEntropy
-	if minEntropy <= 0 {
-		minEntropy = 3.5
-	}
-
-	entropyMinLen := cfg.EntropyMinLength
-	if entropyMinLen <= 0 {
-		entropyMinLen = max(rm.minSecretLength, cfg.MinLength)
-		if entropyMinLen == 0 {
-			entropyMinLen = 12
-		}
-	}
-
-	return !utils.IsLikelyRandomSecret(value, minEntropy, entropyMinLen)
-}
-
 /*
-   Finds all regex matches in content and returns them directly
-   Useful for local file scanning
+Finds all regex matches in content and returns them directly
+Useful for local file scanning
 */
 func (rm *RegexManager) FindMatches(content, url string) map[string][]string {
 	allPatterns := rm.patternManager.GetCompiledPatterns()
@@ -188,13 +161,20 @@ func (rm *RegexManager) FindMatches(content, url string) map[string][]string {
 				if len(matchGroup) > 1 && matchGroup[1] != "" {
 					match := matchGroup[1]
 
-					if !rm.isExcluded(match, name, "") {
+					if !rm.isExcluded(match) {
 						isValid := true
 
 						if isLocalFile || rm.isLocalFileMode {
 							isValid = rm.isLocalFileSecretValid(match, name, content)
 						} else if needsStrictFiltering {
 							isValid = rm.isValidSecretStrict(match, name)
+						}
+
+						if isValid {
+							decision := validation.EvaluateCandidate(name, pattern, match, content, validation.Options{
+								LocalMode: isLocalFile || rm.isLocalFileMode,
+							})
+							isValid = decision.Valid
 						}
 
 						if isValid {
@@ -206,13 +186,20 @@ func (rm *RegexManager) FindMatches(content, url string) map[string][]string {
 		}
 
 		for _, match := range found {
-			if !rm.isExcluded(match, name, "") {
+			if !rm.isExcluded(match) {
 				isValid := true
 
 				if isLocalFile || rm.isLocalFileMode {
 					isValid = rm.isLocalFileSecretValid(match, name, content)
 				} else if needsStrictFiltering {
 					isValid = rm.isValidSecretStrict(match, name)
+				}
+
+				if isValid {
+					decision := validation.EvaluateCandidate(name, pattern, match, content, validation.Options{
+						LocalMode: isLocalFile || rm.isLocalFileMode,
+					})
+					isValid = decision.Valid
 				}
 
 				if isValid {
@@ -241,7 +228,7 @@ func (rm *RegexManager) FindMatches(content, url string) map[string][]string {
 }
 
 /*
-   Applies special validation for local files to reduce false positives
+Applies special validation for local files to reduce false positives
 */
 func (rm *RegexManager) isLocalFileSecretValid(match, patternName, content string) bool {
 	if len(match) < rm.minSecretLength || len(match) > rm.maxSecretLength {
@@ -268,7 +255,7 @@ func (rm *RegexManager) isLocalFileSecretValid(match, patternName, content strin
 }
 
 /*
-   Applies more rigorous validation for secrets in minified contexts
+Applies more rigorous validation for secrets in minified contexts
 */
 func (rm *RegexManager) isValidSecretStrict(match, patternName string) bool {
 	if len(match) < rm.minSecretLength*2 || len(match) > rm.maxSecretLength/2 {

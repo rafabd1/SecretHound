@@ -1,11 +1,11 @@
 package detector
 
 import (
-	"strings"
 	"sync"
 
 	"github.com/rafabd1/SecretHound/core/patterns"
 	"github.com/rafabd1/SecretHound/core/secret"
+	"github.com/rafabd1/SecretHound/core/validation"
 	"github.com/rafabd1/SecretHound/output"
 	"github.com/rafabd1/SecretHound/utils"
 )
@@ -123,7 +123,7 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 }
 
 /*
-   Validates a potential secret and returns validity and confidence score
+Validates a potential secret and returns validity and confidence score
 */
 func (d *Detector) validateSecret(
 	patternName, value, context string,
@@ -144,129 +144,10 @@ func (d *Detector) validateSecret(
 		return false, 0
 	}
 
-	// Remaining validation logic...
-	if patternName == "jwt_token" || patternName == "generic_password" {
-		if utils.IsJavaScriptConstant(value) || utils.IsJavaScriptFunction(value) {
-			return false, 0
-		}
-	}
-
-	for _, keyword := range config.KeywordExcludes {
-		if strings.Contains(value, keyword) || strings.Contains(strings.ToLower(context), keyword) {
-			return false, 0
-		}
-	}
-
-	if shouldUseEntropyValidation(patternName, config) {
-		minEntropy := config.MinEntropy
-		if minEntropy <= 0 {
-			minEntropy = 3.5
-		}
-
-		entropyMinLength := config.EntropyMinLength
-		if entropyMinLength <= 0 {
-			entropyMinLength = maxInt(12, config.MinLength)
-		}
-
-		if !utils.IsLikelyRandomSecret(value, minEntropy, entropyMinLength) {
-			return false, 0
-		}
-	}
-
-	if utils.IsUUID(value) || (utils.HasCommonCodePattern(value) && len(value) < 40) {
-		return false, 0
-	}
-
-	confidence := calculateConfidence(patternName, value, context)
-
-	if d.config.LocalFileMode {
-		confidence += 0.1
-	}
-
-	// This verbose check is no longer needed here for example content filtering
-	// if d.logger.IsVerbose() && confidence >= 0.4 {
-	// 	confidence = 0.6
-	// }
-
-	return true, confidence
-}
-
-func shouldUseEntropyValidation(patternName string, cfg patterns.PatternConfig) bool {
-	if cfg.UseEntropy {
-		return true
-	}
-
-	name := strings.ToLower(patternName)
-	return strings.Contains(name, "password") || strings.Contains(name, "session_token")
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-/*
-   Calculates confidence score for a potential secret
-*/
-func calculateConfidence(patternName, value, context string) float64 {
-	confidence := 0.6
-
-	switch {
-	case strings.Contains(patternName, "aws") && strings.HasPrefix(value, "AKIA"):
-		confidence += 0.3
-
-	case strings.Contains(patternName, "google_api") && strings.HasPrefix(value, "AIza"):
-		confidence += 0.3
-
-	case strings.Contains(patternName, "stripe") &&
-		(strings.HasPrefix(value, "sk_live_") || strings.HasPrefix(value, "pk_live_")):
-		confidence += 0.3
-
-	case strings.Contains(patternName, "jwt") && strings.HasPrefix(value, "eyJ"):
-		confidence += 0.2
-
-	case strings.Contains(patternName, "high_entropy"):
-		uniqueChars := countUniqueChars(value)
-		if float64(uniqueChars)/float64(len(value)) > 0.5 {
-			confidence += 0.1
-		}
-
-	case strings.Contains(patternName, "generic_password"):
-		confidence -= 0.1
-	}
-
-	keyValuePatterns := []string{
-		"apiKey", "api_key", "apikey", "token", "secret", "password",
-		"credential", "auth", "key", "access",
-	}
-
-	for _, pattern := range keyValuePatterns {
-		if strings.Contains(strings.ToLower(context), pattern) {
-			confidence += 0.1
-			break
-		}
-	}
-
-	if confidence < 0 {
-		confidence = 0
-	} else if confidence > 1.0 {
-		confidence = 1.0
-	}
-
-	return confidence
-}
-
-/*
-   Counts unique characters in a string
-*/
-func countUniqueChars(s string) int {
-	charSet := make(map[rune]struct{})
-	for _, r := range s {
-		charSet[r] = struct{}{}
-	}
-	return len(charSet)
+	decision := validation.EvaluateCandidate(patternName, pattern, value, context, validation.Options{
+		LocalMode: d.config.LocalFileMode,
+	})
+	return decision.Valid, decision.Confidence
 }
 
 func (d *Detector) GetStats() Stats {
