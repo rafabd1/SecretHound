@@ -266,6 +266,11 @@ Scan for all secrets except Personal Identifiable Information (PII):
 secrethound --exclude-categories pii -i <target>
 ```
 
+Use a custom YAML pattern set (same structure as `core/patterns/default_patterns.yaml`):
+```bash
+secrethound --patterns-file ./my_patterns.yaml -i <target>
+```
+
 ### URL/Domain Extraction Mode
 
 If you only want to find URLs and domains within files/sources:

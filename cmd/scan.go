@@ -26,6 +26,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	silentMode := vip.GetBool("silent")
 	rawMode := vip.GetBool("raw")
 	groupedMode := vip.GetBool("group_by_source")
+	patternsFile := vip.GetString("patterns_file")
 
 	timeColorLog := color.New(color.FgHiBlack).SprintfFunc()
 
@@ -35,7 +36,16 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// --- List Patterns Handling ---
 	if vip.GetBool("list_patterns") {
-		printPatternList()
+		pm := patterns.NewPatternManager()
+		if patternsFile != "" {
+			if err := pm.LoadDefinitionsFromFile(patternsFile); err != nil {
+				return fmt.Errorf("failed to load custom patterns file %s: %w", patternsFile, err)
+			}
+			if err := pm.LoadPatterns(nil, nil); err != nil {
+				return fmt.Errorf("failed to compile custom patterns from %s: %w", patternsFile, err)
+			}
+		}
+		printPatternList(pm)
 		return nil
 	}
 
@@ -45,7 +55,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	scanUrlsFlag := vip.GetBool("scan_urls")
 
 	var finalIncludeCategories []string
-	var finalExcludeCategories []string 
+	var finalExcludeCategories []string
 
 	if scanUrlsFlag {
 		// --scan-urls Mode: Use ONLY 'url' category, ignore others
@@ -69,9 +79,15 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// --- Centralized Pattern Loading ---
 	pm := patterns.NewPatternManager()
+	if patternsFile != "" {
+		if err := pm.LoadDefinitionsFromFile(patternsFile); err != nil {
+			logger.Error("failed to load custom patterns file %s: %v", patternsFile, err)
+			os.Exit(1)
+		}
+	}
 
 	// Load patterns respecting final filters determined above
-	err := pm.LoadPatterns(finalIncludeCategories, finalExcludeCategories) 
+	err := pm.LoadPatterns(finalIncludeCategories, finalExcludeCategories)
 	if err != nil {
 		logger.Error("%s", fmt.Sprintf("Error loading patterns: %v", err))
 		os.Exit(1)
@@ -107,7 +123,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 		// Update pattern info based on final include/exclude lists
 		patternInfo := fmt.Sprintf("%d patterns loaded", pm.GetPatternCount())
-		if scanUrlsFlag { 
+		if scanUrlsFlag {
 			patternInfo = fmt.Sprintf("%d URL patterns loaded", pm.GetPatternCount())
 		} else if len(finalIncludeCategories) > 0 {
 			patternInfo = fmt.Sprintf("%d patterns from categories: %v", pm.GetPatternCount(), finalIncludeCategories)
@@ -119,7 +135,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "%s %s %s\n",
 			timeStrLog,
 			color.CyanString("[INFO]"),
-			httpConfigLog) 
+			httpConfigLog)
 		fmt.Fprintf(os.Stderr, "%s %s Concurrency: %d workers | Patterns: %s\n",
 			timeStrLog,
 			color.CyanString("[INFO]"),
@@ -128,11 +144,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 		if outputFile != "" {
 			fmt.Fprintf(os.Stderr, "%s %s Output: Results will be saved to %s\n",
 				timeStrLog,
-		color.CyanString("[INFO]"),
+				color.CyanString("[INFO]"),
 				outputFile)
 		} else {
 			fmt.Fprintf(os.Stderr, "%s %s Output: Results will be printed to standard output\n",
-				timeStrLog, 
+				timeStrLog,
 				color.CyanString("[INFO]"))
 		}
 		fmt.Fprintln(os.Stderr)
@@ -205,48 +221,52 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 		// Log domain distribution info HERE, after grouping and only if not silent
 		if !silentMode {
-		    timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
-		    fmt.Fprintf(os.Stderr, "%s %s Processing %d URLs distributed across %d domains\n",
-		        timeStrLog, color.CyanString("[INFO]"), len(remoteURLs), domainManager.GetDomainCount())
-            fmt.Fprintln(os.Stderr)
+			timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
+			fmt.Fprintf(os.Stderr, "%s %s Processing %d URLs distributed across %d domains\n",
+				timeStrLog, color.CyanString("[INFO]"), len(remoteURLs), domainManager.GetDomainCount())
+			fmt.Fprintln(os.Stderr)
 		}
 	}
 
 	// --- Execute Scans (with corrected logic for passing patterns) ---
 	var wg sync.WaitGroup
-	var totalSecretsFound int32 
+	var totalSecretsFound int32
 	var finalErr error
 	var mu sync.Mutex // Mutex to protect totalSecretsFound and finalErr
 
 	scanConcurrency := vip.GetInt("concurrency")
-	
+
 	if len(remoteURLs) > 0 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			// Create RegexManager & Processor specifically for remote scan
 			regexManager := core.NewRegexManager()
-			regexManager.SetPatternManager(pm) 
-			processor := core.NewProcessor(regexManager, logger) 
+			regexManager.SetPatternManager(pm)
+			processor := core.NewProcessor(regexManager, logger)
 
 			scheduler, err := core.NewScheduler(domainManager, client, processor, writer, logger, scanConcurrency, vip.GetBool("no_progress"), silentMode)
 			if err != nil {
 				logger.Error("Failed to create URL scheduler: %v", err)
 				mu.Lock()
-				if finalErr == nil { finalErr = err } 
+				if finalErr == nil {
+					finalErr = err
+				}
 				mu.Unlock()
 				return
 			}
-			
+
 			if err := scheduler.Schedule(remoteURLs); err != nil {
 				logger.Error("Error processing remote URLs: %v", err)
 				mu.Lock()
-				if finalErr == nil { finalErr = err }
+				if finalErr == nil {
+					finalErr = err
+				}
 				mu.Unlock()
 			}
 			stats := scheduler.GetStats()
 			mu.Lock()
-			totalSecretsFound += int32(stats.TotalSecrets) 
+			totalSecretsFound += int32(stats.TotalSecrets)
 			mu.Unlock()
 		}()
 	}
@@ -255,11 +275,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			secrets, err := processLocalFiles(localFiles, logger, writer, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, vip.GetInt64("max_file_size")) 
+			secrets, err := processLocalFiles(localFiles, logger, writer, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, vip.GetInt64("max_file_size"))
 			if err != nil {
 				logger.Error("Error processing local files: %v", err)
 				mu.Lock()
-				if finalErr == nil { finalErr = err }
+				if finalErr == nil {
+					finalErr = err
+				}
 				mu.Unlock()
 			}
 			mu.Lock()
@@ -277,44 +299,44 @@ func runScan(cmd *cobra.Command, args []string) error {
 	<-done
 
 	logger.Flush()
-	
+
 	// --- Summary Logging (Conditionally) ---
 	time.Sleep(100 * time.Millisecond)
 
-	if !silentMode { 
-		if outputFile != "" { 
+	if !silentMode {
+		if outputFile != "" {
 			logger.Success("Found a total of %d secrets", totalSecretsFound)
-			
+
 			timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", 
-			    timeStrLog, 
-			color.CyanString("[INFO]"), 
-			fmt.Sprintf("Results saved to: %s", outputFile))
+			fmt.Fprintf(os.Stderr, "%s %s %s\n",
+				timeStrLog,
+				color.CyanString("[INFO]"),
+				fmt.Sprintf("Results saved to: %s", outputFile))
 		} else {
 			logger.Success("Found a total of %d secrets", totalSecretsFound)
-	}
+		}
 
 		timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
-	fmt.Fprintf(os.Stderr, "\n%s %s %s\n", 
+		fmt.Fprintf(os.Stderr, "\n%s %s %s\n",
 			timeStrLog,
-		color.CyanString("[INFO]"), 
-		"Scan completed. Exiting.")
+			color.CyanString("[INFO]"),
+			"Scan completed. Exiting.")
 		time.Sleep(200 * time.Millisecond)
 	}
 
 	return finalErr
 }
 
-/* 
-   Gathers all input sources from arguments and input file
+/*
+	Gathers all input sources from arguments and input file
 */
 func collectInputSources(inputFile string, args []string, logger *output.Logger) ([]string, error) {
 	var inputs []string
 
-	if (len(args) > 0) {
+	if len(args) > 0 {
 		for _, arg := range args {
 			arg = filepath.FromSlash(arg)
-			
+
 			if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 				inputs = append(inputs, arg)
 			} else {
@@ -336,7 +358,7 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 					if listErr != nil {
 						// Log error from isFileURLList but proceed assuming it's a single file
 						logger.Warning("Error checking if '%s' is a list file: %v. Treating as single file.", arg, listErr)
-						inputs = append(inputs, arg) 
+						inputs = append(inputs, arg)
 					} else if isList {
 						listCount := 0
 						for _, line := range contents {
@@ -348,7 +370,7 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 						logger.Info("Added %d sources from list file (argument): %s", listCount, arg)
 					} else {
 						// Not a list, add the file path itself
-					inputs = append(inputs, arg)
+						inputs = append(inputs, arg)
 						logger.Info("Added single file to scan (argument): %s", arg)
 					}
 				}
@@ -358,7 +380,7 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 
 	if inputFile != "" {
 		inputPath := filepath.FromSlash(inputFile)
-		
+
 		fileInfo, err := os.Stat(inputPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to access input file/directory '%s': %v", inputPath, err)
@@ -376,7 +398,7 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 			if err != nil {
 				return nil, err
 			}
-			
+
 			if isURLList {
 				urlCount := 0
 				for _, line := range contents {
@@ -396,8 +418,8 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 	return inputs, nil
 }
 
-/* 
-   Determines if a file contains a list of URLs/paths
+/*
+	Determines if a file contains a list of URLs/paths
 */
 func isFileURLList(filePath string) (bool, []string, error) {
 	content, err := os.ReadFile(filePath)
@@ -406,7 +428,7 @@ func isFileURLList(filePath string) (bool, []string, error) {
 	}
 
 	lines := strings.Split(string(content), "\n")
-	
+
 	var nonEmptyLines []string
 	for _, line := range lines {
 		trimmedLine := strings.TrimSpace(line)
@@ -414,17 +436,17 @@ func isFileURLList(filePath string) (bool, []string, error) {
 			nonEmptyLines = append(nonEmptyLines, trimmedLine)
 		}
 	}
-	
+
 	if len(nonEmptyLines) == 0 {
 		return false, nil, nil
 	}
-	
+
 	ext := strings.ToLower(filepath.Ext(filePath))
-	
+
 	if isContentExtension(ext) {
 		return false, nil, nil
 	}
-	
+
 	if ext == ".txt" || ext == ".list" || ext == ".urls" {
 		if ext == ".txt" {
 			if len(nonEmptyLines) < 10 {
@@ -432,20 +454,20 @@ func isFileURLList(filePath string) (bool, []string, error) {
 					return false, nil, nil
 				}
 			}
-			
+
 			urlCount := 0
 			for _, line := range nonEmptyLines[:min(10, len(nonEmptyLines))] {
 				if looksLikeURLOrPath(line) {
 					urlCount++
 				}
 			}
-			
+
 			return urlCount >= min(5, len(nonEmptyLines)/2), nonEmptyLines, nil
 		}
-		
+
 		return true, nonEmptyLines, nil
 	}
-	
+
 	if len(nonEmptyLines) > 5 {
 		urlCount := 0
 		for _, line := range nonEmptyLines[:min(5, len(nonEmptyLines))] {
@@ -453,78 +475,78 @@ func isFileURLList(filePath string) (bool, []string, error) {
 				urlCount++
 			}
 		}
-		
+
 		return urlCount >= min(3, len(nonEmptyLines)/2), nonEmptyLines, nil
 	}
-	
+
 	return false, nil, nil
 }
 
-/* 
-   Checks if the file extension indicates content to scan directly
+/*
+	Checks if the file extension indicates content to scan directly
 */
 func isContentExtension(ext string) bool {
 	contentExtensions := map[string]bool{
-		".js":   true,
-		".jsx":  true,
-		".ts":   true,
-		".tsx":  true,
-		".html": true,
-		".htm":  true,
-		".css":  true,
-		".json": true,
-		".xml":  true,
-		".yaml": true,
-		".yml":  true,
-		".md":   true,
-		".csv":  true,
-		".ini":  true,
-		".conf": true,
+		".js":     true,
+		".jsx":    true,
+		".ts":     true,
+		".tsx":    true,
+		".html":   true,
+		".htm":    true,
+		".css":    true,
+		".json":   true,
+		".xml":    true,
+		".yaml":   true,
+		".yml":    true,
+		".md":     true,
+		".csv":    true,
+		".ini":    true,
+		".conf":   true,
 		".config": true,
 	}
-	
+
 	return contentExtensions[ext]
 }
 
-/* 
-   Checks if a string looks like a URL or file path
+/*
+	Checks if a string looks like a URL or file path
 */
 func looksLikeURLOrPath(s string) bool {
 	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
 		return true
 	}
-	
+
 	if strings.Contains(s, "/") || strings.Contains(s, "\\") {
 		return true
 	}
-	
+
 	if strings.Contains(s, ".") && !strings.ContainsAny(s, " \t\n\r") {
 		parts := strings.Split(s, ".")
 		if len(parts) >= 2 && len(parts[len(parts)-1]) >= 2 {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
-/* 
-   Checks if content appears to be code
+/*
+	Checks if content appears to be code
 */
 func looksLikeCode(content string) bool {
 	codePatterns := []string{
-		"{", "}", "function", "var ", "let ", "const ", 
-		"import ", "export ", "class ", "if ", "for ", 
+		"{", "}", "function", "var ", "let ", "const ",
+		"import ", "export ", "class ", "if ", "for ",
 		"while ", "switch ", "<html", "<div", "<script",
 		"/*", "*/", "//", "#include", "#define", "package ",
 	}
-	
+
 	for _, pattern := range codePatterns {
 		if strings.Contains(content, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -535,8 +557,8 @@ func min(a, b int) int {
 	return b
 }
 
-/* 
-   Recursively collects all readable files from a directory
+/*
+	Recursively collects all readable files from a directory
 */
 func collectFilesFromDirectory(dirPath string, logger *output.Logger) ([]string, error) {
 	var files []string
@@ -568,8 +590,8 @@ func collectFilesFromDirectory(dirPath string, logger *output.Logger) ([]string,
 	return files, nil
 }
 
-/* 
-   Separates inputs into remote URLs and local files
+/*
+	Separates inputs into remote URLs and local files
 */
 func categorizeInputs(inputs []string) ([]string, []string) {
 	var remoteURLs, localFiles []string
@@ -600,7 +622,7 @@ func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
 	if len(localFiles) > 0 {
 		timeColor := color.New(color.FgHiBlack).SprintfFunc()
 		timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
-		
+
 		fmt.Fprintf(os.Stderr, "%s %s %s\n",
 			timeStr,
 			color.CyanString("[INFO]"),
@@ -608,9 +630,9 @@ func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
 	}
 }
 
-/* 
-   Processes local files using the scanner
-   Signature updated to accept silent bool
+/*
+	Processes local files using the scanner
+	Signature updated to accept silent bool
 */
 func processLocalFiles(files []string, logger *output.Logger, writer *output.Writer, pm *patterns.PatternManager, concurrency int, noProgress bool, silent bool, maxFileSizeMB int64) (int, error) {
 	scannerCfg := scanner.LocalScannerConfig{
@@ -638,26 +660,32 @@ func processLocalFiles(files []string, logger *output.Logger, writer *output.Wri
 }
 
 // printPatternList prints available patterns
-func printPatternList() {
+func printPatternList(pm *patterns.PatternManager) {
 	fmt.Println("Available Pattern Categories and Patterns:")
 	fmt.Println("===========================================")
 
-	categorized := make(map[string][]struct{ Name string; Config patterns.PatternConfig })
+	categorized := make(map[string][]struct {
+		Name   string
+		Config patterns.PatternConfig
+	})
 	var categories []string
 	categoryMap := make(map[string]bool)
 
-	for name, config := range patterns.DefaultPatterns.Patterns {
+	for name, config := range pm.GetDefinitions().Patterns {
 		if !config.Enabled {
-			continue 
+			continue
 		}
 		if config.Category == "" {
-			config.Category = "uncategorized" 
+			config.Category = "uncategorized"
 		}
 		if !categoryMap[config.Category] {
 			categories = append(categories, config.Category)
 			categoryMap[config.Category] = true
 		}
-		categorized[config.Category] = append(categorized[config.Category], struct{ Name string; Config patterns.PatternConfig }{Name: name, Config: config})
+		categorized[config.Category] = append(categorized[config.Category], struct {
+			Name   string
+			Config patterns.PatternConfig
+		}{Name: name, Config: config})
 	}
 
 	sort.Strings(categories)
@@ -715,10 +743,12 @@ func initScanCmd(cmd *cobra.Command) {
 	cmd.Flags().StringSlice("exclude-categories", []string{}, "Comma-separated list of pattern categories to exclude (e.g., pii,generic)")
 	cmd.Flags().Bool("scan-urls", false, "URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters)") // Updated description
 	cmd.Flags().Bool("list-patterns", false, "List available pattern categories and exit")
+	cmd.Flags().String("patterns-file", "", "Path to a custom YAML patterns file to replace embedded defaults")
 	vip.BindPFlag("include_categories", cmd.Flags().Lookup("include-categories"))
 	vip.BindPFlag("exclude_categories", cmd.Flags().Lookup("exclude-categories"))
 	vip.BindPFlag("scan_urls", cmd.Flags().Lookup("scan-urls"))
 	vip.BindPFlag("list_patterns", cmd.Flags().Lookup("list-patterns"))
+	vip.BindPFlag("patterns_file", cmd.Flags().Lookup("patterns-file"))
 
 	// --- General Behavior ---
 	cmd.Flags().BoolP("verbose", "v", false, "Enable verbose logging output")
@@ -739,7 +769,7 @@ func printHeader() {
  ___/ /  __/ /__/ /  / /_/ /_/ __  / /_/ / /_/ / / / / /_/ /
 /____/\___/\___/_/   \__\/\__/_/ /_/\____/\__,_/_/ /_/\__,_/   v%s
 `, Version)
-	
+
 	authorLine := `
 Secrets Finder | Created by github.com/rafabd1
 `
@@ -748,6 +778,5 @@ Secrets Finder | Created by github.com/rafabd1
 	// Print author line
 	fmt.Fprint(os.Stderr, color.CyanString(authorLine))
 	// Print an extra newline for spacing before logs
-	fmt.Fprintln(os.Stderr) 
+	fmt.Fprintln(os.Stderr)
 }
-

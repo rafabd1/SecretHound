@@ -42,7 +42,7 @@ Secret detection is performed using regular expressions with additional context 
 
 1. **Pattern Matching**: Apply regex patterns to identify potential secrets
 2. **Context Analysis**: Analyze surrounding text to validate potential secrets
-3. **Filtering**: Filter out common false positives based on heuristics
+3. **Filtering**: Filter out common false positives based on heuristics and optional Shannon entropy checks
 4. **Validation**: Perform type-specific validation for certain secret types
 
 ## Threading Model

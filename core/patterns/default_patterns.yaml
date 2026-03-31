@@ -1,0 +1,1852 @@
+patterns:
+    api_key_assignment:
+        regex: '[''"]?(?:api_?key|api_?secret|app_?key|app_?secret)[''"]?\s*[=:]\s*[''"]([a-zA-Z0-9_\-\.]{16,64})[''"]'
+        description: API Key Assignment
+        enabled: true
+        category: generic
+        minlength: 16
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - sample
+            - placeholder
+            - test
+            - your
+            - xxx
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.5
+        entropyminlength: 16
+    auth_token:
+        regex: '[''"]?([a-zA-Z0-9_\-\.]{32,64})[''"]?\s*[,;]?\s*\/\/\s*[Aa]uth(?:entication)?\s+[Tt]oken'
+        description: Authentication Token (Comment Based)
+        enabled: true
+        category: auth
+        minlength: 32
+        maxlength: 64
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    aws_access_key:
+        regex: AKIA[0-9A-Z]{16}
+        description: AWS Access Key ID
+        enabled: true
+        category: aws
+        minlength: 20
+        maxlength: 20
+        keywordmatches:
+            - aws
+            - amazon
+            - access
+            - key
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    aws_secret_key:
+        regex: (?i)aws.{0,20}['"][0-9a-zA-Z/+]{40}['"]
+        description: AWS Secret Access Key
+        enabled: true
+        category: aws
+        minlength: 40
+        maxlength: 40
+        keywordmatches:
+            - aws
+            - amazon
+            - secret
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    azure_connection_string:
+        regex: DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[^;]+;EndpointSuffix=
+        description: Azure Storage Connection String
+        enabled: true
+        category: azure
+        minlength: 70
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    azure_cosmosdb:
+        regex: AccountEndpoint=https:\/\/[^.]+\.documents\.azure\.com:443\/;AccountKey=[^;]+;
+        description: Azure CosmosDB Connection String
+        enabled: true
+        category: azure
+        minlength: 70
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - localhost
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    azure_service_bus:
+        regex: Endpoint=sb:\/\/[^.]+\.servicebus\.windows\.net\/;SharedAccessKeyName=[^;]+;SharedAccessKey=[^;]+
+        description: Azure Service Bus Connection String
+        enabled: true
+        category: azure
+        minlength: 60
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - localhost
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    azure_sql_connection:
+        regex: Server=tcp:[^,]+,1433;Initial Catalog=[^;]+;Persist Security Info=False;User ID=[^;]+;Password=[^;]+;
+        description: Azure SQL Connection String
+        enabled: true
+        category: azure
+        minlength: 50
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - localhost
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    basic_auth:
+        regex: (?i)(?:basic\\s+)(?:[a-zA-Z0-9\\+\\/=]{20,100}=*)
+        description: HTTP Basic Authentication
+        enabled: false
+        category: auth
+        minlength: 25
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - sample
+            - usage
+            - caption
+            - documentation
+            - test
+            - '@example'
+            - description
+            - tutorial
+            - unicode
+            - Basic Multilingual
+            - BMP
+            - fromCharCode
+            - createElement
+            - <h1
+            - <h2
+            - <h3
+            - <h4
+            - <h5
+            - <h6
+            - Basic authorization
+            - Basic authentication
+            - Basic configuration
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    bearer_token:
+        regex: (?i)bearer\\s+[a-zA-Z0-9_\\-\\.=]{10,500}
+        description: Bearer Token
+        enabled: true
+        category: auth
+        minlength: 20
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - QVO
+            - QUO
+            - YO
+            - 'accessToken:'
+            - .accessToken
+            - oauth_token=
+            - variable
+            - config
+            - credential
+            - INVALID_ACCESS_TOKEN
+            - MISSING_ACCESS_TOKEN
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.6
+        entropyminlength: 20
+    braintree_token:
+        regex: access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}
+        description: Braintree Access Token
+        enabled: true
+        category: payment
+        minlength: 67
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    config_api_key:
+        regex: '[''"]?(?:api|app)(?:_|-|\.)?(?:key|token|secret)[''"]?\s*[:=]\s*[''"]([a-zA-Z0-9_\-\.]{8,})[''"]'
+        description: Configuration API Key
+        enabled: true
+        category: config
+        minlength: 8
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.5
+        entropyminlength: 12
+    config_secret:
+        regex: '[''"]?(?:secret|private|auth)(?:_|-|\.)?(?:key|token)[''"]?\s*[:=]\s*[''"]([a-zA-Z0-9_\-\.]{8,})[''"]'
+        description: Configuration Secret
+        enabled: true
+        category: config
+        minlength: 8
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.5
+        entropyminlength: 12
+    credit_card_number:
+        regex: (?i)(?:card_?number|cc-number|credit_?card|pan|cc_num)\s*[:=]\s*['"]?(\b(?:\d[ -]*?){13,19}\b|\b\d{4}[ -]?\*{4}[ -]?\*{4}[ -]?\d{4}\b|\b\d{6}[ -]?\*{6}[ -]?\d{4}\b)['"]?
+        description: Credit Card Number (PAN)
+        enabled: true
+        category: payment
+        minlength: 13
+        maxlength: 23
+        keywordmatches:
+            - card
+            - credit
+            - cc
+            - pan
+        keywordexcludes:
+            - example
+            - test
+            - sample
+            - placeholder
+            - "1234"
+            - XXXX
+            - visa
+            - mastercard
+            - amex
+            - dummy
+            - fake
+            - test_card
+            - card-number-input
+            - card-expiry-input
+            - card-cvc-input
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    digitalocean_access_token:
+        regex: dop_v1_[a-f0-9]{64}
+        description: DigitalOcean Personal Access Token
+        enabled: true
+        category: cloud
+        minlength: 69
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    digitalocean_oauth_token:
+        regex: doo_v1_[a-f0-9]{64}
+        description: DigitalOcean OAuth Token
+        enabled: true
+        category: cloud
+        minlength: 69
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    digitalocean_refresh_token:
+        regex: dor_v1_[a-f0-9]{64}
+        description: DigitalOcean Refresh Token
+        enabled: true
+        category: cloud
+        minlength: 69
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    docker_hub_token:
+        regex: dckr_pat_[A-Za-z0-9_-]{56}
+        description: Docker Hub Personal Access Token
+        enabled: true
+        category: code
+        minlength: 64
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    email_address:
+        regex: \b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b
+        description: Email Address
+        enabled: true
+        category: pii
+        minlength: 6
+        maxlength: 0
+        keywordmatches:
+            - email
+            - mail
+            - address
+        keywordexcludes:
+            - example
+            - test
+            - demo
+            - noreply
+            - no-reply
+            - '@example.com'
+            - '@test.com'
+            - verification-card-
+            - name@email.com
+            - name@domain.com
+            - '@author'
+            - license
+            - (c)
+            - copyright
+            - 'author:'
+            - 'maintainer:'
+            - created by
+            - 'contact:'
+            - <
+            - first.last@company.com
+            - .png')
+            - .jpg')
+            - .gif')
+            - .svg')
+            - .webp')
+            - .png"')
+            - .jpg"')
+            - .gif"')
+            - .svg"')
+            - .webp"')
+            - '@2x.png'
+            - '@3x.png'
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    encryption_key:
+        regex: (?i)['"]?enc(?:ryption)?[_-]?key['"]?\s*[=:]\s*['"]([a-zA-Z0-9+/]{16,64})['"]
+        description: Encryption Key
+        enabled: true
+        category: crypto
+        minlength: 16
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - sample
+            - placeholder
+            - test
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.5
+        entropyminlength: 16
+    ethereum_address:
+        regex: \b0x[a-fA-F0-9]{40}\b
+        description: Ethereum Address
+        enabled: true
+        category: web3
+        minlength: 42
+        maxlength: 42
+        keywordmatches:
+            - address
+            - ethereum
+            - wallet
+            - contract
+            - account
+        keywordexcludes:
+            - example
+            - test
+            - "null"
+            - "0x0"
+            - "0x000"
+            - zero
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    generic_domain_name:
+        regex: \b((?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*(?:www|s3|cdn|api|ftp|mail|blog|shop|assets|static|files|cloud|storage|dev|prod|stage|test|admin|auth|login|metrics|grafana|kibana|jenkins|gitlab|jira)\.(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)+(?:[a-zA-Z]{2,10})|(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)+(?:com|org|net|io|co|dev|app|ai|tech|info|biz|site|online|me|cloud|gov|edu|mil|ca|uk|de|fr|jp|au|br|cn|ru|tv))\b
+        description: Domain name with common indicators (e.g., example.com, www.example.org, api.example.service)
+        enabled: false
+        category: url
+        minlength: 4
+        maxlength: 253
+        keywordmatches: []
+        keywordexcludes:
+            - .js
+            - .css
+            - .json
+            - .xml
+            - .html
+            - .md
+            - .txt
+            - .png
+            - .jpg
+            - .jpeg
+            - .gif
+            - .svg
+            - .ico
+            - .webp
+            - .go
+            - .py
+            - .java
+            - .ts
+            - .cs
+            - .php
+            - .rb
+            - .yaml
+            - .yml
+            - .toml
+            - .ini
+            - .cfg
+            - .conf
+            - .pdf
+            - .doc
+            - .docx
+            - .xls
+            - .xlsx
+            - .ppt
+            - .pptx
+            - .zip
+            - .tar
+            - .gz
+            - .rar
+            - .7z
+            - this.
+            - self.
+            - window.
+            - document.
+            - console.
+            - process.env
+            - module.exports
+            - System.out
+            - Math.
+            - angular.
+            - react.
+            - vue.
+            - jquery.
+            - d3.
+            - prototype
+            - call
+            - apply
+            - bind
+            - constructor
+            - handler
+            - length
+            - name
+            - message
+            - stack
+            - push
+            - pop
+            - shift
+            - unshift
+            - slice
+            - splice
+            - join
+            - concat
+            - reverse
+            - sort
+            - map
+            - filter
+            - reduce
+            - forEach
+            - getElementById
+            - getElementsByTagName
+            - getElementsByClassName
+            - querySelector
+            - querySelectorAll
+            - addEventListener
+            - removeEventListener
+            - dispatchEvent
+            - preventDefault
+            - stopPropagation
+            - stopImmediatePropagation
+            - toString
+            - valueOf
+            - hasOwnProperty
+            - isPrototypeOf
+            - propertyIsEnumerable
+            - toUpperCase
+            - toLowerCase
+            - charAt
+            - charCodeAt
+            - indexOf
+            - lastIndexOf
+            - substring
+            - substr
+            - trim
+            - replace
+            - split
+            - match
+            - search
+            - parse
+            - stringify
+            - now
+            - UTC
+            - isArray
+            - keys
+            - values
+            - entries
+            - parents
+            - children
+            - parent
+            - child
+            - next
+            - prev
+            - siblings
+            - addClass
+            - removeClass
+            - toggleClass
+            - hasClass
+            - attr
+            - removeAttr
+            - prop
+            - removeProp
+            - val
+            - text
+            - html
+            - css
+            - data
+            - removeData
+            - "on"
+            - "off"
+            - trigger
+            - triggerHandler
+            - append
+            - prepend
+            - before
+            - after
+            - remove
+            - empty
+            - clone
+            - show
+            - hide
+            - toggle
+            - fadeIn
+            - fadeOut
+            - fadeTo
+            - slideDown
+            - slideUp
+            - slideToggle
+            - animate
+            - stop
+            - delay
+            - promise
+            - then
+            - catch
+            - finally
+            - headers
+            - body
+            - status
+            - statusText
+            - ok
+            - redirected
+            - type
+            - url
+            - error
+            - json
+            - formData
+            - blob
+            - arrayBuffer
+            - response
+            - request
+            - target
+            - currentTarget
+            - relatedTarget
+            - eventPhase
+            - bubbles
+            - cancelable
+            - defaultPrevented
+            - isTrusted
+            - timeStamp
+            - innerHTML
+            - outerHTML
+            - innerText
+            - textContent
+            - className
+            - id
+            - style
+            - title
+            - lang
+            - dir
+            - dataset
+            - attributes
+            - nodeName
+            - nodeValue
+            - nodeType
+            - parentNode
+            - childNodes
+            - firstChild
+            - lastChild
+            - previousSibling
+            - nextSibling
+            - src
+            - href
+            - alt
+            - width
+            - height
+            - rel
+            - checked
+            - disabled
+            - selected
+            - readonly
+            - multiple
+            - placeholder
+            - action
+            - method
+            - version
+            - config
+            - options
+            - settings
+            - params
+            - query
+            - payload
+            - content
+            - result
+            - results
+            - count
+            - success
+            - info
+            - warning
+            - debug
+            - state
+            - context
+            - user
+            - item
+            - items
+            - key
+            - detail
+            - details
+            - summary
+            - build
+            - env
+            - prod
+            - dev
+            - stage
+            - local
+            - default
+            - main
+            - core
+            - lib
+            - util
+            - utils
+            - helper
+            - helpers
+            - service
+            - services
+            - api
+            - app
+            - controller
+            - model
+            - view
+            - component
+            - module
+            - plugin
+            - widget
+            - template
+            - layout
+            - theme
+            - props
+            - element
+            - elements
+            - instance
+            - manager
+            - loader
+            - parser
+            - formatter
+            - validator
+            - router
+            - route
+            - store
+            - actions
+            - reducer
+            - reducers
+            - effect
+            - effects
+            - events
+            - listener
+            - listeners
+            - stream
+            - buffer
+            - file
+            - files
+            - path
+            - size
+            - date
+            - time
+            - uid
+            - guid
+            - auth
+            - login
+            - logout
+            - account
+            - profile
+            - session
+            - cart
+            - order
+            - product
+            - customer
+            - client
+            - admin
+            - dashboard
+            - report
+            - analytics
+            - stats
+            - log
+            - logs
+            - messages
+            - notification
+            - notifications
+            - alerts
+            - modal
+            - dialog
+            - popup
+            - dropdown
+            - menu
+            - nav
+            - sidebar
+            - header
+            - footer
+            - section
+            - article
+            - aside
+            - figure
+            - figcaption
+            - image
+            - img
+            - picture
+            - audio
+            - video
+            - track
+            - canvas
+            - form
+            - input
+            - textarea
+            - button
+            - select
+            - option
+            - label
+            - fieldset
+            - legend
+            - table
+            - thead
+            - tbody
+            - tfoot
+            - tr
+            - th
+            - td
+            - col
+            - colgroup
+            - ul
+            - ol
+            - li
+            - dl
+            - dt
+            - dd
+            - p
+            - span
+            - h1
+            - h2
+            - h3
+            - h4
+            - h5
+            - h6
+            - br
+            - hr
+            - em
+            - strong
+            - b
+            - i
+            - u
+            - s
+            - strike
+            - del
+            - ins
+            - mark
+            - small
+            - sub
+            - sup
+            - code
+            - pre
+            - samp
+            - kbd
+            - var
+            - q
+            - blockquote
+            - cite
+            - abbr
+            - address
+            - dfn
+            - progress
+            - meter
+            - wbr
+            - base
+            - head
+            - link
+            - meta
+            - script
+            - noscript
+            - example.com
+            - yourdomain.com
+            - mydomain.com
+            - test.com
+            - localhost
+            - '*.example.com'
+            - '*.test.com'
+            - schemas.android.com
+            - schemas.microsoft.com
+            - schemas.openxmlformats.org
+            - xmlns.jcp.org
+            - www.w3.org
+            - purl.org
+            - jquery.com
+            - angular.io
+            - reactjs.org
+            - vuejs.org
+            - npmjs.com
+            - github.com
+            - gitlab.com
+            - bitbucket.org
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    generic_password:
+        regex: (?i)(?:password|passwd|pwd|secret)[\\s]*[=:]+[\\s]*["']([^'"]{8,30})["']
+        description: Generic Password
+        enabled: false
+        category: generic
+        minlength: 8
+        maxlength: 30
+        keywordmatches: []
+        keywordexcludes:
+            - match
+            - valid
+            - must
+            - should
+            - hint
+            - help
+            - message
+            - error
+            - Change password
+            - Reset password
+            - Forgot password
+            - pseudo
+            - selector
+            - createElement
+            - render
+            - component
+            - input[type
+            - USERNAME
+            - PASSWORD
+            - '[REDACTED]'
+            - switch_to_
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.3
+        entropyminlength: 10
+    github_fine_grained_token:
+        regex: github_pat_[0-9A-Za-z_]{82}
+        description: GitHub Fine-Grained Personal Access Token
+        enabled: true
+        category: code
+        minlength: 90
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.6
+        entropyminlength: 50
+    github_personal_token:
+        regex: (?:ghp|ghu|ghs|ghr)_[0-9a-zA-Z]{36,251}
+        description: GitHub Personal Token (Classic & Fine-Grained)
+        enabled: true
+        category: code
+        minlength: 40
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - _white_
+            - _template_
+            - _ng_
+            - .svg
+            - .png
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    github_token:
+        regex: ghp_[0-9a-zA-Z]{36}
+        description: GitHub Personal Access Token (New Format)
+        enabled: true
+        category: code
+        minlength: 40
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    gitlab_personal_token:
+        regex: glpat-[0-9a-zA-Z_\-]{20,}
+        description: GitLab Personal Access Token
+        enabled: true
+        category: ci
+        minlength: 25
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    gitlab_runner_token:
+        regex: glrt-[0-9a-zA-Z_\-]{20,}
+        description: GitLab Runner Registration Token
+        enabled: true
+        category: ci
+        minlength: 25
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    google_api_key:
+        regex: AIza[0-9A-Za-z\-_]{35}
+        description: Google API Key
+        enabled: true
+        category: gcp
+        minlength: 39
+        maxlength: 39
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    google_cloud_platform:
+        regex: '[0-9]+-[0-9A-Za-z_]{32}\\.apps\\.googleusercontent\\.com'
+        description: Google Cloud Platform API Key
+        enabled: true
+        category: gcp
+        minlength: 40
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    heroku_api_key:
+        regex: '[h|H][e|E][r|R][o|O][k|K][u|U].{0,30}[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}'
+        description: Heroku API Key
+        enabled: true
+        category: cloud
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    huggingface_api_token:
+        regex: hf_[A-Za-z0-9]{34}
+        description: Hugging Face Access Token
+        enabled: true
+        category: cloud
+        minlength: 37
+        maxlength: 37
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.4
+        entropyminlength: 20
+    ipv4_address:
+        regex: (?i)(?:^|[^0-9.])(?:ip[_-]?addr(?:ess)?|host[_-]?(?:name|addr)?|server[_-]?(?:ip|addr))\s*[:=]\s*['"]?((?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[1-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]))['"]?
+        description: 'IPv4 Address (associated with a keyworded key, e.g., server_ip: 1.2.3.4)'
+        enabled: true
+        category: pii
+        minlength: 7
+        maxlength: 15
+        keywordmatches:
+            - ip
+            - address
+            - host
+            - server
+        keywordexcludes:
+            - 0.0.0.0
+            - 127.0.0.1
+            - localhost
+            - 1.3.6.1
+            - 2.16.840
+            - 1.2.840
+            - oid
+            - 'urn:'
+            - OID
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    ipv6_address:
+        regex: (?i)(?:ipv6|ip6)[_-]?(?:addr(?:ess)?)?\s*[:=]\s*['"]?((?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){6}:[0-9a-fA-F]{1,4})['"]?
+        description: IPv6 Address (Keyword Dependent)
+        enabled: true
+        category: pii
+        minlength: 15
+        maxlength: 0
+        keywordmatches:
+            - ipv6
+            - ip6
+        keywordexcludes:
+            - ::1
+            - 0000:0000
+            - fingerprint
+            - sha-256
+            - sha256
+            - hash
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    jenkins_api_token:
+        regex: (?i)(?:jenkins|hudson).{0,5}(?:api)?.{0,5}(?:token).{0,5}['"]([0-9a-zA-Z]{30,})['"]
+        description: Jenkins API Token
+        enabled: true
+        category: ci
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    jwt_token:
+        regex: eyJ[a-zA-Z0-9_\-]+\\.[a-zA-Z0-9_\-]+\\.[a-zA-Z0-9_\-]+
+        description: JWT Token
+        enabled: true
+        category: auth
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - function
+            - example
+            - placeholder
+            - test
+            - demo
+            - origin-trial
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    mac_address:
+        regex: (?i)(?:mac[_-]?address|ethernet[_-]?addr|hw[_-]?addr)\s*[:=]\s*['"]?([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})['"]?
+        description: MAC Address (Keyword Dependent, colon format only)
+        enabled: true
+        category: pii
+        minlength: 17
+        maxlength: 17
+        keywordmatches:
+            - mac
+            - ethernet
+            - hardware
+        keywordexcludes:
+            - "00:00:00:00:00:00"
+            - ff:ff:ff:ff:ff:ff
+            - FF:FF:FF:FF:FF:FF
+            - fingerprint
+            - sha
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    mailchimp_api_key:
+        regex: '[0-9a-f]{32}-us[0-9]{1,2}'
+        description: Mailchimp API Key
+        enabled: true
+        category: cloud
+        minlength: 36
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    mailgun_api_key:
+        regex: key-[0-9a-zA-Z]{32}
+        description: Mailgun API Key
+        enabled: true
+        category: cloud
+        minlength: 36
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - .js
+            - .css
+            - .map
+            - /assets/
+            - ace/mode
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    mongodb_srv_connection:
+        regex: mongodb\+srv:\/\/[^:]+:[^@]+@[^\/]+\/[^?]+
+        description: MongoDB SRV Connection String
+        enabled: true
+        category: db
+        minlength: 40
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - localhost
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    mongodb_uri:
+        regex: mongodb(?:\+srv)?:\/\/[^:]+:([^@]+)@
+        description: MongoDB Connection URI
+        enabled: true
+        category: db
+        minlength: 8
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    msql_connection_string:
+        regex: Server=.+;Database=.+;User (?:ID|Id)=.+;Password=.+;
+        description: Microsoft SQL Server Connection String
+        enabled: true
+        category: db
+        minlength: 40
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - localhost
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    mysql_connection_string:
+        regex: mysql:\/\/[^:]+:[^@]+@[^\/]+\/\w+
+        description: MySQL Connection String
+        enabled: true
+        category: db
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - localhost
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    netlify_access_token:
+        regex: nf[pcfub]_[a-zA-Z0-9_\\-]{36}
+        description: Netlify Access Token
+        enabled: true
+        category: cloud
+        minlength: 40
+        maxlength: 40
+        keywordmatches:
+            - netlify
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    npm_access_token:
+        regex: npm_[A-Za-z0-9]{36}
+        description: NPM Access Token
+        enabled: true
+        category: code
+        minlength: 40
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    oauth_token:
+        regex: (?i)(?:oauth|access)[._-]?token\\s*[:=]\\s*['"]([a-zA-Z0-9_.-]{32,500})['"]
+        description: OAuth Token
+        enabled: true
+        category: auth
+        minlength: 32
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - QVO
+            - QUO
+            - YO
+            - 'accessToken:'
+            - .accessToken
+            - oauth_token=
+            - variable
+            - config
+            - credential
+            - INVALID_ACCESS_TOKEN
+            - MISSING_ACCESS_TOKEN
+            - error
+            - payment_widget_
+            - _error_
+            - setAuthTokens
+            - webhooks_
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.6
+        entropyminlength: 20
+    oauth2_access_token:
+        regex: ya29\.[0-9A-Za-z\-_]+
+        description: OAuth 2.0 Access Token (Google/Firebase)
+        enabled: true
+        category: auth
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    paypal_client_id:
+        regex: (?i)(?:paypal|braintree)[_-]?(?:client[_-]?)?(?:id|key|secret)\s*[:=]\s*['"]([A-Za-z0-9_-]{20,64})['"]
+        description: PayPal/Braintree Client ID
+        enabled: true
+        category: payment
+        minlength: 20
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - sample
+            - kill_
+            - button
+            - class
+            - style
+            - css
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    paypal_client_secret:
+        regex: (?i)(?:paypal|braintree)[_-]?(?:client[_-]?)?secret\s*[:=]\s*['"]([A-Za-z0-9_-]{20,64})['"]
+        description: PayPal/Braintree Client Secret
+        enabled: true
+        category: payment
+        minlength: 20
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - sample
+            - kill_
+            - button
+            - class
+            - style
+            - css
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    phone_number:
+        regex: (?i)(?:phone|mobile|tel(?:ephone)?|fax|cell)\s*[:=]\s*['"]?(\+?1?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})['"]?
+        description: Phone Number (US format, keyword dependent)
+        enabled: true
+        category: pii
+        minlength: 10
+        maxlength: 20
+        keywordmatches: []
+        keywordexcludes:
+            - version
+            - id
+            - example
+            - test
+            - port
+            - e.g.
+            - _filter
+            - className
+            - jsx-
+            - mask
+            - 000-000-0000
+            - prod
+            - phones/
+            - watermark
+            - 123-456-7890
+            - 'tel:'
+            - adobe_mc
+            - TS=
+            - gtag
+            - AW-
+            - DC-
+            - Lg(e,
+            - 000-0000
+            - 111-1111
+            - 999-9999
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    postgresql_connection_string:
+        regex: postgres(?:ql)?:\/\/[^:]+:[^@]+@[^\/]+\/\w+
+        description: PostgreSQL Connection String
+        enabled: true
+        category: db
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - localhost
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    private_key_content:
+        regex: '-----BEGIN (?:RSA |OPENSSH |DSA |EC |PGP |ENCRYPTED )?PRIVATE KEY(?:\sBLOCK)?-----[\s]*[A-Za-z0-9+/=]{20,}'
+        description: Private Key Content (with actual key data)
+        enabled: true
+        category: crypto
+        minlength: 60
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    private_key_var:
+        regex: (?i)['"]?(?:private_?key|secret_?key)['"]?\s*[:=]\s*['"]([a-zA-Z0-9+/=_-]{20,})['"]
+        description: Private Key Variable
+        enabled: true
+        category: crypto
+        minlength: 20
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - click_
+            - export_
+            - track_
+            - event_
+            - action_
+            - _event
+            - _click
+            - _track
+            - switch_
+            - show_
+            - hide_
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.5
+        entropyminlength: 20
+    redis_url:
+        regex: redis(?::\\/\\/)[^:]+:[^@]+@[^\/]+(?::\d+)?
+        description: Redis Connection URL
+        enabled: true
+        category: db
+        minlength: 20
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - placeholder
+            - user
+            - password
+            - localhost
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    sendgrid_api_key:
+        regex: SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}
+        description: SendGrid API Key
+        enabled: true
+        category: cloud
+        minlength: 69
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    serial_number:
+        regex: (?i)(?:serial|s\\/n)\\s*[:=]\\s*([A-Za-z0-9\\-]{8,40})\\b
+        description: Serial Number (Keyword Dependent)
+        enabled: true
+        category: pii
+        minlength: 8
+        maxlength: 40
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - test
+            - uuid
+            - guid
+            - session
+            - request
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    session_token:
+        regex: (?i)(?:session[_-]?(?:id|token|key)|sid|jsessionid|auth[_-]token|bearer)[^\n\r]{0,10}(?:[:=]|(?:\s*:\s*['"])|(?:\s*=\s*['"]))[^\n\r]{0,5}['"]([a-zA-Z0-9_\-\.]{40,128})['"]
+        description: Session ID/Token
+        enabled: true
+        category: auth
+        minlength: 40
+        maxlength: 128
+        keywordmatches:
+            - session
+            - sid
+            - token
+            - auth
+        keywordexcludes:
+            - example
+            - test
+            - sample
+            - placeholder
+            - YOUR_SESSION_ID
+            - getSessionId
+            - eventTrackData
+            - amazonCheckoutSessionId
+            - sharedStrings
+            - localStorage
+            - getItem
+            - validresponse
+            - AssetSearch
+            - countryCodeobj
+            - checkout-session-id
+            - 'accessToken:'
+            - .accessToken
+            - oauth_token=
+            - variable
+            - config
+            - credential
+            - INVALID_ACCESS_TOKEN
+            - MISSING_ACCESS_TOKEN
+            - function
+            - return
+            - method
+            - get
+            - set
+            - add
+            - remove
+            - data
+            - angular
+            - _angular_
+            - ɵɵ
+            - ng_template
+            - this.
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.6
+        entropyminlength: 24
+    shopify_access_token:
+        regex: shpat_[a-fA-F0-9]{32}
+        description: Shopify Access Token
+        enabled: true
+        category: cloud
+        minlength: 38
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    shopify_custom_app_token:
+        regex: shpca_[a-fA-F0-9]{32}
+        description: Shopify Custom App Access Token
+        enabled: true
+        category: cloud
+        minlength: 38
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    shopify_private_app_token:
+        regex: shppa_[a-fA-F0-9]{32}
+        description: Shopify Private App Access Token
+        enabled: true
+        category: cloud
+        minlength: 38
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    shopify_shared_secret:
+        regex: shpss_[a-fA-F0-9]{32}
+        description: Shopify Shared Secret
+        enabled: true
+        category: cloud
+        minlength: 38
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    signing_key:
+        regex: (?i)['"]?sign(?:ing)?[_-]?(?:secret|key)['"]?\s*[=:]\s*['"]([a-zA-Z0-9+/]{16,64})['"]
+        description: Signing Key/Secret
+        enabled: true
+        category: crypto
+        minlength: 16
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - sample
+            - placeholder
+            - test
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.5
+        entropyminlength: 16
+    slack_token:
+        regex: xox[pbar]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-zA-Z0-9]{32}
+        description: Slack Token
+        enabled: true
+        category: code
+        minlength: 40
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    slack_webhook:
+        regex: https:\/\/hooks\.slack\.com\/services\/T[a-zA-Z0-9_]{8,12}\/B[a-zA-Z0-9_]{8,12}\/[a-zA-Z0-9_]{24,32}
+        description: Slack Webhook URL
+        enabled: true
+        category: code
+        minlength: 70
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    square_access_token:
+        regex: sq0atp-[0-9A-Za-z\-_]{22}
+        description: Square Access Token
+        enabled: true
+        category: payment
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    square_oauth_secret:
+        regex: sq0csp-[0-9A-Za-z\-_]{43}
+        description: Square OAuth Secret
+        enabled: true
+        category: payment
+        minlength: 50
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    stripe_publishable_key:
+        regex: pk_live_[0-9a-zA-Z]{24,34}
+        description: Stripe Publishable Key
+        enabled: true
+        category: payment
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    stripe_restricted_key:
+        regex: rk_(?:live|test)_[0-9a-zA-Z]{24,34}
+        description: Stripe Restricted API Key
+        enabled: true
+        category: payment
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.5
+        entropyminlength: 24
+    stripe_secret_key:
+        regex: sk_live_[0-9a-zA-Z]{24,34}
+        description: Stripe Secret Key
+        enabled: true
+        category: payment
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    stripe_test_publishable_key:
+        regex: pk_test_[0-9a-zA-Z]{24,34}
+        description: Stripe Test Publishable Key
+        enabled: true
+        category: payment
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    stripe_test_secret_key:
+        regex: sk_test_[0-9a-zA-Z]{24,34}
+        description: Stripe Test Secret Key
+        enabled: true
+        category: payment
+        minlength: 30
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    telegram_bot_token:
+        regex: \b[0-9]{8,10}:[A-Za-z0-9_-]{35}\b
+        description: Telegram Bot Token
+        enabled: true
+        category: cloud
+        minlength: 44
+        maxlength: 46
+        keywordmatches: []
+        keywordexcludes: []
+        excluderegexes: []
+        useentropy: true
+        minentropy: 3.5
+        entropyminlength: 35
+    url_generic:
+        regex: (?i)(?:https?|ftp|sftp|file|git|ws|wss):\/\/(?:[\w\.-]+(?:[:\w\.-]*@)?[\w\.-]+)?(?:\.[\w\.-]+)+[\w\-\_.~:\/?#[\]@!\$&'\(\)\*\+,;=.]+
+        description: Full URL with protocol (http, ftp, file, etc.)
+        enabled: false
+        category: url
+        minlength: 8
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example.com
+            - localhost
+            - 127.0.0.1
+            - ::1
+            - 'javascript:'
+            - 'mailto:'
+            - .png
+            - .jpg
+            - .jpeg
+            - .gif
+            - .css
+            - .js
+            - .svg
+            - .woff
+            - .ttf
+            - schemas.android.com
+            - schemas.microsoft.com
+            - schemas.openxmlformats.org
+            - localhost:3000
+            - localhost:8080
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    url_path:
+        regex: '[''"](\/([\w\-\.~%]+(?:\/[\w\-\.~%]*)*)(?:\?[\w\-\.~=&%+]*)?(?:#[\w\-\.~]*)?)[''"]'
+        description: Quoted URL Path/Endpoint with Parameters
+        enabled: false
+        category: url
+        minlength: 2
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - /dist/
+            - /build/
+            - /node_modules/
+            - /assets/
+            - /static/
+            - .js
+            - .css
+            - .html
+            - .md
+            - .txt
+            - .json
+            - .xml
+            - .png
+            - .jpg
+            - placeholder
+            - example
+            - /path/to/
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    us_zip_code:
+        regex: (?i)(?:zip|postal|post_?code|address)\\s*[:=]\\s*(\\d{5}(?:-\\d{4})?)\\b
+        description: US ZIP Code (Keyword Dependent)
+        enabled: true
+        category: pii
+        minlength: 5
+        maxlength: 10
+        keywordmatches:
+            - zip
+            - postal
+            - postcode
+        keywordexcludes:
+            - version
+            - build
+            - port
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    web3_private_key:
+        regex: (?i)(?:private[._-]?key|secret|wallet|mnemonic|seed|private_key_hex)\s*[:=]\s*['"]?(0x?[a-fA-F0-9]{64})['"]?
+        description: Web3 Private Key (Keyword Dependent)
+        enabled: true
+        category: web3
+        minlength: 64
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - test
+            - placeholder
+            - sample
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0
+    web3_provider_key:
+        regex: (?i)(?:infura|alchemy|quicknode|moralis|ankr).{0,20}(?:api[._-]?key|project[._-]?id|app[._-]?id|secret)\s*[:=]\s*['"]?([a-zA-Z0-9_\-]{32,64})['"]?
+        description: Web3 Provider API Key/ID (Infura, Alchemy, etc.)
+        enabled: true
+        category: web3
+        minlength: 32
+        maxlength: 0
+        keywordmatches: []
+        keywordexcludes:
+            - example
+            - test
+            - placeholder
+            - sample
+            - YOUR_API_KEY
+            - PROJECT_ID
+        excluderegexes: []
+        useentropy: false
+        minentropy: 0
+        entropyminlength: 0

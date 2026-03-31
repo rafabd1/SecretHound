@@ -18,6 +18,8 @@
 - **Extensive Pattern Library**: Over 60 meticulously crafted regex patterns to identify a wide range of secrets, including API keys (AWS, Google Cloud, Stripe, etc.), authentication tokens (JWT, OAuth, Bearer), database credentials, private keys, PII (email, phone), Web3 secrets (crypto addresses, private keys), and more.
 - **URL/Domain Extraction Mode**: Dedicated mode (`--scan-urls`) to efficiently extract only URL and domain patterns from sources.
 - **Flexible Pattern Control**: Fine-tune scans by including or excluding specific pattern categories (e.g., `--include-categories aws,pii`).
+- **YAML-Based Patterns**: Patterns are now managed in `core/patterns/default_patterns.yaml` for easier maintenance and extension.
+- **Shannon Entropy Validation**: Token-like patterns can enforce entropy thresholds to reduce false positives.
 - **Concurrent Processing**: Fast multi-threaded architecture for efficient scanning.
 - **Domain-Aware Scheduling**: Smart distribution of requests to avoid rate limiting when scanning remote URLs.
 - **WAF/Rate Limit Evasion**: Strategies for handling common web security measures.
@@ -114,6 +116,7 @@ SecretHound supports the following options:
 | `--include-categories` | Comma-separated list of pattern categories to include (e.g., aws,gcp). | all enabled |
 | `--exclude-categories` | Comma-separated list of pattern categories to exclude (e.g., pii,url). | none |
 | `--scan-urls` | URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters). | false |
+| `--patterns-file` | Path to a custom YAML patterns file to replace embedded defaults. | - |
 | `--max-file-size` | Maximum file size to scan in MB (0 for no limit). | 10 |
 | `--list-patterns` | List available pattern categories and patterns, then exit. | false |
 | `-v, --verbose` | Enable verbose logging output. | false |
