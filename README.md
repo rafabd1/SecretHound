@@ -23,7 +23,8 @@
 - **Hybrid Context Scoring**: Detection confidence now combines entropy, context signals, and reusable pattern rules instead of hard-only keyword filtering.
 - **Concurrent Processing**: Fast multi-threaded architecture for efficient scanning.
 - **Domain-Aware Scheduling**: Smart distribution of requests to avoid rate limiting when scanning remote URLs.
-- **WAF/Rate Limit Evasion**: Strategies for handling common web security measures.
+- **429-Aware Rate-Limit Hardening**: Strict HTTP `429` handling with adaptive per-domain backoff, plus safe domain discard after persistent throttling.
+- **HTTP Status Visibility**: Final scan summary includes explicit status hit counts (e.g., `429=...`, `403=...`, `503=...`).
 - **Context Analysis**: Reduces false positives by analyzing surrounding code and context.
 - **Real-Time Progress**: Live updates with progress bar and statistics (can be disabled with `--no-progress` or in `--silent` mode).
 - **Multiple Output Formats**: Output results in standard text, JSON, or raw values. Supports a new grouped format (`--group-by-source`) for TXT and JSON, organizing findings by their source URL/file.

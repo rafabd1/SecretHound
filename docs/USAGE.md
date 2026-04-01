@@ -148,6 +148,17 @@ Custom auth headers:
 secrethound -i ./targets.txt -H "Authorization: Bearer <token>" -H "Cookie: session=..."
 ```
 
+Rate-limit behavior:
+
+- `-l` controls request-rate behavior (RPS per domain).
+- `-l 0` (default) enables adaptive/auto rate mode.
+- `-l N` enables fixed rate mode (`N` requests/sec per domain).
+- `-c` controls only worker concurrency and does not switch rate-limit mode.
+- Domain backoff/discard logic is strict for HTTP `429` only.
+- Persistent `429` responses trigger temporary domain cooldown with escalating delay.
+- After the configured max backoff cycles, the domain is safely discarded and an alert is logged (except in `--silent` mode).
+- Final scan output prints an HTTP status summary (`429=...`, `403=...`, etc.) to aid diagnosis.
+
 ## Commands
 
 Version:
