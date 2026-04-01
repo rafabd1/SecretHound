@@ -266,6 +266,7 @@ patterns:
             - .webp"')
             - '@2x.png'
             - '@3x.png'
+            - email@email.com
     encryption_key:
         regex: (?i)['"]?enc(?:ryption)?[_-]?key['"]?\s*[=:]\s*['"]([a-zA-Z0-9+/]{16,64})['"]
         description: Encryption Key
@@ -826,6 +827,25 @@ patterns:
         enabled: true
         category: gcp
         minlength: 40
+    google_recaptcha_key:
+        regex: 6L[0-9A-Za-z_-]{38,}
+        description: Google reCAPTCHA Key (site/secret)
+        enabled: true
+        category: auth
+        minlength: 40
+        maxlength: 60
+        requiredcontextany:
+            - recaptcha
+            - captcha
+            - sitekey
+            - secretkey
+            - captchaconfig
+        contextboostany:
+            - recaptcha
+            - captcha
+            - sitekey
+            - secretkey
+            - captchaconfig
     heroku_api_key:
         regex: '[h|H][e|E][r|R][o|O][k|K][u|U].{0,30}[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}'
         description: Heroku API Key
@@ -1136,6 +1156,8 @@ patterns:
         enabled: true
         category: crypto
         minlength: 20
+        excluderegexes:
+            - 6L[0-9A-Za-z_-]{38,}
         contextpenaltyany:
             - click_
             - export_

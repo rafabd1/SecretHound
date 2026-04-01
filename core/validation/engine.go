@@ -61,6 +61,10 @@ func EvaluateCandidate(patternName string, pattern *patterns.CompiledPattern, va
 		return Decision{Valid: false, Confidence: 0}
 	}
 
+	if strings.Contains(nameLower, "email") && isPlaceholderEmail(valueLower) {
+		return Decision{Valid: false, Confidence: 0}
+	}
+
 	if len(cfg.RequiredContextAny) > 0 && !containsAny(contextLower, normalizeTerms(cfg.RequiredContextAny)) {
 		return Decision{Valid: false, Confidence: 0}
 	}
@@ -213,6 +217,28 @@ func normalizeTerms(raw []string) []string {
 		out = append(out, normalized)
 	}
 	return out
+}
+
+func isPlaceholderEmail(value string) bool {
+	placeholderPrefixes := []string{
+		"email@", "name@", "test@", "example@", "first.last@",
+	}
+	for _, prefix := range placeholderPrefixes {
+		if strings.HasPrefix(value, prefix) {
+			return true
+		}
+	}
+
+	placeholderDomains := []string{
+		"@example.com", "@test.com", "@domain.com", "@email.com",
+	}
+	for _, domain := range placeholderDomains {
+		if strings.HasSuffix(value, domain) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func clamp(v, minV, maxV float64) float64 {
