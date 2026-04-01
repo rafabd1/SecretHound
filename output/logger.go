@@ -83,7 +83,7 @@ func (l *Logger) SetProgressBar(pb *ProgressBar) {
 }
 
 /*
-   Processes log messages from the queue in background
+Processes log messages from the queue in background
 */
 func (l *Logger) processLogs() {
 	for {
@@ -178,9 +178,9 @@ func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) 
 }
 
 /*
-   Determines if a message should bypass normal level filtering
-   (Used primarily for critical ERROR messages that should show even if default level is higher)
-   NOTE: This is less relevant now with the stricter silent mode logic in writeLog.
+Determines if a message should bypass normal level filtering
+(Used primarily for critical ERROR messages that should show even if default level is higher)
+NOTE: This is less relevant now with the stricter silent mode logic in writeLog.
 */
 func isCriticalMessage(level LogLevel, message string) bool {
 	// SUCCESS messages are no longer automatically critical
@@ -248,7 +248,7 @@ func (l *Logger) Fatal(format string, args ...interface{}) {
 }
 
 /*
-   Logs a discovered secret while avoiding duplicates
+Logs a discovered secret while avoiding duplicates
 */
 func (l *Logger) SecretFound(secretType string, secretValue string, url string) {
 	secretPart := utils.TruncateString(secretValue, 35)
@@ -256,8 +256,18 @@ func (l *Logger) SecretFound(secretType string, secretValue string, url string) 
 	time.Sleep(5 * time.Millisecond)
 }
 
+func (l *Logger) SecretFoundWithCount(secretType string, secretValue string, url string, count int) {
+	secretPart := utils.TruncateString(secretValue, 35)
+	if count > 1 {
+		l.Success("Found %dx %s: %s... in %s", count, secretType, secretPart, url)
+	} else {
+		l.Success("Found %s: %s... in %s", secretType, secretPart, url)
+	}
+	time.Sleep(5 * time.Millisecond)
+}
+
 /*
-   Flushes all queued log messages and ensures they are processed
+Flushes all queued log messages and ensures they are processed
 */
 func (l *Logger) Flush() {
 	startTime := time.Now()
@@ -299,7 +309,7 @@ func (l *Logger) Close() {
 }
 
 /*
-   Completely resets the logger's internal state
+Completely resets the logger's internal state
 */
 func (l *Logger) ResetState() {
 	l.outputMu.Lock()

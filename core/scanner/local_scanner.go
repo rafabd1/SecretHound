@@ -280,8 +280,31 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 		s.stats.TotalSecrets += secretCount
 		s.stats.TotalBytes += fi.Size()
 		s.mu.Unlock()
+		type groupedLog struct {
+			secretType  string
+			secretValue string
+			secretURL   string
+			count       int
+		}
+		groupedLogs := make(map[string]*groupedLog)
+		order := make([]string, 0, len(secrets))
 		for _, sec := range secrets {
-			s.logger.SecretFound(sec.Type, sec.Value, sec.URL)
+			key := sec.Type + "\x00" + sec.Value + "\x00" + sec.URL
+			if existing, ok := groupedLogs[key]; ok {
+				existing.count++
+			} else {
+				groupedLogs[key] = &groupedLog{
+					secretType:  sec.Type,
+					secretValue: sec.Value,
+					secretURL:   sec.URL,
+					count:       1,
+				}
+				order = append(order, key)
+			}
+		}
+		for _, key := range order {
+			entry := groupedLogs[key]
+			s.logger.SecretFoundWithCount(entry.secretType, entry.secretValue, entry.secretURL, entry.count)
 		}
 		if s.writer != nil {
 			for _, sec := range secrets {
