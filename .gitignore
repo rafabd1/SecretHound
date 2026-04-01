@@ -47,3 +47,5 @@ output_*
 .cursor
 
 mailmap.txt
+
+.gocache/

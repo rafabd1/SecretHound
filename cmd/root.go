@@ -39,26 +39,26 @@ Flag Categories:
   Output:            -o, --output | --raw
   Performance:       -c, --concurrency | -l, --rate-limit
   Networking:        -t, --timeout | -r, --retries | -H, --header | --insecure
-  Pattern Control:   --include-categories | --exclude-categories | --scan-urls | --list-patterns
+  Pattern Control:   --include-categories | --exclude-categories | --scan-urls | --list-patterns | --patterns-file
   General Behavior:  -v, --verbose | -n, --no-progress | -s, --silent
 `,
 	RunE: runScan,
 	Args: func(cmd *cobra.Command, args []string) error {
-		// --- List Patterns Check --- 
+		// --- List Patterns Check ---
 		lp, _ := cmd.Flags().GetBool("list-patterns")
 		if lp {
-			if len(args) != 0 { 
+			if len(args) != 0 {
 				return fmt.Errorf("accepts 0 arguments when --list-patterns is used, received %d", len(args))
 			}
 			return nil
 		}
 
-		// --- Input Source Check --- 
+		// --- Input Source Check ---
 		inputFileUsed, _ := cmd.Flags().GetString("input-file")
 		hasInputFile := inputFileUsed != ""
 
 		if hasInputFile {
-			return nil 
+			return nil
 		}
 
 		if len(args) != 1 {
@@ -74,10 +74,10 @@ Flag Categories:
 }
 
 // beforeCommand executes before any command runs
-func beforeCommand() {  
-    runtime.GC()
-    
-    time.Sleep(100 * time.Millisecond)
+func beforeCommand() {
+	runtime.GC()
+
+	time.Sleep(100 * time.Millisecond)
 }
 
 // Execute adds all child commands to the root command
@@ -85,15 +85,15 @@ func Execute() {
 	originalPreRun := rootCmd.PreRun
 	rootCmd.PreRun = func(cmd *cobra.Command, args []string) {
 		beforeCommand()
-            if originalPreRun != nil {
-                originalPreRun(cmd, args)
-        }
-    }
-    
-    if err := rootCmd.Execute(); err != nil {
-        fmt.Println(err)
-        os.Exit(1)
-    }
+		if originalPreRun != nil {
+			originalPreRun(cmd, args)
+		}
+	}
+
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func init() {
@@ -118,7 +118,7 @@ func init() {
 	vip.BindPFlag("raw", rootCmd.Flags().Lookup("raw"))
 
 	// Group: Performance
-	rootCmd.Flags().IntP("concurrency", "c", 50, "Number of concurrent workers") // Default changed to 50 based on scan.go edits
+	rootCmd.Flags().IntP("concurrency", "c", 50, "Number of concurrent workers")                            // Default changed to 50 based on scan.go edits
 	rootCmd.Flags().IntP("rate-limit", "l", 0, "Max requests per second per domain (0 for auto/unlimited)") // Moved from persistent
 	vip.BindPFlag("concurrency", rootCmd.Flags().Lookup("concurrency"))
 	vip.BindPFlag("rate_limit", rootCmd.Flags().Lookup("rate-limit"))
@@ -127,7 +127,7 @@ func init() {
 	rootCmd.Flags().IntP("timeout", "t", 10, "HTTP request timeout in seconds")
 	rootCmd.Flags().IntP("retries", "r", 2, "Maximum number of retries for HTTP requests") // Default changed to 2 based on scan.go edits
 	rootCmd.Flags().StringSliceP("header", "H", []string{}, "Custom headers to add (e.g., \"Authorization: Bearer token\")")
-	rootCmd.Flags().Bool("insecure", false, "Disable SSL/TLS certificate verification") // Moved from persistent
+	rootCmd.Flags().Bool("insecure", true, "Disable SSL/TLS certificate verification (default: true)")
 	vip.BindPFlag("timeout", rootCmd.Flags().Lookup("timeout"))
 	vip.BindPFlag("retries", rootCmd.Flags().Lookup("retries"))
 	vip.BindPFlag("headers", rootCmd.Flags().Lookup("header"))
@@ -138,21 +138,22 @@ func init() {
 	rootCmd.Flags().StringSlice("exclude-categories", []string{}, "Comma-separated list of pattern categories to exclude (e.g., pii,generic)")
 	rootCmd.Flags().Bool("scan-urls", false, "URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters)")
 	rootCmd.Flags().Bool("list-patterns", false, "List available pattern categories and patterns, then exit")
+	rootCmd.Flags().String("patterns-file", "", "Path to a custom YAML patterns file to replace embedded defaults")
 	vip.BindPFlag("include_categories", rootCmd.Flags().Lookup("include-categories"))
 	vip.BindPFlag("exclude_categories", rootCmd.Flags().Lookup("exclude-categories"))
 	vip.BindPFlag("scan_urls", rootCmd.Flags().Lookup("scan-urls"))
 	vip.BindPFlag("list_patterns", rootCmd.Flags().Lookup("list-patterns"))
+	vip.BindPFlag("patterns_file", rootCmd.Flags().Lookup("patterns-file"))
 
 	// Group: Output Format (Adicionando a nova flag aqui)
 	rootCmd.Flags().Bool("group-by-source", false, "Group secrets by source URL/file in the output")
 	vip.BindPFlag("group_by_source", rootCmd.Flags().Lookup("group-by-source"))
 
 	// Group: General Behavior
-	rootCmd.Flags().BoolP("no-progress", "n", false, "Disable the progress bar display") // Added based on scan.go
+	rootCmd.Flags().BoolP("no-progress", "n", false, "Disable the progress bar display")             // Added based on scan.go
 	rootCmd.Flags().BoolP("silent", "s", false, "Silent mode (suppress progress bar and info logs)") // Kept, might conflict with no-progress? Review needed.
-	rootCmd.Flags().Int64("max-file-size", 10, "Maximum file size to scan in MB (0 for no limit)")
+	rootCmd.Flags().Int64("max-file-size", 0, "Maximum file size to scan in MB (0 for no limit)")
 	vip.BindPFlag("no_progress", rootCmd.Flags().Lookup("no-progress"))
 	vip.BindPFlag("silent", rootCmd.Flags().Lookup("silent"))
 	vip.BindPFlag("max_file_size", rootCmd.Flags().Lookup("max-file-size"))
 }
-

@@ -88,8 +88,8 @@ SecretHound supports the following options:
 | `-n, --concurrency` | Number of concurrent workers | 10 |
 | `-l, --rate-limit` | Requests per second per domain (0 = auto) | 0 |
 | `-H, --header` | Custom HTTP header (format: 'Name: Value') | - |
-| `--max-file-size` | Maximum file size to scan in MB (0 for no limit) | 10 |
-| `--insecure` | Disable SSL/TLS certificate verification | false |
+| `--max-file-size` | Maximum file size to scan in MB (0 for no limit) | 0 |
+| `--insecure` | Disable SSL/TLS certificate verification | true |
 | `-v, --verbose` | Enable verbose output | false |
 
 ## Advanced Options
@@ -265,6 +265,18 @@ Scan for all secrets except Personal Identifiable Information (PII):
 ```bash
 secrethound --exclude-categories pii -i <target>
 ```
+
+Use a custom YAML pattern set (same structure as `core/patterns/default_patterns.yaml`):
+```bash
+secrethound --patterns-file ./my_patterns.yaml -i <target>
+```
+
+Useful optional YAML fields for advanced tuning:
+
+- `requiredcontextany`: requires at least one term in surrounding context
+- `contextboostany`: increases confidence when terms are present
+- `contextpenaltyany`: decreases confidence when terms are present
+- `useentropy`, `minentropy`, `entropyminlength`: entropy-based validation controls
 
 ### URL/Domain Extraction Mode
 

@@ -48,37 +48,8 @@ jobs:
           name: SecretHound v${{ env.VERSION }}
           draft: false
           prerelease: false
+          generate_release_notes: true
           files: |
             secrethound-${{ env.VERSION }}-windows-amd64.exe
             secrethound-${{ env.VERSION }}-linux-amd64
             secrethound-${{ env.VERSION }}-darwin-amd64
-          body: |
-                # SecretHound v${{ env.VERSION }}
-
-                ## New Features
-                - **Max File Size Flag**: Added `--max-file-size` flag to set the maximum file size for local file scanning.
-                - **Netlify Access Token Pattern**: Added new detection pattern for Netlify Access Tokens.
-
-                ## Improvements
-                - **Enhanced Pattern Accuracy**: Refined multiple regex patterns (MAC Address, IPv4, IPv6, PayPal, Private Key, Phone Number) to significantly reduce false positives based on real-world testing.
-
-                ## Bug Fixes
-                - Fixed false positives where SVG path data was detected as MAC addresses.
-                - Fixed false positives where OIDs were detected as IPv4 addresses.
-                - Fixed false positives where SHA-256 fingerprints were detected as IPv6 addresses.
-                - Fixed false positives where CSS class names were detected as PayPal credentials.
-                - Fixed false positives where event tracking strings were detected as private keys.
-                - Fixed Private Key Content pattern to require actual key data after BEGIN header.
-
-                ## Installation
-                
-                Download the appropriate binary for your platform and make it executable.
-                
-                For Go users:
-                ```
-                go install github.com/rafabd1/SecretHound/cmd/secrethound@latest
-                ```
-                
-                ## Documentation
-                
-                See the [documentation](https://github.com/rafabd1/SecretHound/tree/main/docs) for usage details.

@@ -30,23 +30,23 @@ type Scheduler struct {
 }
 
 type SchedulerStats struct {
-	TotalURLs        int
-	ProcessedURLs    int
-	FailedURLs       int
-	BlockedDomains   int
-	TotalSecrets     int
-	StartTime        time.Time
-	EndTime          time.Time
-	RateLimitHits    int
-	WAFBlockHits     int
-	DomainRetries    map[string]int
+	TotalURLs      int
+	ProcessedURLs  int
+	FailedURLs     int
+	BlockedDomains int
+	TotalSecrets   int
+	StartTime      time.Time
+	EndTime        time.Time
+	RateLimitHits  int
+	WAFBlockHits   int
+	DomainRetries  map[string]int
 }
 
-func NewScheduler(domainManager *networking.DomainManager, client *networking.Client, 
+func NewScheduler(domainManager *networking.DomainManager, client *networking.Client,
 	processor *Processor, writer *output.Writer, logger *output.Logger, concurrency int, noProgress bool, silent bool) (*Scheduler, error) {
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &Scheduler{
 		domainManager: domainManager,
 		client:        client,
@@ -73,7 +73,7 @@ func (s *Scheduler) Schedule(urls []string) error {
 
 	s.domainManager.GroupURLsByDomain(urls)
 	domains := s.domainManager.GetDomainList()
-	
+
 	s.buildBalancedWorkQueue(domains)
 
 	time.Sleep(200 * time.Millisecond)
@@ -82,7 +82,7 @@ func (s *Scheduler) Schedule(urls []string) error {
 	if !s.noProgress && !s.silent {
 		progressBar = output.NewProgressBar(len(urls), 40)
 		progressBar.SetPrefix("Processing URLs: ")
-	s.logger.SetProgressBar(progressBar)
+		s.logger.SetProgressBar(progressBar)
 		progressBar.Start()
 		progressBar.SetSuffix("Secrets: 0 | Rate: 0.0/s")
 	}
@@ -92,16 +92,16 @@ func (s *Scheduler) Schedule(urls []string) error {
 	done := make(chan struct{})
 
 	if progressBar != nil {
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				s.mutex.Lock()
-				processedCount := s.stats.ProcessedURLs
+		go func() {
+			for {
+				select {
+				case <-ticker.C:
+					s.mutex.Lock()
+					processedCount := s.stats.ProcessedURLs
 					failedCount := s.stats.FailedURLs
-				secretsFound := s.stats.TotalSecrets
+					secretsFound := s.stats.TotalSecrets
 					startTime := s.stats.StartTime
-				s.mutex.Unlock()
+					s.mutex.Unlock()
 
 					totalCompleted := processedCount + failedCount
 					progressBar.Update(totalCompleted)
@@ -111,8 +111,8 @@ func (s *Scheduler) Schedule(urls []string) error {
 					if elapsedSeconds > 0 {
 						rate = float64(totalCompleted) / elapsedSeconds
 					}
-				progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
-					secretsFound,
+					progressBar.SetSuffix(fmt.Sprintf("Secrets: %d | Rate: %.1f/s",
+						secretsFound,
 						rate))
 				case <-done:
 					return
@@ -124,7 +124,7 @@ func (s *Scheduler) Schedule(urls []string) error {
 	go func() {
 		completionTicker := time.NewTicker(100 * time.Millisecond)
 		defer completionTicker.Stop()
-		
+
 		for {
 			select {
 			case <-s.ctx.Done():
@@ -158,7 +158,7 @@ func (s *Scheduler) Schedule(urls []string) error {
 
 	if progressBar != nil {
 		close(done)
-	progressBar.Stop()
+		progressBar.Stop()
 		progressBar.Finalize()
 		s.logger.SetProgressBar(nil)
 	}
@@ -191,44 +191,44 @@ func (s *Scheduler) Schedule(urls []string) error {
 	return nil
 }
 
-/* 
+/*
 	Builds a balanced queue of URLs by taking one URL from each domain in rounds
 	to ensure fair distribution across domains
 */
 func (s *Scheduler) buildBalancedWorkQueue(domains []string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	
+
 	s.waitingURLs = make([]string, 0)
-	
+
 	roundRobinCount := 0
 	continueFetching := true
-	
+
 	utils.SimpleSortByDomainCount(domains, func(domain string) int {
 		return len(s.domainManager.GetURLsForDomain(domain))
 	})
-	
+
 	for continueFetching {
 		continueFetching = false
-		
+
 		for _, domain := range domains {
 			urls := s.domainManager.GetURLsForDomain(domain)
-			
+
 			if roundRobinCount < len(urls) {
 				s.waitingURLs = append(s.waitingURLs, urls[roundRobinCount])
 				continueFetching = true
 			}
 		}
-		
+
 		roundRobinCount++
 	}
-	
+
 	s.shuffleWithDomainAwareness(s.waitingURLs)
-	
+
 	s.logger.Debug("Built balanced work queue with %d URLs", len(s.waitingURLs))
 }
 
-/* 
+/*
 	Shuffles the URLs while maintaining distance between URLs from the same domain
 	to prevent hammering a single domain with consecutive requests
 */
@@ -236,49 +236,49 @@ func (s *Scheduler) shuffleWithDomainAwareness(urls []string) {
 	if len(urls) <= 1 {
 		return
 	}
-	
+
 	domainIndices := make(map[string][]int)
-	
+
 	for i, url := range urls {
 		domain, err := utils.ExtractDomain(url)
 		if err != nil {
 			continue
 		}
-		
+
 		domainIndices[domain] = append(domainIndices[domain], i)
 	}
-	
+
 	if len(domainIndices) > 1 {
 		domains := make([]string, 0, len(domainIndices))
 		for domain := range domainIndices {
 			domains = append(domains, domain)
 		}
-		
+
 		utils.SortByValueDesc(domains, func(domain string) int {
 			return len(domainIndices[domain])
 		})
-		
+
 		newURLs := make([]string, len(urls))
 		position := 0
-		
+
 		for len(domains) > 0 {
 			for i := 0; i < len(domains); i++ {
 				domain := domains[i]
 				indices := domainIndices[domain]
-				
+
 				if len(indices) == 0 {
 					domains = append(domains[:i], domains[i+1:]...)
 					i--
 					continue
 				}
-				
+
 				newURLs[position] = urls[indices[0]]
 				position++
-				
+
 				domainIndices[domain] = indices[1:]
 			}
 		}
-		
+
 		copy(urls, newURLs)
 	}
 }
@@ -286,7 +286,7 @@ func (s *Scheduler) shuffleWithDomainAwareness(urls []string) {
 func (s *Scheduler) worker(id int) {
 	defer s.waitGroup.Done()
 	s.logger.Debug("Worker %d started", id)
-	
+
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -294,25 +294,25 @@ func (s *Scheduler) worker(id int) {
 			return
 		default:
 			url, hasMore := s.GetNextURL()
-		
+
 			if !hasMore {
 				s.logger.Debug("Worker %d: Queue empty and context likely canceled. Exiting.", id)
-			return
-		}
-		
+				return
+			}
+
 			if url == "" {
 				s.logger.Debug("Worker %d: Queue temporarily empty, sleeping.", id)
 				time.Sleep(time.Duration(150+utils.RandomInt(0, 100)) * time.Millisecond)
-			continue
-		}
-		
+				continue
+			}
+
 			domain, err := utils.ExtractDomain(url)
 			if err != nil {
 				s.logger.Warning("Worker %d: failed to extract domain from %s: %v", id, url, err)
 				s.incrementFailedURLs(domain)
-			continue
-		}
-		
+				continue
+			}
+
 			s.logger.Debug("Worker %d: Requesting URL %s", id, url)
 			startTime := time.Now()
 
@@ -330,13 +330,13 @@ func (s *Scheduler) worker(id int) {
 			secrets, processErr := s.processor.ProcessJSContent(content, url)
 			processingDuration := time.Since(processStartTime)
 			totalDuration := time.Since(startTime)
-		
+
 			if processErr != nil {
 				s.logger.Warning("Worker %d: Failed to process content from %s: %v", id, url, processErr)
 				s.incrementFailedURLs(domain)
 				continue
 			}
-			
+
 			s.incrementProcessedURLs(domain, totalDuration)
 
 			if len(secrets) > 0 {
@@ -344,15 +344,33 @@ func (s *Scheduler) worker(id int) {
 				s.stats.TotalSecrets += len(secrets)
 				s.mutex.Unlock()
 				s.logger.Debug("Worker %d found %d secrets in %s (Process took %v)", id, len(secrets), url, processingDuration)
-		for _, secret := range secrets {
-			s.logger.SecretFound(secret.Type, secret.Value, url)
+				type groupedLog struct {
+					secret Secret
+					count  int
+				}
+				groupedLogs := make(map[string]*groupedLog)
+				order := make([]string, 0, len(secrets))
+				for _, sec := range secrets {
+					key := sec.Type + "\x00" + sec.Value + "\x00" + sec.URL
+					if existing, ok := groupedLogs[key]; ok {
+						existing.count++
+					} else {
+						groupedLogs[key] = &groupedLog{secret: sec, count: 1}
+						order = append(order, key)
+					}
+				}
+				for _, key := range order {
+					entry := groupedLogs[key]
+					s.logger.SecretFoundWithCount(entry.secret.Type, entry.secret.Value, entry.secret.URL, entry.count)
+				}
+				for _, secret := range secrets {
 					if s.writer != nil {
 						writeErr := s.writer.WriteSecret(url, secret.Type, secret.Value, url, secret.Context, "", secret.Line)
 						if writeErr != nil {
 							s.logger.Error("Worker %d: failed to write secret to output file: %v", id, writeErr)
+						}
+					}
 				}
-			}
-		}
 			} else {
 				s.logger.Debug("Worker %d found 0 secrets in %s (Process took %v)", id, url, processingDuration)
 			}
@@ -376,13 +394,13 @@ func (s *Scheduler) incrementProcessedURLs(domain string, duration time.Duration
 
 func (s *Scheduler) GetNextURL() (string, bool) {
 	s.mutex.Lock()
-	
+
 	if len(s.waitingURLs) > 0 {
-	url := s.waitingURLs[0]
-	s.waitingURLs = s.waitingURLs[1:]
+		url := s.waitingURLs[0]
+		s.waitingURLs = s.waitingURLs[1:]
 		s.mutex.Unlock()
-	return url, true
-}
+		return url, true
+	}
 
 	select {
 	case <-s.ctx.Done():
@@ -397,24 +415,24 @@ func (s *Scheduler) GetNextURL() (string, bool) {
 func (s *Scheduler) GetStats() SchedulerStats {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	
+
 	statsCopy := SchedulerStats{
-		TotalURLs:        s.stats.TotalURLs,
-		ProcessedURLs:    s.stats.ProcessedURLs,
-		FailedURLs:       s.stats.FailedURLs,
-		BlockedDomains:   s.stats.BlockedDomains,
-		TotalSecrets:     s.stats.TotalSecrets,
-		StartTime:        s.stats.StartTime,
-		EndTime:          s.stats.EndTime,
-		RateLimitHits:    s.stats.RateLimitHits,
-		WAFBlockHits:     s.stats.WAFBlockHits,
-		DomainRetries:    make(map[string]int),
+		TotalURLs:      s.stats.TotalURLs,
+		ProcessedURLs:  s.stats.ProcessedURLs,
+		FailedURLs:     s.stats.FailedURLs,
+		BlockedDomains: s.stats.BlockedDomains,
+		TotalSecrets:   s.stats.TotalSecrets,
+		StartTime:      s.stats.StartTime,
+		EndTime:        s.stats.EndTime,
+		RateLimitHits:  s.stats.RateLimitHits,
+		WAFBlockHits:   s.stats.WAFBlockHits,
+		DomainRetries:  make(map[string]int),
 	}
-	
+
 	for domain, count := range s.stats.DomainRetries {
 		statsCopy.DomainRetries[domain] = count
 	}
-	
+
 	return statsCopy
 }
 
@@ -436,44 +454,44 @@ func (s *Scheduler) GetActiveWorkers() int {
 
 func (s *Scheduler) printDomainStatistics() {
 	domainStats := s.domainManager.GetDomainStatus()
-	
+
 	blockedDomains := s.domainManager.GetBlockedDomains()
-	
+
 	s.logger.Info("Domain Statistics:")
-	
+
 	domains := make([]string, 0, len(domainStats))
 	for domain := range domainStats {
 		domains = append(domains, domain)
 	}
-	
+
 	utils.SortByValueDesc(domains, func(domain string) int {
 		return domainStats[domain].TotalURLs
 	})
-	
+
 	for _, domain := range domains {
 		stats := domainStats[domain]
-		
+
 		blockStatus := ""
 		if expiry, blocked := blockedDomains[domain]; blocked {
 			remaining := time.Until(expiry).Round(time.Second)
 			blockStatus = fmt.Sprintf(" [BLOCKED for %s]", remaining)
 		}
-		
-		s.logger.Info("  - %s: %d URLs, %d processed, %d failed%s", 
+
+		s.logger.Info("  - %s: %d URLs, %d processed, %d failed%s",
 			domain, stats.TotalURLs, stats.ProcessedURLs, stats.FailedURLs, blockStatus)
 	}
-	
+
 	s.logger.Info("Domain Retry Counts:")
-	
+
 	retryDomains := make([]string, 0, len(s.stats.DomainRetries))
 	for domain := range s.stats.DomainRetries {
 		retryDomains = append(retryDomains, domain)
 	}
-	
+
 	utils.SortByValueDesc(retryDomains, func(domain string) int {
 		return s.stats.DomainRetries[domain]
 	})
-	
+
 	for _, domain := range retryDomains {
 		count := s.stats.DomainRetries[domain]
 		if count > 0 {

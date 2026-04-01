@@ -1,194 +1,631 @@
 # Supported Secret Types
 
-SecretHound is equipped with **over 60 patterns** to detect a wide variety of secrets. These patterns are organized into categories, allowing for more targeted scanning when using the `--include-categories` or `--exclude-categories` flags.
+SecretHound currently loads its built-in patterns from:
 
-Below is a list of supported categories and examples of the types of secrets detected within them. For a complete and up-to-date list of all individual patterns and their details, you can use the command:
+- `core/patterns/default_patterns.yaml`
+
+Licensing notice for adapted third-party pattern content:
+
+- See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
+For the exact and current list in your runtime, use:
 
 ```bash
 secrethound --list-patterns
 ```
 
-## Pattern Categories
+You can also replace built-in patterns with your own YAML file:
 
-### Cloud Provider Keys & Tokens
-- **AWS**: Access Keys, Secret Keys, S3 URLs (pre-signed, etc.)
-- **Google Cloud (GCP)**: API Keys, Service Account Credentials (JSON)
-- **Azure**: Service Principal Secrets, Storage Keys
-- **Alibaba Cloud**: AccessKey ID, AccessKey Secret
+```bash
+secrethound --patterns-file ./my_patterns.yaml --list-patterns
+```
 
-### API Keys (General & SaaS)
-- General API Keys (various common formats)
-- Stripe API Keys
-- Twilio API Keys
-- SendGrid API Keys
-- Slack Tokens (Bot, User, Webhook)
-- GitHub Tokens (Personal Access Tokens, OAuth tokens)
-- ... and more SaaS provider keys.
+## Detection Model
 
-### Authentication & Session Tokens
-- Bearer Tokens
-- JSON Web Tokens (JWT)
-- OAuth Access Tokens
-- Basic Auth Credentials (in URLs or headers)
-- Session IDs (common patterns)
+Secret detection combines:
 
-### Database Credentials
-- Database Connection Strings (various formats including user/pass)
-- Private Keys often associated with DB auth (e.g., PEM in config)
+- Regex matching by pattern type
+- Context/heuristic filtering (code/doc/path/content-type noise)
+- Pattern-level constraints (`minlength`, `maxlength`, keyword filters)
+- Optional Shannon entropy validation (`useentropy`, `minentropy`, `entropyminlength`)
 
-### Cryptographic Keys
-- Generic Private Keys (PEM, OpenSSH format)
-- PGP Private Keys
-- SSH Private Keys
+## Categories and Patterns
 
-### Personally Identifiable Information (PII)
-- Email Addresses (keyword-dependent)
-- Phone Numbers (US format, keyword-dependent)
-- IP Addresses (IPv4/IPv6, keyword-dependent with OID exclusions)
-- MAC Addresses (keyword-dependent, colon format only)
-- US ZIP Codes (keyword-dependent)
-- Serial Numbers (keyword-dependent)
+### Auth
+- `asanaoauth`
+- `auth0oauth_1`
+- `auth_token`
+- `basic_auth`
+- `bearer_token`
+- `facebookoauth`
+- `google_recaptcha_key`
+- `jwt_token`
+- `oauth2_access_token`
+- `oauth_token`
+- `session_token`
 
-### Web3 & Cryptocurrency
-- Ethereum Addresses
-- Ethereum Private Keys
-- Bitcoin Addresses (P2PKH, P2SH, Bech32)
-- Bitcoin Private Keys (WIF format)
-- Generic Cryptocurrency Private Keys (common hex patterns)
+### AWS
+- `aws_access_key`
+- `aws_secret_key`
 
-### Network & Infrastructure
-- Generic Domain Names / Hostnames
-- URLs with potentially sensitive parameters or paths
-- Netlify Access Tokens
+### Azure
+- `azure_connection_string`
+- `azure_cosmosdb`
+- `azure_service_bus`
+- `azure_sql_connection`
 
-### Generic & Miscellaneous
-- Generic High Entropy Strings (potential secrets)
-- Passwords in URLs or common config contexts
-- Artifactory Credentials
-- npm Tokens
+### Bash
+- `bash_command_suspicious`
 
-This list is continuously updated. Always refer to `secrethound --list-patterns` for the most current set of patterns and their categories.
+### CI/CD
+- `buildkite`
+- `droneci`
+- `gitlab_runner_token`
+- `jenkins_api_token`
+- `semaphore`
+- `travisci`
 
-> **Note**: Many patterns are now "keyword-dependent", meaning they only match when specific keywords (like `ip_addr`, `mac_address`, `phone`, etc.) are found near the value. This significantly reduces false positives.
+### Cloud
+- `abbysale`
+- `abstract`
+- `abuseipdb`
+- `adobeio_1`
+- `adzuna_2`
+- `aeroworkflow_2`
+- `agora`
+- `airbrakeprojectkey_2`
+- `airbrakeuserkey`
+- `airship`
+- `airvisual`
+- `alconost`
+- `alegra_1`
+- `alegra_2`
+- `aletheiaapi`
+- `algoliaadminkey_2`
+- `alienvault`
+- `allsports`
+- `amadeus_1`
+- `ambee`
+- `apacta`
+- `api2cart`
+- `apideck_2`
+- `apiflash_1`
+- `apiflash_2`
+- `apiscience`
+- `apollo`
+- `appcues_2`
+- `appcues_3`
+- `appfollow`
+- `appsynergy`
+- `apptivo_1`
+- `apptivo_2`
+- `artsy_1`
+- `artsy_2`
+- `assemblyai`
+- `audd`
+- `autodesk_1`
+- `autoklose`
+- `autopilot`
+- `aviationstack`
+- `axonaut`
+- `aylien_1`
+- `baremetrics`
+- `beebole`
+- `besttime`
+- `billomat_2`
+- `bitbar`
+- `bitcoinaverage`
+- `bitlyaccesstoken`
+- `blablabus`
+- `blitapp`
+- `blogger`
+- `bombbomb`
+- `boostnote`
+- `borgbase`
+- `brandfetch`
+- `browshot`
+- `buddyns`
+- `bugherd`
+- `bulbul`
+- `buttercms`
+- `caflou`
+- `calendarific`
+- `calorieninja`
+- `campayn`
+- `capsulecrm`
+- `captaindata_2`
+- `carboninterface`
+- `caspio_2`
+- `censys_1`
+- `censys_2`
+- `centralstationcrm`
+- `chatbot`
+- `chatfule`
+- `checklyhq`
+- `cicero`
+- `clearbit`
+- `clickhelp_2`
+- `clinchpad`
+- `clockify`
+- `cloudelements_1`
+- `cloudelements_2`
+- `cloudflare_api_token`
+- `cloudimage`
+- `cloudmersive`
+- `cloudplan`
+- `cloverly`
+- `cloze_1`
+- `clustdoc`
+- `coinapi`
+- `coinlayer`
+- `commercejs`
+- `commodities`
+- `companyhub_1`
+- `confluent_2`
+- `convertkit`
+- `copper_2`
+- `countrylayer`
+- `cryptocompare`
+- `currencycloud_1`
+- `currencyfreaks`
+- `currencylayer`
+- `currencyscoop`
+- `currentsapi`
+- `customerguru_1`
+- `customerguru_2`
+- `customerio`
+- `dailyco`
+- `dandelion`
+- `datafire`
+- `datagov`
+- `deepai`
+- `deepgram`
+- `delighted`
+- `deputy_2`
+- `detectlanguage`
+- `diffbot`
+- `digitalocean_access_token`
+- `digitalocean_oauth_token`
+- `digitalocean_refresh_token`
+- `dnscheck_1`
+- `dnscheck_2`
+- `dronahq`
+- `dwolla`
+- `dynalist`
+- `dyspatch`
+- `edamam_1`
+- `elasticemail`
+- `enablex_1`
+- `enablex_2`
+- `enigma`
+- `ethplorer`
+- `etsyapikey`
+- `exchangerateapi`
+- `exchangeratesapi`
+- `faceplusplus`
+- `fakejson`
+- `fastforex`
+- `fastlypersonaltoken`
+- `feedier`
+- `fetchrss`
+- `fileio`
+- `financialmodelingprep`
+- `finnhub`
+- `fixerio`
+- `flatio`
+- `flickr`
+- `flightapi`
+- `flightstats_1`
+- `float`
+- `flowflu_2`
+- `fmfw_1`
+- `fmfw_2`
+- `foursquare`
+- `freshbooks_1`
+- `freshdesk_1`
+- `fulcrum`
+- `fusebill`
+- `fxmarket`
+- `geckoboard`
+- `geoapify`
+- `geocode`
+- `geocodify`
+- `geocodio_2`
+- `geoipifi`
+- `getemail`
+- `getemails_1`
+- `getgeoapi`
+- `getsandbox_1`
+- `gitter`
+- `glassnode`
+- `goodday`
+- `graphcms_1`
+- `graphhopper`
+- `gyazo`
+- `happyscribe`
+- `harvest_1`
+- `hellosign`
+- `helpscout`
+- `hereapi`
+- `heroku_api_key`
+- `hive_1`
+- `hiveage`
+- `holidayapi`
+- `html2pdf`
+- `humanity`
+- `hunter`
+- `hypertrack_1`
+- `hypertrack_2`
+- `iconfinder`
+- `iexcloud`
+- `impala`
+- `insightly`
+- `integromat`
+- `intrinio`
+- `ipapi`
+- `ipgeolocation`
+- `ipify`
+- `ipinfodb`
+- `ipquality`
+- `ipstack`
+- `jiratoken_1`
+- `jotform`
+- `jumpcloud`
+- `juro`
+- `karmacrm`
+- `keenio_1`
+- `keenio_2`
+- `klipfolio`
+- `kontent`
+- `kucoin_3`
+- `kylas`
+- `languagelayer`
+- `lastfm`
+- `leadfeeder`
+- `lessannoyingcrm`
+- `lexigram`
+- `linkpreview`
+- `liveagent`
+- `lokalisetoken`
+- `loyverse`
+- `luno_2`
+- `macaddress`
+- `madkudu`
+- `mailboxlayer`
+- `mailchimp_api_key`
+- `mailerlite`
+- `mandrill`
+- `manifest`
+- `mapbox_secret_token`
+- `mapquest`
+- `marketstack`
+- `mattermostpersonaltoken_2`
+- `mavenlink`
+- `meaningcloud`
+- `mediastack`
+- `meistertask`
+- `mesibo`
+- `mindmeister`
+- `mixmax`
+- `mixpanel_1`
+- `mixpanel_2`
+- `moonclerck`
+- `moonclerk`
+- `myfreshworks_2`
+- `nasdaqdatalink`
+- `nethunt_1`
+- `nethunt_2`
+- `netlify_access_token`
+- `neutrinoapi_1`
+- `newscatcher`
+- `nicereply`
+- `nimble`
+- `nitro`
+- `noticeable`
+- `numverify`
+- `nutritionix_1`
+- `nylas`
+- `nytimes`
+- `oanda`
+- `omnisend`
+- `onepagecrm_2`
+- `onwaterio`
+- `oopspam`
+- `opencagedata`
+- `opengraphr`
+- `openuv`
+- `openweather`
+- `optimizely`
+- `owlbot`
+- `pandadoc`
+- `paralleldots`
+- `partnerstack`
+- `passbase`
+- `pastebin`
+- `paymoapp`
+- `pdflayer`
+- `pdfshift`
+- `peopledatalabs`
+- `pipedream`
+- `pipedrive`
+- `pixabay`
+- `planyo`
+- `plivo_1`
+- `plivo_2`
+- `poloniex_1`
+- `polygon`
+- `positionstack`
+- `postageapp`
+- `powrbot`
+- `prospectcrm`
+- `prospectio`
+- `protocolsio`
+- `proxycrawl`
+- `purestake`
+- `pushbulletapikey`
+- `pusherchannelkey_2`
+- `qubole`
+- `quickmetrics`
+- `rapidapi`
+- `rawg`
+- `readme`
+- `rebrandly`
+- `repairshopr_2`
+- `restpack`
+- `restpackhtmltopdfapi`
+- `revampcrm_2`
+- `ringcentral_2`
+- `ritekit`
+- `roaring`
+- `rocketreach`
+- `roninapp_2`
+- `route4me`
+- `rownd_2`
+- `runrunit_1`
+- `salescookie`
+- `salesflare`
+- `satismeterprojectkey_2`
+- `scrapeowl`
+- `scraperapi`
+- `scraperbox`
+- `scrapersite`
+- `scrapestack`
+- `scrapfly`
+- `scrapingant`
+- `scrapingbee`
+- `screenshotlayer`
+- `securitytrails`
+- `selectpdf`
+- `sentiment_2`
+- `serphouse`
+- `serpstack`
+- `sheety_1`
+- `sheety_2`
+- `sherpadesk`
+- `shodankey`
+- `shopify_access_token`
+- `shopify_custom_app_token`
+- `shopify_private_app_token`
+- `shopify_shared_secret`
+- `shortcut`
+- `shotstack`
+- `shutterstock_1`
+- `signalwire_3`
+- `signaturit`
+- `signupgenius`
+- `sigopt`
+- `simplynoted`
+- `simvoly`
+- `sirv_2`
+- `siteleaf`
+- `skrappio`
+- `skybiometry`
+- `smartsheets`
+- `smartystreets_1`
+- `smartystreets_2`
+- `smooch_2`
+- `snipcart`
+- `splunkobservabilitytoken`
+- `spoonacular`
+- `sportsmonk`
+- `sslmate`
+- `stitchdata`
+- `stockdata`
+- `storecove`
+- `stormglass`
+- `strava_2`
+- `streak`
+- `stytch_2`
+- `sugester_2`
+- `sumologickey_2`
+- `surveyanyplace_1`
+- `surveyanyplace_2`
+- `surveybot`
+- `surveysparrow`
+- `survicate`
+- `swell_2`
+- `tatumio`
+- `taxjar`
+- `teamgate_1`
+- `teamgate_2`
+- `technicalanalysisapi`
+- `thinkific_1`
+- `thousandeyes_1`
+- `ticketmaster`
+- `tiingo`
+- `timezoneapi`
+- `tmetric`
+- `todoist`
+- `toggltrack`
+- `tomorrowio`
+- `tomtom`
+- `tradier`
+- `travelpayouts`
+- `trelloapikey_2`
+- `twelvedata`
+- `typeform`
+- `unplugg`
+- `unsplash`
+- `upcdatabase`
+- `uplead`
+- `uploadcare`
+- `upwave`
+- `urlscan`
+- `userstack`
+- `vatlayer`
+- `verifier_2`
+- `verimail`
+- `veriphone`
+- `versioneye`
+- `virustotal`
+- `visualcrossing`
+- `vouchery_1`
+- `vpnapi`
+- `vyte`
+- `walkscore`
+- `weatherbit`
+- `weatherstack`
+- `webex_2`
+- `webex_3`
+- `webflow`
+- `webscraper`
+- `webscraping`
+- `whoxy`
+- `worksnaps`
+- `workstack`
+- `worldcoinindex`
+- `worldweather`
+- `yandex`
+- `youneedabudget`
+- `yousign`
+- `youtubeapikey_1`
+- `zenserp`
+- `zeplin`
+- `zerobounce`
+- `zipapi_3`
+- `zipcodeapi`
+- `zonkafeedback`
 
-## API Keys and Tokens
+### Code
+- `codacy`
+- `coveralls`
+- `crowdin`
+- `discord_bot_token`
+- `discord_webhook`
+- `docker_hub_token`
+- `github_fine_grained_token`
+- `github_personal_token`
+- `github_token`
+- `gitlab_personal_token`
+- `launchdarkly`
+- `npm_access_token`
+- `postman_api_key`
+- `slack_token`
+- `slack_webhook`
+- `vercel`
 
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| Google API Key | Google API key | `AIza[0-9A-Za-z\-_]{35}` |
-| Firebase API Key | Firebase API key | `AIzaSy[0-9A-Za-z_-]{33}` |
-| Google OAuth | Google OAuth access token | `ya29\.[0-9A-Za-z\-_]+` |
-| Google Cloud Platform | Google Cloud Platform API Key | `[0-9]+-[0-9A-Za-z_]{32}\.apps\.googleusercontent\.com` |
-| AWS Key | Amazon AWS access key ID | `AKIA[0-9A-Z]{16}` |
-| AWS Secret | AWS secret access key | `(?i)aws.{0,20}['"][0-9a-zA-Z/+]{40}['"]` |
-| Heroku API Key | Heroku API key | `[h\|H][e\|E][r\|R][o\|O][k\|K][u\|U].{0,30}[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}` |
+### Communication
+- `linemessaging`
+- `linenotify`
+- `mailgun_api_key`
+- `mailjetsms`
+- `messagebird`
+- `sendbird_1`
+- `sendbirdorganizationapi`
+- `sendgrid_api_key`
+- `sendinblue_api_key`
+- `sinchmessage`
+- `telegram_bot_token`
+- `textmagic_1`
+- `twilio_api_key`
+- `tyntec`
 
-## Payment and Financial Services
+### Config
+- `config_api_key`
+- `config_secret`
 
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| Stripe Secret Key | Stripe standard API key | `sk_live_[0-9a-zA-Z]{24,34}` |
-| Stripe Publishable Key | Stripe publishable key | `pk_live_[0-9a-zA-Z]{24,34}` |
-| Stripe Test Secret Key | Stripe test secret key | `sk_test_[0-9a-zA-Z]{24,34}` |
-| Stripe Test Publishable Key | Stripe test publishable key | `pk_test_[0-9a-zA-Z]{24,34}` |
-| Square Access Token | Square OAuth token | `sq0atp-[0-9A-Za-z\-_]{22}` |
-| Square OAuth Secret | Square OAuth secret | `sq0csp-[0-9A-Za-z\-_]{43}` |
-| PayPal/Braintree Client ID | PayPal/Braintree Client ID (keyword-dependent) | `(?i)(?:paypal\|braintree)[_-]?(?:client[_-]?)?(?:id\|key\|secret)\s*[:=]\s*['"](...)['"` |
-| Braintree Token | Braintree access token | `access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}` |
+### Crypto
+- `encryption_key`
+- `private_key_content`
+- `private_key_var`
+- `signing_key`
 
-## Email and Communication Services
+### Database
+- `mongodb_srv_connection`
+- `mongodb_uri`
+- `msql_connection_string`
+- `mysql_connection_string`
+- `postgresql_connection_string`
+- `redis_url`
 
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| Mailgun API Key | Mailgun API key | `key-[0-9a-zA-Z]{32}` |
-| Mailchimp API Key | Mailchimp API key | `[0-9a-f]{32}-us[0-9]{1,2}` |
-| SendGrid API Key | SendGrid API key | `SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}` |
-| Slack Token | Slack token | `xox[pbar]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-zA-Z0-9]{32}` |
-| Slack Webhook | Slack webhook URL | `https:\/\/hooks\.slack\.com\/services\/T[a-zA-Z0-9_]{8,12}\/B[a-zA-Z0-9_]{8,12}\/[a-zA-Z0-9_]{24,32}` |
+### GCP
+- `google_api_key`
+- `google_cloud_platform`
 
-## Cloud Services
+### Generic
+- `api_key_assignment`
+- `generic_password`
 
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| Digital Ocean PAT | Digital Ocean personal access token | `dop_v1_[a-f0-9]{64}` |
-| Digital Ocean OAuth Token | Digital Ocean OAuth token | `doo_v1_[a-f0-9]{64}` |
-| Digital Ocean Refresh Token | Digital Ocean refresh token | `dor_v1_[a-f0-9]{64}` |
-| GitHub PAT | GitHub personal access token | `ghp_[0-9a-zA-Z]{36}` |
-| GitHub Personal Token | GitHub personal token | `gh[a-z]_[A-Za-z0-9_]{36,255}` |
-| Azure Storage Connection | Azure storage connection string | `DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[^;]+;EndpointSuffix=` |
-| Azure SQL Connection | Azure SQL connection string | `Server=tcp:[^,]+,1433;Initial Catalog=[^;]+;Persist Security Info=False;User ID=[^;]+;Password=[^;]+;` |
-| Azure Service Bus | Azure Service Bus connection string | `Endpoint=sb:\/\/[^.]+\.servicebus\.windows\.net\/;SharedAccessKeyName=[^;]+;SharedAccessKey=[^;]+` |
-| Azure CosmosDB | Azure CosmosDB connection string | `AccountEndpoint=https:\/\/[^.]+\.documents\.azure\.com:443\/;AccountKey=[^;]+;` |
+### LLM
+- `huggingface_api_token`
+- `llm_anthropic_api_key`
+- `llm_doubao_ark_api_key`
+- `llm_groq_api_key`
+- `llm_kimi_moonshot_api_key`
+- `llm_openai_api_key`
+- `llm_openrouter_api_key`
+- `llm_perplexity_api_key`
+- `llm_qwen_dashscope_api_key`
+- `llm_replicate_api_token`
+- `llm_xai_grok_api_key`
+- `llm_zhipu_glm_api_key`
 
-## E-commerce Platforms
+### Observability
+- `datadog_api_key`
+- `fullstory`
+- `sentry_auth_token`
 
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| Shopify Access Token | Shopify access token | `shpat_[a-fA-F0-9]{32}` |
-| Shopify Custom App Token | Shopify custom app access token | `shpca_[a-fA-F0-9]{32}` |
-| Shopify Private App Token | Shopify private app access token | `shppa_[a-fA-F0-9]{32}` |
-| Shopify Shared Secret | Shopify shared secret | `shpss_[a-fA-F0-9]{32}` |
+### Payment
+- `braintree_token`
+- `credit_card_number`
+- `invoiceocean_1`
+- `paymongo`
+- `paypal_client_id`
+- `paypal_client_secret`
+- `plaidkey_1`
+- `plaidkey_2`
+- `square_access_token`
+- `square_oauth_secret`
+- `stripe_publishable_key`
+- `stripe_restricted_key`
+- `stripe_secret_key`
+- `stripe_test_publishable_key`
+- `stripe_test_secret_key`
+- `wepay_2`
 
-## Authentication and Security
+### PII
+- `email_address`
+- `ipv4_address`
+- `ipv6_address`
+- `mac_address`
+- `phone_number`
+- `serial_number`
+- `us_zip_code`
 
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| Basic Auth | HTTP basic authentication | `(?i)(?:basic\s+)(?:[a-zA-Z0-9\+\/=]{10,100})` |
-| Bearer Token | Bearer authentication token | `(?i)bearer\s+[a-zA-Z0-9_\-\.=]{10,500}` |
-| JWT Token | JWT token | `eyJ[a-zA-Z0-9_\-\.=]{10,500}` |
-| JWT Token (Improved) | JWT token with improved pattern | `eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+` |
-| OAuth Token | OAuth token | `(?i)(?:oauth\|access)[._-]?token[.\s\'\"]*[=:][.\s\'\"]*[a-zA-Z0-9_\-\.=]{10,500}` |
-| OAuth 2.0 Access Token | OAuth 2.0 access token | `ya29\.[0-9A-Za-z\-_]+` |
-| Generic Password | Password in configuration | `(?i)(?:password\|passwd\|pwd\|secret)[\s]*[=:]+[\s]*["']([^'"]{8,30})["']` |
-| Authentication Token | Authentication token with comment | `['"]?([a-zA-Z0-9_\-\.]{32,64})['"]?\s*[,;]?\s*\/\/\s*[Aa]uth(?:entication)?\s+[Tt]oken` |
-| Private Key Variable | Private key variable (excludes tracking events) | `['"?(?:private_?key\|secret_?key)['"?\s*[:=]\s*['"(...)['"]` |
-| Encryption Key | Encryption key | `(?i)['"]?enc(?:ryption)?[_-]?key['"]?\s*[=:]\s*['"]([a-zA-Z0-9+/]{16,64})['"]` |
-| Signing Key | Signing key/secret | `(?i)['"]?sign(?:ing)?[_-]?(?:secret\|key)['"]?\s*[=:]\s*['"]([a-zA-Z0-9+/]{16,64})['"]` |
+### URL
+- `generic_domain_name`
+- `url_generic`
+- `url_path`
 
-## Database Credentials
+### Web3
+- `bitfinex`
+- `coinbase`
+- `ethereum_address`
+- `web3_private_key`
+- `web3_provider_key`
 
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| MongoDB URL | MongoDB connection string | `mongodb(?:\+srv)?:\/\/[^:]+:[^@]+@[^\/]+\/\w+` |
-| MongoDB SRV | MongoDB SRV connection string | `mongodb\+srv:\/\/[^:]+:[^@]+@[^\/]+\/[^?]+` |
-| PostgreSQL URL | PostgreSQL connection string | `postgres(?:ql)?:\/\/[^:]+:[^@]+@[^\/]+\/\w+` |
-| MySQL URL | MySQL connection string | `mysql:\/\/[^:]+:[^@]+@[^\/]+\/\w+` |
-| Redis URL | Redis connection string | `redis(?::\\/\\/)[^:]+:[^@]+@[^\/]+(?::\d+)?` |
-| MS SQL Connection String | Microsoft SQL Server connection string | `Server=.+;Database=.+;User (?:ID\|Id)=.+;Password=.+;` |
-| Configuration API Key | Configuration API key | `['"]?(?:api\|app)(?:_\|-\|\.)(?:key\|token\|secret)['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-\.]{8,})['"]` |
-| Configuration Secret | Configuration secret | `['"]?(?:secret\|private\|auth)(?:_\|-\|\.)(?:key\|token)['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-\.]{8,})['"]` |
+## Notes
 
-## Private Keys and Certificates
-
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| Private Key Content | Private key with actual key data | `-----BEGIN (?:RSA \|OPENSSH \|...) PRIVATE KEY-----[\s]*[A-Za-z0-9+/=]{20,}` |
-
-## CI/CD and DevOps
-
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| Jenkins API Token | Jenkins API token | `(?i)(?:jenkins\|hudson).{0,5}(?:api)?.{0,5}(?:token).{0,5}['"]([0-9a-zA-Z]{30,})['"]` |
-| NPM Access Token | NPM access token | `npm_[A-Za-z0-9]{36}` |
-| Docker Hub Personal Access Token | Docker Hub personal access token | `dckr_pat_[A-Za-z0-9_-]{56}` |
-| GitLab Runner Token | GitLab runner registration token | `glrt-[0-9a-zA-Z_\-]{20,}` |
-| GitLab Personal Token | GitLab personal access token | `glpat-[0-9a-zA-Z_\-]{20,}` |
-| Netlify Access Token | Netlify personal access token | `nf[pcfub]_[a-zA-Z0-9_\-]{36}` |
-
-## Generic Secret Patterns
-
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| Generic API Key | Generic API key format | `['"]?(?:api_?key\|api_?secret\|app_?key\|app_?secret)['"]?\s*[=:]\s*['"]([a-zA-Z0-9_\-\.]{16,64})['"]` |
-| API Key Assignment | API key assignment | `['"]?(?:api_?key\|api_?secret\|app_?key\|app_?secret)['"]?\s*[=:]\s*['"]([a-zA-Z0-9_\-\.]{16,64})['"]` |
-
-## PII (Personally Identifiable Information)
-
-| Secret Type | Description | Example Pattern |
-|-------------|-------------|-----------------|
-| Email Address | Email address (keyword-dependent) | `[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}` |
-| Phone Number | Phone number (US format, keyword-dependent) | Requires keywords like `phone`, `mobile`, `tel` |
-| IPv4 Address | IPv4 address (keyword-dependent) | Requires keywords like `ip_addr`, `host_addr`, `server_ip` |
-| IPv6 Address | IPv6 address (keyword-dependent) | Requires keywords like `ipv6`, `ip6` |
-| MAC Address | MAC address (keyword-dependent, colon format) | Requires keywords like `mac_address`, `ethernet_addr`, `hw_addr` |
-| US ZIP Code | US ZIP code (keyword-dependent) | Requires keywords like `zip`, `postal`, `postcode` |
+- Some patterns are intentionally disabled by default and can still be loaded by category include flags.
+- `pii` patterns are disabled by default; enable them explicitly with `--include-categories pii` (or include `pii` alongside other categories).
+- Pattern behavior is defined by YAML fields (`enabled`, lengths, keyword constraints, entropy fields), allowing maintenance without changing Go code.

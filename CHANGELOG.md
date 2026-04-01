@@ -1,5 +1,50 @@
 # SecretHound Changelog
 
+## v1.1.0 (2026-04-01)
+
+### New Features
+- Expanded default pattern catalog to **555** YAML-managed patterns across multiple categories.
+- Added dedicated categories to improve organization and scanning precision:
+  - `llm`
+  - `bash`
+  - `communication`
+  - `observability`
+- Added extensive provider coverage from `secrets-patterns-db` with in-project tuning and context scoring controls.
+- Added grouped dedup behavior improvements:
+  - duplicate findings are aggregated with occurrences count
+  - contextual evidence is retained as arrays for repeated matches
+
+### Improvements
+- Pattern loading diagnostics were significantly improved:
+  - load statistics now track `loaded/selected/total`
+  - compile and validation failures are surfaced with detailed logs
+  - invalid `excluderegexes` are reported per pattern
+- Added explicit Shannon entropy validation flow in the detection pipeline to better gate token-like candidates and reduce false positives.
+- Introduced a hybrid confidence scoring heuristic (context boosts/penalties + hard guards + entropy) replacing heavy dependence on hardcoded keyword exclusion.
+- Startup summary now reports pattern loading as `loaded/total` for clearer visibility.
+- `--list-patterns` now reflects only successfully compiled/loaded patterns.
+- Pattern taxonomy was refined:
+  - `gitlab_personal_token` aligned with code/platform token category
+  - multiple imported patterns recategorized to reduce ambiguity and improve filter usability.
+
+### Bug Fixes
+- Fixed root CLI flag exposure for custom pattern files (`--patterns-file`) so it works in the standard command path.
+- Fixed custom-pattern listing behavior where invalid regex definitions could appear as loadable in listing output.
+- Fixed raw output flow and logging reliability from prior refactors (writer close error visibility and output path stability).
+
+### Detection Quality
+- Hardened imported provider patterns with:
+  - `requiredcontextany` constraints
+  - stronger entropy thresholds
+  - revised descriptions and semantic category placement
+- Reduced common false positives in imported generic service rules by tightening service anchors.
+- Disabled `pii` category by default to avoid noisy scans unless explicitly requested.
+
+### Release & Docs
+- Release workflow modernized to use GitHub-generated release notes (`generate_release_notes: true`).
+- `SUPPORTED_SECRETS.md` synchronized with current YAML pattern inventory and category structure.
+- Added `THIRD_PARTY_NOTICES.md` and explicit attribution/licensing references for adapted `secrets-patterns-db` pattern content (CC BY-SA 4.0).
+
 ## v1.0.1 (2025-12-05)
 
 ### New Features

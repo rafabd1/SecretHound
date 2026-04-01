@@ -9,15 +9,18 @@
 
 
 <p align="center">
-    <b>A powerful CLI tool designed to find secrets in JavaScript files, web pages, and other text sources.</b>
+    <b>A powerful CLI tool designed to find secrets in files, web pages, and other text sources.</b>
 </p>
 
 ## Features
 
 - **Multi-Source Scanning**: Process remote URLs, local files, and entire directories.
-- **Extensive Pattern Library**: Over 60 meticulously crafted regex patterns to identify a wide range of secrets, including API keys (AWS, Google Cloud, Stripe, etc.), authentication tokens (JWT, OAuth, Bearer), database credentials, private keys, PII (email, phone), Web3 secrets (crypto addresses, private keys), and more.
+- **Extensive Pattern Library**: Over 500 regex patterns (currently 555 in the default catalog) to identify a wide range of secrets, including API keys (AWS, Google Cloud, Stripe, etc.), authentication tokens (JWT, OAuth, Bearer), database credentials, private keys, PII (email, phone), Web3 secrets (crypto addresses, private keys), and more.
 - **URL/Domain Extraction Mode**: Dedicated mode (`--scan-urls`) to efficiently extract only URL and domain patterns from sources.
 - **Flexible Pattern Control**: Fine-tune scans by including or excluding specific pattern categories (e.g., `--include-categories aws,pii`).
+- **YAML-Based Patterns**: Patterns are now managed in `core/patterns/default_patterns.yaml` for easier maintenance and extension.
+- **Shannon Entropy Validation**: Token-like patterns can enforce entropy thresholds to reduce false positives.
+- **Hybrid Context Scoring**: Detection confidence now combines entropy, context signals, and reusable pattern rules instead of hard-only keyword filtering.
 - **Concurrent Processing**: Fast multi-threaded architecture for efficient scanning.
 - **Domain-Aware Scheduling**: Smart distribution of requests to avoid rate limiting when scanning remote URLs.
 - **WAF/Rate Limit Evasion**: Strategies for handling common web security measures.
@@ -110,11 +113,12 @@ SecretHound supports the following options:
 | `-c, --concurrency` | Number of concurrent workers. | 50 |
 | `-l, --rate-limit` | Max requests per second per domain (0 for auto/unlimited). | 0 |
 | `-H, --header` | Custom HTTP header to add (e.g., "Authorization: Bearer token"). Can be used multiple times. | - |
-| `--insecure` | Disable SSL/TLS certificate verification. | false |
+| `--insecure` | Disable SSL/TLS certificate verification. | true |
 | `--include-categories` | Comma-separated list of pattern categories to include (e.g., aws,gcp). | all enabled |
 | `--exclude-categories` | Comma-separated list of pattern categories to exclude (e.g., pii,url). | none |
 | `--scan-urls` | URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters). | false |
-| `--max-file-size` | Maximum file size to scan in MB (0 for no limit). | 10 |
+| `--patterns-file` | Path to a custom YAML patterns file to replace embedded defaults. | - |
+| `--max-file-size` | Maximum file size to scan in MB (0 for no limit). | 0 |
 | `--list-patterns` | List available pattern categories and patterns, then exit. | false |
 | `-v, --verbose` | Enable verbose logging output. | false |
 | `-n, --no-progress` | Disable the progress bar display. | false |
@@ -142,4 +146,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Third-party adapted pattern content is documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), including attribution and license terms for imported/adapted regex pattern sources.
+
 
