@@ -844,7 +844,7 @@ patterns:
         category: cloud
         minlength: 30
     huggingface_api_token:
-        regex: hf_[A-Za-z0-9]{34}
+        regex: \bhf_[A-Za-z0-9]{34}\b
         description: Hugging Face Access Token
         enabled: true
         category: llm
