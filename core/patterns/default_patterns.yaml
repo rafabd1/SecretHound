@@ -1,3 +1,8 @@
+# Note on third-party licensing:
+# A subset of these pattern definitions was adapted from
+# https://github.com/mazen160/secrets-patterns-db (db/rules-stable.yml),
+# licensed under CC BY-SA 4.0. See THIRD_PARTY_NOTICES.md for attribution
+# and licensing details for adapted pattern content.
 patterns:
     api_key_assignment:
         regex: '[''"]?(?:api_?key|api_?secret|app_?key|app_?secret)[''"]?\s*[=:]\s*[''"]([a-zA-Z0-9_\-\.]{16,64})[''"]'

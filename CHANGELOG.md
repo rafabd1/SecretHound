@@ -43,6 +43,7 @@
 ### Release & Docs
 - Release workflow modernized to use GitHub-generated release notes (`generate_release_notes: true`).
 - `SUPPORTED_SECRETS.md` synchronized with current YAML pattern inventory and category structure.
+- Added `THIRD_PARTY_NOTICES.md` and explicit attribution/licensing references for adapted `secrets-patterns-db` pattern content (CC BY-SA 4.0).
 
 ## v1.0.1 (2025-12-05)
 

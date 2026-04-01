@@ -4,6 +4,10 @@ SecretHound currently loads its built-in patterns from:
 
 - `core/patterns/default_patterns.yaml`
 
+Licensing notice for adapted third-party pattern content:
+
+- See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
 For the exact and current list in your runtime, use:
 
 ```bash

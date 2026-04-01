@@ -147,4 +147,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+Third-party adapted pattern content is documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), including attribution and license terms for imported/adapted regex pattern sources.
+
 
