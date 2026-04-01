@@ -309,7 +309,7 @@ func (s *Scheduler) worker(id int) {
 			domain, err := utils.ExtractDomain(url)
 			if err != nil {
 				s.logger.Warning("Worker %d: failed to extract domain from %s: %v", id, url, err)
-				s.incrementFailedURLs(domain)
+				s.incrementFailedStatsOnly()
 				continue
 			}
 
@@ -321,7 +321,8 @@ func (s *Scheduler) worker(id int) {
 
 			if fetchErr != nil {
 				s.logger.Warning("Worker %d: Failed to fetch %s after retries: %v", id, url, fetchErr)
-				s.incrementFailedURLs(domain)
+				s.registerFetchError(domain, fetchErr)
+				s.incrementFailedURLs(url)
 				continue
 			}
 
@@ -333,11 +334,11 @@ func (s *Scheduler) worker(id int) {
 
 			if processErr != nil {
 				s.logger.Warning("Worker %d: Failed to process content from %s: %v", id, url, processErr)
-				s.incrementFailedURLs(domain)
+				s.incrementFailedURLs(url)
 				continue
 			}
 
-			s.incrementProcessedURLs(domain, totalDuration)
+			s.incrementProcessedURLs(url, totalDuration)
 
 			if len(secrets) > 0 {
 				s.mutex.Lock()
@@ -378,28 +379,66 @@ func (s *Scheduler) worker(id int) {
 	}
 }
 
-func (s *Scheduler) incrementFailedURLs(domain string) {
+func (s *Scheduler) incrementFailedStatsOnly() {
 	s.mutex.Lock()
 	s.stats.FailedURLs++
 	s.mutex.Unlock()
-	s.domainManager.RecordURLProcessed(domain, false, 0)
 }
 
-func (s *Scheduler) incrementProcessedURLs(domain string, duration time.Duration) {
+func (s *Scheduler) incrementFailedURLs(url string) {
+	s.mutex.Lock()
+	s.stats.FailedURLs++
+	s.mutex.Unlock()
+	s.domainManager.RecordURLProcessed(url, false, 0)
+}
+
+func (s *Scheduler) incrementProcessedURLs(url string, duration time.Duration) {
 	s.mutex.Lock()
 	s.stats.ProcessedURLs++
 	s.mutex.Unlock()
-	s.domainManager.RecordURLProcessed(domain, true, duration)
+	s.domainManager.RecordURLProcessed(url, true, duration)
+}
+
+func (s *Scheduler) registerFetchError(domain string, fetchErr error) {
+	s.mutex.Lock()
+	s.stats.DomainRetries[domain]++
+
+	if utils.IsRateLimitError(fetchErr) {
+		s.stats.RateLimitHits++
+	} else if utils.IsWAFError(fetchErr) {
+		s.stats.WAFBlockHits++
+	}
+	s.mutex.Unlock()
+
+	if utils.IsRateLimitError(fetchErr) {
+		s.domainManager.AddBlockedDomain(domain, 20*time.Second)
+	} else if utils.IsWAFError(fetchErr) {
+		s.domainManager.AddBlockedDomain(domain, 60*time.Second)
+	}
+
+	s.mutex.Lock()
+	s.stats.BlockedDomains = s.domainManager.GetBlockedDomainCount()
+	s.mutex.Unlock()
 }
 
 func (s *Scheduler) GetNextURL() (string, bool) {
 	s.mutex.Lock()
 
 	if len(s.waitingURLs) > 0 {
-		url := s.waitingURLs[0]
-		s.waitingURLs = s.waitingURLs[1:]
-		s.mutex.Unlock()
-		return url, true
+		totalCandidates := len(s.waitingURLs)
+		for i := 0; i < totalCandidates; i++ {
+			url := s.waitingURLs[0]
+			s.waitingURLs = s.waitingURLs[1:]
+
+			domain, err := utils.ExtractDomain(url)
+			if err != nil || !s.domainManager.IsBlocked(domain) {
+				s.mutex.Unlock()
+				return url, true
+			}
+
+			// Keep blocked-domain URLs for later instead of dropping them.
+			s.waitingURLs = append(s.waitingURLs, url)
+		}
 	}
 
 	select {

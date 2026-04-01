@@ -23,7 +23,7 @@ func NewResponseFilter() *ResponseFilter {
 	}
 }
 
-/* 
+/*
    Determines if an HTTP response should be processed based on status code and content type
 */
 func (rf *ResponseFilter) ShouldProcess(resp *http.Response) bool {
@@ -38,27 +38,27 @@ func (rf *ResponseFilter) ShouldProcess(resp *http.Response) bool {
 				return true
 			}
 		}
-		
+
 		return strings.HasSuffix(strings.ToLower(resp.Request.URL.Path), ".js")
 	}
-	
-	return strings.HasSuffix(strings.ToLower(resp.Request.URL.Path), ".js") || true
+
+	return true
 }
 
-/* 
+/*
    Checks if a response indicates rate limiting based on status code and headers
 */
 func (rf *ResponseFilter) IsRateLimited(resp *http.Response) bool {
 	if resp.StatusCode == 429 {
 		return true
 	}
-	
+
 	rateLimitHeaders := []string{
 		"X-RateLimit-Remaining",
 		"X-Rate-Limit-Remaining",
 		"Retry-After",
 	}
-	
+
 	for _, header := range rateLimitHeaders {
 		if val := resp.Header.Get(header); val != "" {
 			if val == "0" || (header == "Retry-After" && val != "") {
@@ -66,14 +66,14 @@ func (rf *ResponseFilter) IsRateLimited(resp *http.Response) bool {
 			}
 		}
 	}
-	
+
 	rateLimitKeywords := []string{
 		"rate limit exceeded",
 		"too many requests",
 		"rate limiting",
 		"throttled",
 	}
-	
+
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 		for _, keyword := range rateLimitKeywords {
 			if strings.Contains(strings.ToLower(resp.Status), keyword) {
@@ -81,11 +81,11 @@ func (rf *ResponseFilter) IsRateLimited(resp *http.Response) bool {
 			}
 		}
 	}
-	
+
 	return false
 }
 
-/* 
+/*
    Checks if a response indicates Web Application Firewall blocking
 */
 func (rf *ResponseFilter) IsWAFBlocked(resp *http.Response) bool {
@@ -99,7 +99,7 @@ func (rf *ResponseFilter) IsWAFBlocked(resp *http.Response) bool {
 			"X-CDN-",
 			"X-Varnish",
 		}
-		
+
 		for _, header := range wafHeaders {
 			for key := range resp.Header {
 				if strings.HasPrefix(strings.ToLower(key), strings.ToLower(header)) {
@@ -107,7 +107,7 @@ func (rf *ResponseFilter) IsWAFBlocked(resp *http.Response) bool {
 				}
 			}
 		}
-		
+
 		wafKeywords := []string{
 			"blocked",
 			"firewall",
@@ -117,36 +117,36 @@ func (rf *ResponseFilter) IsWAFBlocked(resp *http.Response) bool {
 			"violation",
 			"challenge",
 		}
-		
+
 		for _, keyword := range wafKeywords {
 			if strings.Contains(strings.ToLower(resp.Status), keyword) {
 				return true
 			}
 		}
 	}
-	
+
 	wafStatusCodes := []int{418, 419, 420}
 	for _, code := range wafStatusCodes {
 		if resp.StatusCode == code {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
-/* 
+/*
    Determines if an error represents a network timeout
 */
 func (f *ResponseFilter) IsTimeout(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 		return true
 	}
-	
+
 	errStr := err.Error()
 	timeoutPatterns := []string{
 		"timeout",
@@ -157,13 +157,13 @@ func (f *ResponseFilter) IsTimeout(err error) bool {
 		"TLS handshake timeout",
 		"operation timed out",
 	}
-	
+
 	for _, pattern := range timeoutPatterns {
 		if strings.Contains(strings.ToLower(errStr), pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 

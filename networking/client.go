@@ -39,20 +39,20 @@ type ClientStats struct {
 
 // Adaptive rate limiting constants
 const (
-	DefaultAdaptiveRate = 15 // Initial rate for auto mode
-	MinAdaptiveRate     = 3  // Minimum rate when limited
-	MaxAdaptiveRate     = 40 // Maximum rate for auto mode
-	AdaptationFactor    = 0.7 // Factor to reduce rate upon error (e.g., 10 -> 7)
-	RecoveryFactor    = 1.2 // Factor to increase rate during recovery (e.g., 10 -> 12)
-	RecoveryInterval  = 30 * time.Second // Time without errors before starting recovery
-	FullRecoveryTime  = 2 * time.Minute  // Time without errors to reach max rate again
+	DefaultAdaptiveRate = 15               // Initial rate for auto mode
+	MinAdaptiveRate     = 3                // Minimum rate when limited
+	MaxAdaptiveRate     = 40               // Maximum rate for auto mode
+	AdaptationFactor    = 0.7              // Factor to reduce rate upon error (e.g., 10 -> 7)
+	RecoveryFactor      = 1.2              // Factor to increase rate during recovery (e.g., 10 -> 12)
+	RecoveryInterval    = 30 * time.Second // Time without errors before starting recovery
+	FullRecoveryTime    = 2 * time.Minute  // Time without errors to reach max rate again
 )
 
 type RateLimiter struct {
-	domain      map[string]*DomainBucket
-	globalLimit int // Represents the FIXED limit when -l N > 0
+	domain       map[string]*DomainBucket
+	globalLimit  int  // Represents the FIXED limit when -l N > 0
 	adaptiveMode bool // True when -l 0 (auto)
-	mutex       sync.Mutex
+	mutex        sync.Mutex
 }
 
 type DomainBucket struct {
@@ -62,9 +62,9 @@ type DomainBucket struct {
 	maxTokens      float64
 	mutex          sync.Mutex
 	// Adaptive fields
-	isAdapting     bool      // Currently reducing rate due to errors
-	lastErrorTime  time.Time // Time of the last rate limit error from server
-	currentRate    float64   // Actual rate being used (for adaptive mode)
+	isAdapting    bool      // Currently reducing rate due to errors
+	lastErrorTime time.Time // Time of the last rate limit error from server
+	currentRate   float64   // Actual rate being used (for adaptive mode)
 }
 
 func NewClient(timeout int, maxRetries int) *Client {
@@ -80,8 +80,8 @@ func NewClient(timeout int, maxRetries int) *Client {
 			Transport: transport,
 		},
 		rateLimiter: &RateLimiter{
-			domain:      make(map[string]*DomainBucket),
-			globalLimit: 0,
+			domain:       make(map[string]*DomainBucket),
+			globalLimit:  0,
 			adaptiveMode: true,
 		},
 		filter:     NewResponseFilter(),
@@ -133,7 +133,7 @@ func (c *Client) SetGlobalRateLimit(requestsPerSecond int) {
 		} else {
 			bucket.refillRate = float64(c.rateLimiter.globalLimit)
 			bucket.maxTokens = float64(c.rateLimiter.globalLimit)
-			bucket.currentRate = float64(c.rateLimiter.globalLimit) 
+			bucket.currentRate = float64(c.rateLimiter.globalLimit)
 			bucket.isAdapting = false
 		}
 		// Reset tokens to max for simplicity when changing modes/rates
@@ -166,7 +166,7 @@ func (c *Client) SetRateLimit(domain string, requestsPerSecond int) {
 	}
 }
 
-/* 
+/*
    Fetches JavaScript content from a URL with retry logic and adaptive rate limiting
 */
 func (c *Client) GetJSContent(urlStr string) (string, error) {
@@ -175,9 +175,18 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 	c.mutex.Unlock()
 
 	startTime := time.Now()
+	retriesUsed := 0
+	defer func() {
+		if retriesUsed > 0 {
+			c.mutex.Lock()
+			c.stats.RetryCount += retriesUsed
+			c.mutex.Unlock()
+		}
+	}()
 
 	parsedURL, err := url.Parse(urlStr)
-	if (err != nil) {
+	if err != nil {
+		c.markRequestFailed()
 		return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed to parse URL: %s", urlStr), err)
 	}
 
@@ -193,11 +202,12 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 	for retryCount = 0; retryCount <= c.maxRetries; retryCount++ {
 		if err := c.checkRateLimit(domain); err != nil {
 			c.logger.Debug("Internal rate limit hit for %s, waiting... (%v)", domain, err)
-			waitTime := time.Second / time.Duration(c.rateLimiter.getCurrentRate(domain)) 
+			waitTime := time.Second / time.Duration(c.rateLimiter.getCurrentRate(domain))
 			if waitTime < 10*time.Millisecond {
 				waitTime = 10 * time.Millisecond
 			}
 			time.Sleep(waitTime + time.Duration(rand.Intn(50))*time.Millisecond)
+			retryCount--
 			continue
 		}
 
@@ -206,6 +216,7 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 		req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 		if err != nil {
 			cancel()
+			c.markRequestFailed()
 			return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed to create request for URL: %s", urlStr), err)
 		}
 
@@ -213,132 +224,110 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 			req.Header.Set(key, value)
 		}
 
-		requestDone := make(chan struct{})
-		var requestErr error
-
-		go func() {
-			resp, requestErr = c.httpClient.Do(req)
-			close(requestDone)
-		}()
-
-		select {
-		case <-ctx.Done():
+		resp, requestErr := c.httpClient.Do(req)
+		if requestErr != nil {
 			cancel()
-			
-			if retryCount >= c.maxRetries {
-				return "", utils.NewError(utils.NetworkError, fmt.Sprintf("request to %s timed out after %d retries", urlStr, retryCount+1), ctx.Err())
-			}
-			
-			retryDelay = c.calculateBackoff(retryCount, domain)
-			time.Sleep(retryDelay)
-			continue
 
-		case <-requestDone:
-			if requestErr != nil {
-				cancel()
-				
-				if retryCount < c.maxRetries {
+			if retryCount < c.maxRetries {
+				if c.filter.IsTimeout(requestErr) {
+					c.logger.Debug("Timeout for %s, retrying (%d/%d): %v", urlStr, retryCount+1, c.maxRetries, requestErr)
+				} else {
 					c.logger.Debug("Network error for %s, retrying (%d/%d): %v", urlStr, retryCount+1, c.maxRetries, requestErr)
-					retryDelay = c.calculateBackoff(retryCount, domain) 
-					time.Sleep(retryDelay)
-					continue
 				}
-				
-				return "", utils.NewError(utils.NetworkError, fmt.Sprintf("network error after %d retries for %s", retryCount+1, urlStr), requestErr)
-			}
-			
-			defer cancel()
-			
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				break
-			}
-
-			var respBodyBytes []byte
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				respBodyBytes = []byte{}
-			} else {
-				respBodyBytes, _ = io.ReadAll(resp.Body)
-			}
-			resp.Body.Close()
-			
-			isRateLimited := c.filter.IsRateLimited(resp)
-			isWAFBlocked := c.filter.IsWAFBlocked(resp)
-
-			if isRateLimited {
-				c.logger.Warning("Server rate limit detected for %s (Status: %d)", urlStr, resp.StatusCode)
-				c.rateLimiter.NotifyRateLimitError(domain)
-				return "", utils.NewError(utils.RateLimitError, fmt.Sprintf("server rate limited %s (Status %d)", urlStr, resp.StatusCode), nil)
-			}
-
-			if isWAFBlocked {
-				c.logger.Warning("WAF block detected for %s (Status: %d)", urlStr, resp.StatusCode)
-				bodyStr := string(respBodyBytes)
-				if len(bodyStr) > 100 {
-					bodyStr = bodyStr[:100] + "..."
-				}
-				c.logger.Debug("WAF Response Body Snippet: %s", bodyStr)
-				return "", utils.NewError(utils.WAFError, fmt.Sprintf("WAF blocked %s (Status %d)", urlStr, resp.StatusCode), nil)
-			}
-
-			shouldRetry, retryDelay = c.shouldRetryStatus(resp.StatusCode, retryCount, domain)
-			if shouldRetry && retryCount < c.maxRetries {
-				c.logger.Debug("Received status %d for %s, retrying (%d/%d) after %s", resp.StatusCode, urlStr, retryCount+1, c.maxRetries, retryDelay)
+				retriesUsed++
+				retryDelay = c.calculateBackoff(retryCount, domain)
 				time.Sleep(retryDelay)
 				continue
 			}
 
-			c.logger.Error("Failed request for %s after %d retries with status %d", urlStr, retryCount+1, resp.StatusCode)
+			c.markRequestFailed()
+			return "", utils.NewError(utils.NetworkError, fmt.Sprintf("network error after %d retries for %s", retryCount+1, urlStr), requestErr)
+		}
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			if !c.filter.ShouldProcess(resp) {
+				resp.Body.Close()
+				cancel()
+				c.markRequestSucceeded(startTime, 0)
+				return "", nil
+			}
+
+			bodyBytes, bodyErr := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			cancel()
+			if bodyErr != nil {
+				c.markRequestFailed()
+				return "", utils.NewError(utils.NetworkError, fmt.Sprintf("error reading body from %s", urlStr), bodyErr)
+			}
+
+			c.markRequestSucceeded(startTime, int64(len(bodyBytes)))
+			return string(bodyBytes), nil
+		}
+
+		respBodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		cancel()
+
+		isRateLimited := c.filter.IsRateLimited(resp)
+		isWAFBlocked := c.filter.IsWAFBlocked(resp)
+
+		if isRateLimited {
+			c.logger.Warning("Server rate limit detected for %s (Status: %d)", urlStr, resp.StatusCode)
+			c.rateLimiter.NotifyRateLimitError(domain)
+			c.markRequestFailed()
+			return "", utils.NewError(utils.RateLimitError, fmt.Sprintf("server rate limited %s (Status %d)", urlStr, resp.StatusCode), nil)
+		}
+
+		if isWAFBlocked {
+			c.logger.Warning("WAF block detected for %s (Status: %d)", urlStr, resp.StatusCode)
 			bodyStr := string(respBodyBytes)
 			if len(bodyStr) > 100 {
 				bodyStr = bodyStr[:100] + "..."
 			}
-			c.logger.Debug("Final Error Response Body Snippet: %s", bodyStr)
-			return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed %s after %d retries (Status %d)", urlStr, retryCount+1, resp.StatusCode), nil)
+			c.logger.Debug("WAF Response Body Snippet: %s", bodyStr)
+			c.markRequestFailed()
+			return "", utils.NewError(utils.WAFError, fmt.Sprintf("WAF blocked %s (Status %d)", urlStr, resp.StatusCode), nil)
 		}
-	}
 
-	if retryCount > 0 {
-		c.mutex.Lock()
-		c.stats.RetryCount += retryCount
-		c.mutex.Unlock()
+		shouldRetry, retryDelay = c.shouldRetryStatus(resp.StatusCode, retryCount, domain)
+		if shouldRetry && retryCount < c.maxRetries {
+			c.logger.Debug("Received status %d for %s, retrying (%d/%d) after %s", resp.StatusCode, urlStr, retryCount+1, c.maxRetries, retryDelay)
+			retriesUsed++
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		c.logger.Error("Failed request for %s after %d retries with status %d", urlStr, retryCount+1, resp.StatusCode)
+		bodyStr := string(respBodyBytes)
+		if len(bodyStr) > 100 {
+			bodyStr = bodyStr[:100] + "..."
+		}
+		c.logger.Debug("Final Error Response Body Snippet: %s", bodyStr)
+		c.markRequestFailed()
+		return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed %s after %d retries (Status %d)", urlStr, retryCount+1, resp.StatusCode), nil)
 	}
 
 	if resp == nil {
+		c.markRequestFailed()
 		return "", utils.NewError(utils.NetworkError, fmt.Sprintf("no valid response for %s after retries", urlStr), nil)
 	}
-	
-	bodyCtx, bodyCancel := context.WithTimeout(context.Background(), c.httpClient.Timeout)
-	defer bodyCancel()
-	
-	bodyReadComplete := make(chan struct{})
-	
-	var bodyBytes []byte
-	var bodyErr error
-	
-	go func() {
-		defer resp.Body.Close()
-		bodyBytes, bodyErr = io.ReadAll(resp.Body)
-		close(bodyReadComplete)
-	}()
-	
-	select {
-	case <-bodyCtx.Done():
-		c.stats.RequestsFailed++
-		return "", utils.NewError(utils.NetworkError, fmt.Sprintf("timeout reading body from %s", urlStr), bodyCtx.Err())
-	case <-bodyReadComplete:
-		if bodyErr != nil {
-			c.stats.RequestsFailed++
-			return "", utils.NewError(utils.NetworkError, fmt.Sprintf("error reading body from %s", urlStr), bodyErr)
-		}
-	}
 
+	c.markRequestFailed()
+	return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed %s after retries", urlStr), nil)
+}
+
+func (c *Client) markRequestFailed() {
+	c.mutex.Lock()
+	c.stats.RequestsFailed++
+	c.mutex.Unlock()
+}
+
+func (c *Client) markRequestSucceeded(startTime time.Time, bodyBytes int64) {
 	c.mutex.Lock()
 	c.stats.RequestsSucceeded++
-	c.stats.TotalBytes += int64(len(bodyBytes))
+	c.stats.TotalBytes += bodyBytes
 	c.stats.TotalTime += time.Since(startTime)
 	c.mutex.Unlock()
-
-	return string(bodyBytes), nil
 }
 
 func (c *Client) checkRateLimit(domain string) error {
@@ -392,7 +381,7 @@ func (b *DomainBucket) refill() {
 
 	if b.isAdapting && time.Since(b.lastErrorTime) > RecoveryInterval {
 		if time.Since(b.lastErrorTime) > FullRecoveryTime {
-			b.currentRate = math.Min(float64(MaxAdaptiveRate), b.currentRate * RecoveryFactor * 2)
+			b.currentRate = math.Min(float64(MaxAdaptiveRate), b.currentRate*RecoveryFactor*2)
 			if b.currentRate >= float64(MaxAdaptiveRate) {
 				b.currentRate = float64(MaxAdaptiveRate)
 				b.isAdapting = false
@@ -435,12 +424,12 @@ func (rl *RateLimiter) NotifyRateLimitError(domain string) {
 func (c *Client) GetRateLimit() int {
 	c.rateLimiter.mutex.Lock()
 	defer c.rateLimiter.mutex.Unlock()
-	
+
 	// If adaptive mode is ON, return 0 to signify "auto"
 	if c.rateLimiter.adaptiveMode {
-		return 0 
+		return 0
 	}
-	
+
 	// Otherwise, return the globally set fixed limit
 	return c.rateLimiter.globalLimit
 }
@@ -463,21 +452,21 @@ func (c *Client) shouldRetryStatus(statusCode int, retryCount int, domain string
 
 func (c *Client) calculateBackoff(retryCount int, domain string) time.Duration {
 	baseDelay := time.Duration(1<<uint(retryCount)) * time.Second
-	
+
 	jitterFactor := 0.5 + 0.5*utils.RandomFloat()
 	delay := time.Duration(float64(baseDelay) * jitterFactor)
-	
+
 	if delay > 30*time.Second {
 		delay = 30 * time.Second
 	}
-	
+
 	return delay
 }
 
 func (c *Client) GetStats() ClientStats {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	return ClientStats{
 		RequestsAttempted: c.stats.RequestsAttempted,
 		RequestsSucceeded: c.stats.RequestsSucceeded,
@@ -491,23 +480,23 @@ func (c *Client) GetStats() ClientStats {
 func (c *Client) ResetStats() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.stats = ClientStats{}
 }
 
 func (c *Client) SetInsecureSkipVerify(insecure bool) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.insecure = insecure
-	
+
 	transport := &http.Transport{
 		MaxIdleConns:       100,
 		IdleConnTimeout:    30 * time.Second,
 		DisableCompression: false,
 		TLSClientConfig:    &tls.Config{InsecureSkipVerify: insecure},
 	}
-	
+
 	c.httpClient.Transport = transport
 }
 
@@ -519,7 +508,7 @@ func (rl *RateLimiter) getCurrentRate(domain string) float64 {
 		bucket.mutex.Lock()
 		rate := bucket.currentRate
 		bucket.mutex.Unlock()
-		if rate < 0.1 { 
+		if rate < 0.1 {
 			return 0.1
 		}
 		return rate
