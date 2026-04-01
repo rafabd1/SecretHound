@@ -9,13 +9,13 @@
 
 
 <p align="center">
-    <b>A powerful CLI tool designed to find secrets in JavaScript files, web pages, and other text sources.</b>
+    <b>A powerful CLI tool designed to find secrets in files, web pages, and other text sources.</b>
 </p>
 
 ## Features
 
 - **Multi-Source Scanning**: Process remote URLs, local files, and entire directories.
-- **Extensive Pattern Library**: Over 60 meticulously crafted regex patterns to identify a wide range of secrets, including API keys (AWS, Google Cloud, Stripe, etc.), authentication tokens (JWT, OAuth, Bearer), database credentials, private keys, PII (email, phone), Web3 secrets (crypto addresses, private keys), and more.
+- **Extensive Pattern Library**: Over 500 regex patterns (currently 555 in the default catalog) to identify a wide range of secrets, including API keys (AWS, Google Cloud, Stripe, etc.), authentication tokens (JWT, OAuth, Bearer), database credentials, private keys, PII (email, phone), Web3 secrets (crypto addresses, private keys), and more.
 - **URL/Domain Extraction Mode**: Dedicated mode (`--scan-urls`) to efficiently extract only URL and domain patterns from sources.
 - **Flexible Pattern Control**: Fine-tune scans by including or excluding specific pattern categories (e.g., `--include-categories aws,pii`).
 - **YAML-Based Patterns**: Patterns are now managed in `core/patterns/default_patterns.yaml` for easier maintenance and extension.
@@ -146,4 +146,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
 

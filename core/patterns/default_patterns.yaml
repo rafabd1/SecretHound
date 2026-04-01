@@ -792,7 +792,7 @@ patterns:
         regex: glpat-[0-9a-zA-Z_\-]{20,}
         description: GitLab Personal Access Token
         enabled: true
-        category: ci
+        category: code
         minlength: 25
     gitlab_runner_token:
         regex: glrt-[0-9a-zA-Z_\-]{20,}
@@ -842,7 +842,7 @@ patterns:
         regex: hf_[A-Za-z0-9]{34}
         description: Hugging Face Access Token
         enabled: true
-        category: cloud
+        category: llm
         minlength: 37
         maxlength: 37
         useentropy: true
@@ -1207,7 +1207,7 @@ patterns:
         regex: key-[0-9a-zA-Z]{32}
         description: Mailgun API Key
         enabled: true
-        category: cloud
+        category: communication
         minlength: 36
         contextpenaltyany:
             - .js
@@ -1414,13 +1414,13 @@ patterns:
         regex: SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}
         description: SendGrid API Key
         enabled: true
-        category: cloud
+        category: communication
         minlength: 69
     sendinblue_api_key:
         regex: \bxkeysib\-[A-Za-z0-9_-]{81}\b
         description: Brevo/Sendinblue API Key v2
         enabled: true
-        category: cloud
+        category: communication
         minlength: 90
         contextboostany:
             - sendinblue
@@ -1623,7 +1623,7 @@ patterns:
         regex: (?:datadog).{0,40}\b([A-Za-z0-9]{32}|[A-Za-z0-9]{40})\b
         description: Datadog API/Application Key
         enabled: true
-        category: cloud
+        category: observability
         minlength: 32
         maxlength: 40
         contextboostany:
@@ -1705,7 +1705,7 @@ patterns:
         regex: (?:sentry).{0,40}\b([a-f0-9]{64})\b
         description: Sentry Auth Token
         enabled: true
-        category: cloud
+        category: observability
         minlength: 64
         maxlength: 64
         contextboostany:
@@ -1776,7 +1776,7 @@ patterns:
         regex: \b[0-9]{8,10}:[A-Za-z0-9_-]{35}\b
         description: Telegram Bot Token
         enabled: true
-        category: cloud
+        category: communication
         minlength: 44
         maxlength: 46
         useentropy: true
@@ -1786,7 +1786,7 @@ patterns:
         regex: SK[0-9a-fA-F]{32}
         description: Twilio API Key
         enabled: true
-        category: cloud
+        category: communication
         minlength: 34
         maxlength: 34
         contextboostany:
@@ -3074,9 +3074,9 @@ patterns:
         entropyminlength: 24
     bitfinex:
         regex: '(?:bitfinex).{0,40}\b([A-Za-z0-9_-]{43})\b'
-        description: Bitfinex Payment API Credential
+        description: Bitfinex Exchange API Credential
         enabled: true
-        category: payment
+        category: web3
         minlength: 43
         requiredcontextany:
             - bitfinex
@@ -3306,7 +3306,7 @@ patterns:
         regex: '(?:buddyns).{0,40}\b([0-9a-z]{40})\b'
         description: Buddyns API Key
         enabled: true
-        category: ci
+        category: cloud
         minlength: 40
         requiredcontextany:
             - buddyns
@@ -4042,7 +4042,7 @@ patterns:
         regex: '(?:codacy).{0,40}\b([0-9A-Za-z]{20})\b'
         description: Codacy API Key/Token
         enabled: true
-        category: cloud
+        category: code
         minlength: 20
         requiredcontextany:
             - codacy
@@ -4088,7 +4088,7 @@ patterns:
         regex: '(?:coinbase).{0,40}\b([a-zA-Z-0-9]{64})\b'
         description: Coinbase API Key
         enabled: true
-        category: payment
+        category: web3
         minlength: 64
         requiredcontextany:
             - coinbase
@@ -4295,7 +4295,7 @@ patterns:
         regex: '(?:coveralls).{0,40}\b([a-zA-Z0-9-]{37})\b'
         description: Coveralls API Key/Token
         enabled: true
-        category: cloud
+        category: code
         minlength: 37
         requiredcontextany:
             - coveralls
@@ -4318,7 +4318,7 @@ patterns:
         regex: '(?:crowdin).{0,40}\b([0-9A-Za-z]{80})\b'
         description: Crowdin API Key/Token
         enabled: true
-        category: cloud
+        category: code
         minlength: 80
         requiredcontextany:
             - crowdin
@@ -4960,9 +4960,9 @@ patterns:
         entropyminlength: 24
     elasticemail:
         regex: '(?:elastic).{0,40}\b([A-Za-z0-9_-]{96})\b'
-        description: Elasticemail Database Credential
+        description: Elasticemail API Credential
         enabled: true
-        category: db
+        category: cloud
         minlength: 96
         requiredcontextany:
             - elastic
@@ -5581,9 +5581,9 @@ patterns:
         entropyminlength: 24
     foursquare:
         regex: '(?:foursquare).{0,40}\b([0-9A-Z]{48})\b'
-        description: Foursquare Payment API Credential
+        description: Foursquare API Credential
         enabled: true
-        category: payment
+        category: cloud
         minlength: 48
         requiredcontextany:
             - foursquare
@@ -5675,7 +5675,7 @@ patterns:
         regex: '(?:fullstory).{0,40}\b([a-zA-Z-0-9/+]{88})\b'
         description: Fullstory API Key/Token
         enabled: true
-        category: cloud
+        category: observability
         minlength: 88
         requiredcontextany:
             - fullstory
@@ -7009,7 +7009,7 @@ patterns:
         regex: '(?:launchdarkly).{0,40}\b([a-z0-9-]{40})\b'
         description: Launchdarkly API Key
         enabled: true
-        category: cloud
+        category: code
         minlength: 40
         requiredcontextany:
             - launchdarkly
@@ -7101,7 +7101,7 @@ patterns:
         regex: '(?:line).{0,40}\b([A-Za-z0-9+/]{171,172})\b'
         description: Linemessaging API Key/Token
         enabled: true
-        category: cloud
+        category: communication
         minlength: 120
         requiredcontextany:
             - line
@@ -7124,7 +7124,7 @@ patterns:
         regex: '(?:linenotify).{0,40}\b([0-9A-Za-z]{43})\b'
         description: Linenotify API Key/Token
         enabled: true
-        category: cloud
+        category: communication
         minlength: 43
         requiredcontextany:
             - linenotify
@@ -7354,7 +7354,7 @@ patterns:
         regex: '(?:mailjet).{0,40}\b([A-Za-z0-9]{32})\b'
         description: Mailjetsms API Key
         enabled: true
-        category: cloud
+        category: communication
         minlength: 32
         requiredcontextany:
             - mailjet
@@ -7607,7 +7607,7 @@ patterns:
         regex: '(?:messagebird).{0,40}\b([A-Za-z0-9_-]{25})\b'
         description: Messagebird API Key/Token
         enabled: true
-        category: cloud
+        category: communication
         minlength: 25
         requiredcontextany:
             - messagebird
@@ -8481,7 +8481,7 @@ patterns:
         regex: '(?:paymongo).{0,40}\b([a-zA-Z0-9_]{32})\b'
         description: Paymongo API Key
         enabled: true
-        category: db
+        category: payment
         minlength: 32
         requiredcontextany:
             - paymongo
@@ -9792,7 +9792,7 @@ patterns:
         regex: '(?:sendbird).{0,40}\b([0-9a-f]{40})\b'
         description: Sendbird API Key
         enabled: true
-        category: cloud
+        category: communication
         minlength: 40
         requiredcontextany:
             - sendbird
@@ -9815,7 +9815,7 @@ patterns:
         regex: '(?:sendbird).{0,40}\b([0-9a-f]{24})\b'
         description: Sendbirdorganizationapi API Key/Token
         enabled: true
-        category: cloud
+        category: communication
         minlength: 24
         requiredcontextany:
             - sendbird
@@ -10206,7 +10206,7 @@ patterns:
         regex: '(?:sinch).{0,40}\b([a-z0-9]{32})\b'
         description: Sinchmessage API Key
         enabled: true
-        category: cloud
+        category: communication
         minlength: 32
         requiredcontextany:
             - sinch
@@ -10988,7 +10988,7 @@ patterns:
         regex: '(?:textmagic).{0,40}\b([0-9A-Za-z]{30})\b'
         description: Textmagic API Key/Token
         enabled: true
-        category: cloud
+        category: communication
         minlength: 30
         requiredcontextany:
             - textmagic
@@ -11356,7 +11356,7 @@ patterns:
         regex: '(?:tyntec).{0,40}\b([a-zA-Z0-9]{32})\b'
         description: Tyntec API Key
         enabled: true
-        category: cloud
+        category: communication
         minlength: 32
         requiredcontextany:
             - tyntec
@@ -11448,7 +11448,7 @@ patterns:
         regex: '(?:upcdatabase).{0,40}\b([A-Z0-9]{32})\b'
         description: Upcdatabase API Key
         enabled: true
-        category: db
+        category: cloud
         minlength: 32
         requiredcontextany:
             - upcdatabase

@@ -54,10 +54,8 @@ Secret detection combines:
 - `bash_command_suspicious`
 
 ### CI/CD
-- `buddyns`
 - `buildkite`
 - `droneci`
-- `gitlab_personal_token`
 - `gitlab_runner_token`
 - `jenkins_api_token`
 - `semaphore`
@@ -122,6 +120,7 @@ Secret detection combines:
 - `borgbase`
 - `brandfetch`
 - `browshot`
+- `buddyns`
 - `bugherd`
 - `bulbul`
 - `buttercms`
@@ -153,7 +152,6 @@ Secret detection combines:
 - `cloverly`
 - `cloze_1`
 - `clustdoc`
-- `codacy`
 - `coinapi`
 - `coinlayer`
 - `commercejs`
@@ -163,8 +161,6 @@ Secret detection combines:
 - `convertkit`
 - `copper_2`
 - `countrylayer`
-- `coveralls`
-- `crowdin`
 - `cryptocompare`
 - `currencycloud_1`
 - `currencyfreaks`
@@ -176,7 +172,6 @@ Secret detection combines:
 - `customerio`
 - `dailyco`
 - `dandelion`
-- `datadog_api_key`
 - `datafire`
 - `datagov`
 - `deepai`
@@ -195,6 +190,7 @@ Secret detection combines:
 - `dynalist`
 - `dyspatch`
 - `edamam_1`
+- `elasticemail`
 - `enablex_1`
 - `enablex_2`
 - `enigma`
@@ -220,10 +216,10 @@ Secret detection combines:
 - `flowflu_2`
 - `fmfw_1`
 - `fmfw_2`
+- `foursquare`
 - `freshbooks_1`
 - `freshdesk_1`
 - `fulcrum`
-- `fullstory`
 - `fusebill`
 - `fxmarket`
 - `geckoboard`
@@ -252,7 +248,6 @@ Secret detection combines:
 - `hiveage`
 - `holidayapi`
 - `html2pdf`
-- `huggingface_api_token`
 - `humanity`
 - `hunter`
 - `hypertrack_1`
@@ -282,12 +277,9 @@ Secret detection combines:
 - `kylas`
 - `languagelayer`
 - `lastfm`
-- `launchdarkly`
 - `leadfeeder`
 - `lessannoyingcrm`
 - `lexigram`
-- `linemessaging`
-- `linenotify`
 - `linkpreview`
 - `liveagent`
 - `lokalisetoken`
@@ -298,8 +290,6 @@ Secret detection combines:
 - `mailboxlayer`
 - `mailchimp_api_key`
 - `mailerlite`
-- `mailgun_api_key`
-- `mailjetsms`
 - `mandrill`
 - `manifest`
 - `mapbox_secret_token`
@@ -311,7 +301,6 @@ Secret detection combines:
 - `mediastack`
 - `meistertask`
 - `mesibo`
-- `messagebird`
 - `mindmeister`
 - `mixmax`
 - `mixpanel_1`
@@ -403,12 +392,7 @@ Secret detection combines:
 - `screenshotlayer`
 - `securitytrails`
 - `selectpdf`
-- `sendbird_1`
-- `sendbirdorganizationapi`
-- `sendgrid_api_key`
-- `sendinblue_api_key`
 - `sentiment_2`
-- `sentry_auth_token`
 - `serphouse`
 - `serpstack`
 - `sheety_1`
@@ -428,7 +412,6 @@ Secret detection combines:
 - `sigopt`
 - `simplynoted`
 - `simvoly`
-- `sinchmessage`
 - `sirv_2`
 - `siteleaf`
 - `skrappio`
@@ -462,8 +445,6 @@ Secret detection combines:
 - `teamgate_1`
 - `teamgate_2`
 - `technicalanalysisapi`
-- `telegram_bot_token`
-- `textmagic_1`
 - `thinkific_1`
 - `thousandeyes_1`
 - `ticketmaster`
@@ -478,11 +459,10 @@ Secret detection combines:
 - `travelpayouts`
 - `trelloapikey_2`
 - `twelvedata`
-- `twilio_api_key`
-- `tyntec`
 - `typeform`
 - `unplugg`
 - `unsplash`
+- `upcdatabase`
 - `uplead`
 - `uploadcare`
 - `upwave`
@@ -523,17 +503,38 @@ Secret detection combines:
 - `zonkafeedback`
 
 ### Code
+- `codacy`
+- `coveralls`
+- `crowdin`
 - `discord_bot_token`
 - `discord_webhook`
 - `docker_hub_token`
 - `github_fine_grained_token`
 - `github_personal_token`
 - `github_token`
+- `gitlab_personal_token`
+- `launchdarkly`
 - `npm_access_token`
 - `postman_api_key`
 - `slack_token`
 - `slack_webhook`
 - `vercel`
+
+### Communication
+- `linemessaging`
+- `linenotify`
+- `mailgun_api_key`
+- `mailjetsms`
+- `messagebird`
+- `sendbird_1`
+- `sendbirdorganizationapi`
+- `sendgrid_api_key`
+- `sendinblue_api_key`
+- `sinchmessage`
+- `telegram_bot_token`
+- `textmagic_1`
+- `twilio_api_key`
+- `tyntec`
 
 ### Config
 - `config_api_key`
@@ -546,15 +547,12 @@ Secret detection combines:
 - `signing_key`
 
 ### Database
-- `elasticemail`
 - `mongodb_srv_connection`
 - `mongodb_uri`
 - `msql_connection_string`
 - `mysql_connection_string`
-- `paymongo`
 - `postgresql_connection_string`
 - `redis_url`
-- `upcdatabase`
 
 ### GCP
 - `google_api_key`
@@ -565,6 +563,7 @@ Secret detection combines:
 - `generic_password`
 
 ### LLM
+- `huggingface_api_token`
 - `llm_anthropic_api_key`
 - `llm_doubao_ark_api_key`
 - `llm_groq_api_key`
@@ -577,13 +576,16 @@ Secret detection combines:
 - `llm_xai_grok_api_key`
 - `llm_zhipu_glm_api_key`
 
+### Observability
+- `datadog_api_key`
+- `fullstory`
+- `sentry_auth_token`
+
 ### Payment
-- `bitfinex`
 - `braintree_token`
-- `coinbase`
 - `credit_card_number`
-- `foursquare`
 - `invoiceocean_1`
+- `paymongo`
 - `paypal_client_id`
 - `paypal_client_secret`
 - `plaidkey_1`
@@ -612,6 +614,8 @@ Secret detection combines:
 - `url_path`
 
 ### Web3
+- `bitfinex`
+- `coinbase`
 - `ethereum_address`
 - `web3_private_key`
 - `web3_provider_key`
