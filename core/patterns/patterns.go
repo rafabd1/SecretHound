@@ -15,18 +15,21 @@ import (
 var embeddedPatternsFS embed.FS
 
 type PatternConfig struct {
-	Regex            string   `yaml:"regex"`
-	Description      string   `yaml:"description"`
-	Enabled          bool     `yaml:"enabled"`
-	Category         string   `yaml:"category"`
-	MinLength        int      `yaml:"minlength"`
-	MaxLength        int      `yaml:"maxlength"`
-	KeywordMatches   []string `yaml:"keywordmatches"`
-	KeywordExcludes  []string `yaml:"keywordexcludes"`
-	ExcludeRegexes   []string `yaml:"excluderegexes"`
-	UseEntropy       bool     `yaml:"useentropy"`
-	MinEntropy       float64  `yaml:"minentropy"`
-	EntropyMinLength int      `yaml:"entropyminlength"`
+	Regex              string   `yaml:"regex"`
+	Description        string   `yaml:"description"`
+	Enabled            bool     `yaml:"enabled"`
+	Category           string   `yaml:"category"`
+	MinLength          int      `yaml:"minlength,omitempty"`
+	MaxLength          int      `yaml:"maxlength,omitempty"`
+	KeywordMatches     []string `yaml:"keywordmatches,omitempty"`
+	KeywordExcludes    []string `yaml:"keywordexcludes,omitempty"`
+	ExcludeRegexes     []string `yaml:"excluderegexes,omitempty"`
+	RequiredContextAny []string `yaml:"requiredcontextany,omitempty"`
+	ContextBoostAny    []string `yaml:"contextboostany,omitempty"`
+	ContextPenaltyAny  []string `yaml:"contextpenaltyany,omitempty"`
+	UseEntropy         bool     `yaml:"useentropy,omitempty"`
+	MinEntropy         float64  `yaml:"minentropy,omitempty"`
+	EntropyMinLength   int      `yaml:"entropyminlength,omitempty"`
 }
 
 type PatternDefinitions struct {
@@ -36,10 +39,11 @@ type PatternDefinitions struct {
 var DefaultPatterns = loadEmbeddedPatterns()
 
 type CompiledPattern struct {
-	Name        string
-	Description string
-	Regex       *regexp.Regexp
-	Config      PatternConfig
+	Name                   string
+	Description            string
+	Regex                  *regexp.Regexp
+	CompiledExcludeRegexes []*regexp.Regexp
+	Config                 PatternConfig
 }
 
 type PatternManager struct {
@@ -166,10 +170,11 @@ func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []st
 		}
 
 		pm.compiledPatterns[name] = &CompiledPattern{
-			Name:        name,
-			Description: config.Description,
-			Regex:       re,
-			Config:      config,
+			Name:                   name,
+			Description:            config.Description,
+			Regex:                  re,
+			CompiledExcludeRegexes: compileExcludeRegexes(config.ExcludeRegexes),
+			Config:                 config,
 		}
 	}
 
@@ -232,9 +237,10 @@ func (pm *PatternManager) AddPattern(name, regex, description string) error {
 	defer pm.mu.Unlock()
 
 	pm.compiledPatterns[name] = &CompiledPattern{
-		Name:        name,
-		Description: description,
-		Regex:       re,
+		Name:                   name,
+		Description:            description,
+		Regex:                  re,
+		CompiledExcludeRegexes: []*regexp.Regexp{},
 		Config: PatternConfig{
 			Regex:       regex,
 			Description: description,
@@ -246,6 +252,18 @@ func (pm *PatternManager) AddPattern(name, regex, description string) error {
 
 	pm.definitions.Patterns[name] = pm.compiledPatterns[name].Config
 	return nil
+}
+
+func compileExcludeRegexes(patterns []string) []*regexp.Regexp {
+	compiled := make([]*regexp.Regexp, 0, len(patterns))
+	for _, raw := range patterns {
+		re, err := regexp.Compile(raw)
+		if err != nil {
+			continue
+		}
+		compiled = append(compiled, re)
+	}
+	return compiled
 }
 
 func (pm *PatternManager) Reset() {
