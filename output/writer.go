@@ -235,10 +235,10 @@ func (w *Writer) marshalByFormat(v interface{}) ([]byte, error) {
 
 func marshalCSV(v interface{}) ([]byte, error) {
 	var sb strings.Builder
-	sb.WriteString("Type,Value,SourceURL,Occurrences,Context,Description\n")
 
 	switch data := v.(type) {
 	case []SecretFindingData:
+		sb.WriteString("Type,Value,SourceURL,Occurrences,Context,Description\n")
 		for _, f := range data {
 			sb.WriteString(fmt.Sprintf("%s,\"%s\",\"%s\",%d,\"%s\",\"%s\"\n",
 				f.Type,
@@ -264,6 +264,26 @@ func marshalCSV(v interface{}) ([]byte, error) {
 					f.Occurrences,
 					escapeCsv(strings.Join(f.Context, " | ")),
 					escapeCsv(f.Description),
+				))
+			}
+		}
+	case []string:
+		sb.WriteString("Value\n")
+		for _, value := range data {
+			sb.WriteString(fmt.Sprintf("\"%s\"\n", escapeCsv(value)))
+		}
+	case map[string][]string:
+		sb.WriteString("Source,Value\n")
+		keys := make([]string, 0, len(data))
+		for k := range data {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, source := range keys {
+			for _, value := range data[source] {
+				sb.WriteString(fmt.Sprintf("\"%s\",\"%s\"\n",
+					escapeCsv(source),
+					escapeCsv(value),
 				))
 			}
 		}
@@ -314,6 +334,23 @@ func marshalTXT(v interface{}) ([]byte, error) {
 				}
 				sb.WriteString("\n")
 			}
+		}
+	case []string:
+		for _, value := range data {
+			sb.WriteString(value + "\n")
+		}
+	case map[string][]string:
+		keys := make([]string, 0, len(data))
+		for k := range data {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, source := range keys {
+			sb.WriteString(source + ":\n")
+			for _, value := range data[source] {
+				sb.WriteString("\t" + value + "\n")
+			}
+			sb.WriteString("\n")
 		}
 	default:
 		return nil, fmt.Errorf("unsupported TXT output type")

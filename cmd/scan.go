@@ -171,7 +171,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	if writer != nil {
-		defer writer.Close()
+		defer func() {
+			if err := writer.Close(); err != nil {
+				logger.Error("failed to write output: %v", err)
+			}
+		}()
 	}
 
 	// --- Input Collection ---

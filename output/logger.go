@@ -149,6 +149,15 @@ func (l *Logger) writeLog(msg LogMessage) {
 		case LevelSuccess:
 			prefix = l.successColor("[SUCCESS]")
 			formatted = l.successColor("%s", msg.Message)
+			parts := strings.SplitN(msg.Message, " ", 3)
+			if len(parts) == 3 && parts[0] == "Found" && strings.HasSuffix(parts[1], "x") {
+				countPart := strings.TrimSuffix(parts[1], "x")
+				if countPart != "" && isDigits(countPart) {
+					formatted = l.successColor("%s ", parts[0]) +
+						l.infoColor("%s", parts[1]) +
+						l.successColor(" %s", parts[2])
+				}
+			}
 		}
 
 		fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
@@ -264,6 +273,15 @@ func (l *Logger) SecretFoundWithCount(secretType string, secretValue string, url
 		l.Success("Found %s: %s... in %s", secretType, secretPart, url)
 	}
 	time.Sleep(5 * time.Millisecond)
+}
+
+func isDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 /*
