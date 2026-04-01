@@ -20,6 +20,7 @@
 - **Flexible Pattern Control**: Fine-tune scans by including or excluding specific pattern categories (e.g., `--include-categories aws,pii`).
 - **YAML-Based Patterns**: Patterns are now managed in `core/patterns/default_patterns.yaml` for easier maintenance and extension.
 - **Shannon Entropy Validation**: Token-like patterns can enforce entropy thresholds to reduce false positives.
+- **Hybrid Context Scoring**: Detection confidence now combines entropy, context signals, and reusable pattern rules instead of hard-only keyword filtering.
 - **Concurrent Processing**: Fast multi-threaded architecture for efficient scanning.
 - **Domain-Aware Scheduling**: Smart distribution of requests to avoid rate limiting when scanning remote URLs.
 - **WAF/Rate Limit Evasion**: Strategies for handling common web security measures.

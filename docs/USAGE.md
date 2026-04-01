@@ -271,6 +271,13 @@ Use a custom YAML pattern set (same structure as `core/patterns/default_patterns
 secrethound --patterns-file ./my_patterns.yaml -i <target>
 ```
 
+Useful optional YAML fields for advanced tuning:
+
+- `requiredcontextany`: requires at least one term in surrounding context
+- `contextboostany`: increases confidence when terms are present
+- `contextpenaltyany`: decreases confidence when terms are present
+- `useentropy`, `minentropy`, `entropyminlength`: entropy-based validation controls
+
 ### URL/Domain Extraction Mode
 
 If you only want to find URLs and domains within files/sources:
