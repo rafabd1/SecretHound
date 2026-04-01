@@ -52,7 +52,19 @@ type PatternManager struct {
 	specificExclusions map[string][]*regexp.Regexp
 	localModeEnabled   bool
 	definitions        *PatternDefinitions
+	lastLoadStats      PatternLoadStats
 	mu                 sync.RWMutex
+}
+
+type PatternLoadStats struct {
+	TotalDefinitions   int
+	SelectedForLoad    int
+	Loaded             int
+	FailedCompilation  int
+	SkippedByCategory  int
+	SkippedByEnabled   int
+	FailedValidation   int
+	ExcludeRegexErrors int
 }
 
 func loadEmbeddedPatterns() *PatternDefinitions {
@@ -103,6 +115,7 @@ func NewPatternManager() *PatternManager {
 		exclusionPatterns:  make([]*regexp.Regexp, 0),
 		specificExclusions: make(map[string][]*regexp.Regexp),
 		definitions:        cloneDefinitions(DefaultPatterns),
+		lastLoadStats:      PatternLoadStats{},
 	}
 
 	_ = pm.LoadPatterns(nil, nil)
@@ -132,6 +145,7 @@ func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []st
 	defer pm.mu.Unlock()
 
 	pm.compiledPatterns = make(map[string]*CompiledPattern)
+	pm.lastLoadStats = PatternLoadStats{TotalDefinitions: len(pm.definitions.Patterns)}
 
 	includeMap := make(map[string]bool)
 	for _, cat := range includeCategories {
@@ -160,22 +174,45 @@ func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []st
 		}
 
 		if !loadPattern {
+			if isExcluded || (useInclude && !isIncluded) {
+				pm.lastLoadStats.SkippedByCategory++
+			} else if !isEnabledByDefault {
+				pm.lastLoadStats.SkippedByEnabled++
+			}
+			continue
+		}
+
+		pm.lastLoadStats.SelectedForLoad++
+
+		if strings.TrimSpace(config.Regex) == "" {
+			pm.lastLoadStats.FailedValidation++
+			fmt.Fprintf(os.Stderr, "[ERROR] Pattern '%s' has empty regex and was skipped\n", name)
+			continue
+		}
+		if strings.TrimSpace(config.Category) == "" {
+			pm.lastLoadStats.FailedValidation++
+			fmt.Fprintf(os.Stderr, "[ERROR] Pattern '%s' has empty category and was skipped\n", name)
 			continue
 		}
 
 		re, err := regexp.Compile(config.Regex)
 		if err != nil {
+			pm.lastLoadStats.FailedCompilation++
 			fmt.Fprintf(os.Stderr, "[ERROR] Failed to compile regex for pattern '%s': %v\nRegex: %s\n", name, err, config.Regex)
 			continue
 		}
+
+		excludeCompiled, excludeErrors := compileExcludeRegexes(name, config.ExcludeRegexes)
+		pm.lastLoadStats.ExcludeRegexErrors += excludeErrors
 
 		pm.compiledPatterns[name] = &CompiledPattern{
 			Name:                   name,
 			Description:            config.Description,
 			Regex:                  re,
-			CompiledExcludeRegexes: compileExcludeRegexes(config.ExcludeRegexes),
+			CompiledExcludeRegexes: excludeCompiled,
 			Config:                 config,
 		}
+		pm.lastLoadStats.Loaded++
 	}
 
 	criticalExclusions := []string{"example", "sample", "test", "demo", "function(", "return"}
@@ -186,6 +223,15 @@ func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []st
 			continue
 		}
 		pm.exclusionPatterns = append(pm.exclusionPatterns, re)
+	}
+
+	if pm.lastLoadStats.SelectedForLoad > 0 && pm.lastLoadStats.Loaded == 0 {
+		return fmt.Errorf(
+			"failed to load any patterns (selected=%d, failed_compile=%d, failed_validation=%d)",
+			pm.lastLoadStats.SelectedForLoad,
+			pm.lastLoadStats.FailedCompilation,
+			pm.lastLoadStats.FailedValidation,
+		)
 	}
 
 	return nil
@@ -207,6 +253,12 @@ func (pm *PatternManager) GetPatternCount() int {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	return len(pm.compiledPatterns)
+}
+
+func (pm *PatternManager) GetLoadStats() PatternLoadStats {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	return pm.lastLoadStats
 }
 
 func (pm *PatternManager) GetCompiledPatterns() map[string]*CompiledPattern {
@@ -254,16 +306,19 @@ func (pm *PatternManager) AddPattern(name, regex, description string) error {
 	return nil
 }
 
-func compileExcludeRegexes(patterns []string) []*regexp.Regexp {
+func compileExcludeRegexes(patternName string, patterns []string) ([]*regexp.Regexp, int) {
 	compiled := make([]*regexp.Regexp, 0, len(patterns))
+	errors := 0
 	for _, raw := range patterns {
 		re, err := regexp.Compile(raw)
 		if err != nil {
+			errors++
+			fmt.Fprintf(os.Stderr, "[ERROR] Failed to compile excluderegex for pattern '%s': %v\nExcludeRegex: %s\n", patternName, err, raw)
 			continue
 		}
 		compiled = append(compiled, re)
 	}
-	return compiled
+	return compiled, errors
 }
 
 func (pm *PatternManager) Reset() {
@@ -275,4 +330,5 @@ func (pm *PatternManager) Reset() {
 	pm.specificExclusions = make(map[string][]*regexp.Regexp)
 	pm.localModeEnabled = false
 	pm.definitions = cloneDefinitions(DefaultPatterns)
+	pm.lastLoadStats = PatternLoadStats{}
 }

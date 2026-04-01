@@ -92,6 +92,18 @@ func runScan(cmd *cobra.Command, args []string) error {
 		logger.Error("%s", fmt.Sprintf("Error loading patterns: %v", err))
 		os.Exit(1)
 	}
+	loadStats := pm.GetLoadStats()
+	if loadStats.FailedCompilation > 0 || loadStats.FailedValidation > 0 || loadStats.ExcludeRegexErrors > 0 {
+		logger.Info(
+			"Pattern loading had issues: loaded=%d/%d selected=%d | compile_failures=%d | validation_failures=%d | excluderegex_failures=%d",
+			loadStats.Loaded,
+			loadStats.TotalDefinitions,
+			loadStats.SelectedForLoad,
+			loadStats.FailedCompilation,
+			loadStats.FailedValidation,
+			loadStats.ExcludeRegexErrors,
+		)
+	}
 
 	regexManager := core.NewRegexManager()
 	regexManager.SetPatternManager(pm)
@@ -127,13 +139,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 
 		// Update pattern info based on final include/exclude lists
-		patternInfo := fmt.Sprintf("%d patterns loaded", pm.GetPatternCount())
+		patternInfo := fmt.Sprintf("%d/%d patterns loaded", loadStats.Loaded, loadStats.TotalDefinitions)
 		if scanUrlsFlag {
-			patternInfo = fmt.Sprintf("%d URL patterns loaded", pm.GetPatternCount())
+			patternInfo = fmt.Sprintf("%d/%d URL patterns loaded (selected: %d)", loadStats.Loaded, loadStats.TotalDefinitions, loadStats.SelectedForLoad)
 		} else if len(finalIncludeCategories) > 0 {
-			patternInfo = fmt.Sprintf("%d patterns from categories: %v", pm.GetPatternCount(), finalIncludeCategories)
+			patternInfo = fmt.Sprintf("%d/%d patterns loaded (selected: %d) from categories: %v", loadStats.Loaded, loadStats.TotalDefinitions, loadStats.SelectedForLoad, finalIncludeCategories)
 		} else if len(finalExcludeCategories) > 0 {
-			patternInfo = fmt.Sprintf("%d patterns excluding categories: %v", pm.GetPatternCount(), finalExcludeCategories)
+			patternInfo = fmt.Sprintf("%d/%d patterns loaded (selected: %d) excluding categories: %v", loadStats.Loaded, loadStats.TotalDefinitions, loadStats.SelectedForLoad, finalExcludeCategories)
 		}
 
 		timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
@@ -680,10 +692,8 @@ func printPatternList(pm *patterns.PatternManager) {
 	var categories []string
 	categoryMap := make(map[string]bool)
 
-	for name, config := range pm.GetDefinitions().Patterns {
-		if !config.Enabled {
-			continue
-		}
+	for name, compiled := range pm.GetCompiledPatterns() {
+		config := compiled.Config
 		if config.Category == "" {
 			config.Category = "uncategorized"
 		}

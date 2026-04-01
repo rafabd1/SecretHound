@@ -39,7 +39,7 @@ Flag Categories:
   Output:            -o, --output | --raw
   Performance:       -c, --concurrency | -l, --rate-limit
   Networking:        -t, --timeout | -r, --retries | -H, --header | --insecure
-  Pattern Control:   --include-categories | --exclude-categories | --scan-urls | --list-patterns
+  Pattern Control:   --include-categories | --exclude-categories | --scan-urls | --list-patterns | --patterns-file
   General Behavior:  -v, --verbose | -n, --no-progress | -s, --silent
 `,
 	RunE: runScan,
@@ -138,10 +138,12 @@ func init() {
 	rootCmd.Flags().StringSlice("exclude-categories", []string{}, "Comma-separated list of pattern categories to exclude (e.g., pii,generic)")
 	rootCmd.Flags().Bool("scan-urls", false, "URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters)")
 	rootCmd.Flags().Bool("list-patterns", false, "List available pattern categories and patterns, then exit")
+	rootCmd.Flags().String("patterns-file", "", "Path to a custom YAML patterns file to replace embedded defaults")
 	vip.BindPFlag("include_categories", rootCmd.Flags().Lookup("include-categories"))
 	vip.BindPFlag("exclude_categories", rootCmd.Flags().Lookup("exclude-categories"))
 	vip.BindPFlag("scan_urls", rootCmd.Flags().Lookup("scan-urls"))
 	vip.BindPFlag("list_patterns", rootCmd.Flags().Lookup("list-patterns"))
+	vip.BindPFlag("patterns_file", rootCmd.Flags().Lookup("patterns-file"))
 
 	// Group: Output Format (Adicionando a nova flag aqui)
 	rootCmd.Flags().Bool("group-by-source", false, "Group secrets by source URL/file in the output")
