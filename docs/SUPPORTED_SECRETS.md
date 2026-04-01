@@ -46,6 +46,8 @@ Secret detection combines:
 - `digitalocean_access_token`
 - `digitalocean_oauth_token`
 - `digitalocean_refresh_token`
+- `cloudflare_api_token`
+- `datadog_api_key`
 - `shopify_access_token`
 - `shopify_custom_app_token`
 - `shopify_private_app_token`
@@ -53,8 +55,12 @@ Secret detection combines:
 - `netlify_access_token`
 - `mailchimp_api_key`
 - `sendgrid_api_key`
+- `sendinblue_api_key`
+- `sentry_auth_token`
 - `telegram_bot_token`
 - `huggingface_api_token`
+- `twilio_api_key`
+- `mapbox_secret_token`
 
 ### Payment
 - `stripe_secret_key`
@@ -86,6 +92,9 @@ Secret detection combines:
 - `docker_hub_token`
 - `slack_token`
 - `slack_webhook`
+- `discord_bot_token`
+- `discord_webhook`
+- `postman_api_key`
 
 ### CI/CD
 - `gitlab_runner_token`
@@ -112,6 +121,25 @@ Secret detection combines:
 - `config_secret`
 - `generic_password` (disabled by default)
 
+### LLM Providers
+- `llm_openai_api_key`
+- `llm_anthropic_api_key`
+- `llm_groq_api_key`
+- `llm_openrouter_api_key`
+- `llm_perplexity_api_key`
+- `llm_replicate_api_token`
+- `llm_xai_grok_api_key`
+- `llm_kimi_moonshot_api_key`
+- `llm_qwen_dashscope_api_key`
+- `llm_zhipu_glm_api_key`
+- `llm_doubao_ark_api_key`
+
+### Bash
+- `bash_command_suspicious`
+
+### Imported Providers
+- Hundreds of additional service-scoped provider patterns imported from `secrets-patterns-db` are included directly by provider name (for example, `neutrinoapi_1`, `customerio`, `zipcodeapi`) and are categorized under existing categories (mainly `cloud`).
+
 ### PII
 - `email_address`
 - `phone_number`
@@ -134,4 +162,6 @@ Secret detection combines:
 ## Notes
 
 - Some patterns are intentionally disabled by default and can still be loaded by category include flags.
+- `pii` patterns are disabled by default; enable them explicitly with `--include-categories pii` (or include `pii` alongside other categories).
 - Pattern behavior is defined by YAML fields (`enabled`, lengths, keyword constraints, entropy fields), allowing maintenance without changing Go code.
+
