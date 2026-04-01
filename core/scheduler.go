@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -12,35 +13,46 @@ import (
 )
 
 type Scheduler struct {
-	domainManager *networking.DomainManager
-	client        *networking.Client
-	processor     *Processor
-	writer        *output.Writer
-	logger        *output.Logger
-	workerPool    *utils.WorkerPool
-	concurrency   int
-	mutex         sync.Mutex
-	waitingURLs   []string
-	ctx           context.Context
-	cancel        context.CancelFunc
-	waitGroup     sync.WaitGroup
-	stats         SchedulerStats
-	noProgress    bool
-	silent        bool
+	domainManager     *networking.DomainManager
+	client            *networking.Client
+	processor         *Processor
+	writer            *output.Writer
+	logger            *output.Logger
+	workerPool        *utils.WorkerPool
+	concurrency       int
+	mutex             sync.Mutex
+	waitingURLs       []string
+	ctx               context.Context
+	cancel            context.CancelFunc
+	waitGroup         sync.WaitGroup
+	stats             SchedulerStats
+	noProgress        bool
+	silent            bool
+	rateLimitBackoffs map[string]int
+	discardedDomains  map[string]bool
 }
 
 type SchedulerStats struct {
-	TotalURLs      int
-	ProcessedURLs  int
-	FailedURLs     int
-	BlockedDomains int
-	TotalSecrets   int
-	StartTime      time.Time
-	EndTime        time.Time
-	RateLimitHits  int
-	WAFBlockHits   int
-	DomainRetries  map[string]int
+	TotalURLs        int
+	ProcessedURLs    int
+	FailedURLs       int
+	BlockedDomains   int
+	TotalSecrets     int
+	StartTime        time.Time
+	EndTime          time.Time
+	RateLimitHits    int
+	WAFBlockHits     int
+	DomainRetries    map[string]int
+	DiscardedDomains int
+	DiscardedURLs    int
 }
+
+const (
+	baseRateLimitBlock                = 10 * time.Second
+	maxRateLimitBlock                 = 5 * time.Minute
+	maxRateLimitBackoffsBeforeDiscard = 6
+	wafBlockDuration                  = 60 * time.Second
+)
 
 func NewScheduler(domainManager *networking.DomainManager, client *networking.Client,
 	processor *Processor, writer *output.Writer, logger *output.Logger, concurrency int, noProgress bool, silent bool) (*Scheduler, error) {
@@ -62,6 +74,8 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 			DomainRetries: make(map[string]int),
 			StartTime:     time.Now(),
 		},
+		rateLimitBackoffs: make(map[string]int),
+		discardedDomains:  make(map[string]bool),
 	}, nil
 }
 
@@ -175,6 +189,8 @@ func (s *Scheduler) Schedule(urls []string) error {
 	failed := s.stats.FailedURLs
 	rateLimitHits := s.stats.RateLimitHits
 	wafHits := s.stats.WAFBlockHits
+	discardedDomains := s.stats.DiscardedDomains
+	discardedURLs := s.stats.DiscardedURLs
 	s.mutex.Unlock()
 
 	s.logger.Info("Processing completed in %.2f seconds", duration.Seconds())
@@ -183,6 +199,9 @@ func (s *Scheduler) Schedule(urls []string) error {
 	s.logger.Info("Failed to process %d URLs", failed)
 	s.logger.Info("Encountered rate limiting %d times", rateLimitHits)
 	s.logger.Info("Encountered WAF blocks %d times", wafHits)
+	if discardedDomains > 0 {
+		s.logger.Warning("Discarded %d domains and %d queued URLs due to persistent blocking", discardedDomains, discardedURLs)
+	}
 
 	if s.logger.IsVerbose() {
 		s.printDomainStatistics()
@@ -192,8 +211,8 @@ func (s *Scheduler) Schedule(urls []string) error {
 }
 
 /*
-	Builds a balanced queue of URLs by taking one URL from each domain in rounds
-	to ensure fair distribution across domains
+Builds a balanced queue of URLs by taking one URL from each domain in rounds
+to ensure fair distribution across domains
 */
 func (s *Scheduler) buildBalancedWorkQueue(domains []string) {
 	s.mutex.Lock()
@@ -229,8 +248,8 @@ func (s *Scheduler) buildBalancedWorkQueue(domains []string) {
 }
 
 /*
-	Shuffles the URLs while maintaining distance between URLs from the same domain
-	to prevent hammering a single domain with consecutive requests
+Shuffles the URLs while maintaining distance between URLs from the same domain
+to prevent hammering a single domain with consecutive requests
 */
 func (s *Scheduler) shuffleWithDomainAwareness(urls []string) {
 	if len(urls) <= 1 {
@@ -395,30 +414,95 @@ func (s *Scheduler) incrementFailedURLs(url string) {
 func (s *Scheduler) incrementProcessedURLs(url string, duration time.Duration) {
 	s.mutex.Lock()
 	s.stats.ProcessedURLs++
+	if domain, err := utils.ExtractDomain(url); err == nil {
+		s.rateLimitBackoffs[domain] = 0
+	}
 	s.mutex.Unlock()
 	s.domainManager.RecordURLProcessed(url, true, duration)
 }
 
 func (s *Scheduler) registerFetchError(domain string, fetchErr error) {
+	isRateLimit := utils.IsRateLimitError(fetchErr)
+	isWAF := utils.IsWAFError(fetchErr)
+
 	s.mutex.Lock()
-	s.stats.DomainRetries[domain]++
-
-	if utils.IsRateLimitError(fetchErr) {
-		s.stats.RateLimitHits++
-	} else if utils.IsWAFError(fetchErr) {
-		s.stats.WAFBlockHits++
+	if s.discardedDomains[domain] {
+		s.mutex.Unlock()
+		return
 	}
-	s.mutex.Unlock()
 
-	if utils.IsRateLimitError(fetchErr) {
-		s.domainManager.AddBlockedDomain(domain, 20*time.Second)
-	} else if utils.IsWAFError(fetchErr) {
-		s.domainManager.AddBlockedDomain(domain, 60*time.Second)
+	s.stats.DomainRetries[domain]++
+	if isRateLimit {
+		s.stats.RateLimitHits++
+		s.rateLimitBackoffs[domain]++
+		backoffCount := s.rateLimitBackoffs[domain]
+		s.mutex.Unlock()
+
+		if backoffCount >= maxRateLimitBackoffsBeforeDiscard {
+			s.discardDomain(domain, fmt.Sprintf("persistent HTTP 429 after %d backoff cycles", backoffCount))
+			return
+		}
+
+		blockDuration := s.calculateRateLimitBlockDuration(backoffCount)
+		s.domainManager.AddBlockedDomain(domain, blockDuration)
+		s.logger.Warning("Domain %s temporarily blocked for %s after 429 (backoff %d/%d)",
+			domain, blockDuration.Round(time.Second), backoffCount, maxRateLimitBackoffsBeforeDiscard)
+	} else if isWAF {
+		s.stats.WAFBlockHits++
+		s.mutex.Unlock()
+		s.domainManager.AddBlockedDomain(domain, wafBlockDuration)
+		s.logger.Warning("Domain %s temporarily blocked for %s due to WAF detection",
+			domain, wafBlockDuration.Round(time.Second))
+	} else {
+		s.mutex.Unlock()
 	}
 
 	s.mutex.Lock()
 	s.stats.BlockedDomains = s.domainManager.GetBlockedDomainCount()
 	s.mutex.Unlock()
+}
+
+func (s *Scheduler) calculateRateLimitBlockDuration(backoffCount int) time.Duration {
+	adaptiveMode := s.client.GetRateLimit() == 0
+	base := baseRateLimitBlock
+	if !adaptiveMode {
+		base = 5 * time.Second
+	}
+
+	exp := math.Pow(2, float64(backoffCount-1))
+	d := time.Duration(float64(base) * exp)
+	if d > maxRateLimitBlock {
+		return maxRateLimitBlock
+	}
+	return d
+}
+
+func (s *Scheduler) discardDomain(domain string, reason string) {
+	s.mutex.Lock()
+	if s.discardedDomains[domain] {
+		s.mutex.Unlock()
+		return
+	}
+	s.discardedDomains[domain] = true
+	s.stats.DiscardedDomains++
+
+	filtered := make([]string, 0, len(s.waitingURLs))
+	removedFromQueue := 0
+	for _, queuedURL := range s.waitingURLs {
+		queuedDomain, err := utils.ExtractDomain(queuedURL)
+		if err == nil && queuedDomain == domain {
+			removedFromQueue++
+			continue
+		}
+		filtered = append(filtered, queuedURL)
+	}
+	s.waitingURLs = filtered
+	s.stats.FailedURLs += removedFromQueue
+	s.stats.DiscardedURLs += removedFromQueue
+	s.mutex.Unlock()
+
+	s.domainManager.RemoveDomain(domain)
+	s.logger.Warning("Discarded domain %s and %d queued URLs: %s", domain, removedFromQueue, reason)
 }
 
 func (s *Scheduler) GetNextURL() (string, bool) {
@@ -456,16 +540,18 @@ func (s *Scheduler) GetStats() SchedulerStats {
 	defer s.mutex.Unlock()
 
 	statsCopy := SchedulerStats{
-		TotalURLs:      s.stats.TotalURLs,
-		ProcessedURLs:  s.stats.ProcessedURLs,
-		FailedURLs:     s.stats.FailedURLs,
-		BlockedDomains: s.stats.BlockedDomains,
-		TotalSecrets:   s.stats.TotalSecrets,
-		StartTime:      s.stats.StartTime,
-		EndTime:        s.stats.EndTime,
-		RateLimitHits:  s.stats.RateLimitHits,
-		WAFBlockHits:   s.stats.WAFBlockHits,
-		DomainRetries:  make(map[string]int),
+		TotalURLs:        s.stats.TotalURLs,
+		ProcessedURLs:    s.stats.ProcessedURLs,
+		FailedURLs:       s.stats.FailedURLs,
+		BlockedDomains:   s.stats.BlockedDomains,
+		TotalSecrets:     s.stats.TotalSecrets,
+		StartTime:        s.stats.StartTime,
+		EndTime:          s.stats.EndTime,
+		RateLimitHits:    s.stats.RateLimitHits,
+		WAFBlockHits:     s.stats.WAFBlockHits,
+		DomainRetries:    make(map[string]int),
+		DiscardedDomains: s.stats.DiscardedDomains,
+		DiscardedURLs:    s.stats.DiscardedURLs,
 	}
 
 	for domain, count := range s.stats.DomainRetries {

@@ -88,7 +88,7 @@ func (dm *DomainManager) IsBlocked(domain string) bool {
 }
 
 /*
-   Returns the next available domain that is not blocked and has URLs to process
+Returns the next available domain that is not blocked and has URLs to process
 */
 func (dm *DomainManager) GetNextDomain() string {
 	dm.mu.RLock()
@@ -289,4 +289,16 @@ func (dm *DomainManager) GetUnblockedDomainsCount() int {
 		}
 	}
 	return count
+}
+
+// RemoveDomain removes a domain and all its queued URLs from the domain manager.
+// Returns the number of URLs removed from the domain bucket.
+func (dm *DomainManager) RemoveDomain(domain string) int {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+
+	removed := len(dm.domains[domain])
+	delete(dm.domains, domain)
+	delete(dm.blockedDomains, domain)
+	return removed
 }
