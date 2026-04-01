@@ -45,6 +45,19 @@ Secret detection is performed using regular expressions with additional context 
 3. **Filtering**: Filter out common false positives based on heuristics and optional Shannon entropy checks
 4. **Validation**: Perform type-specific validation for certain secret types
 
+### Hybrid Validation Engine
+
+SecretHound now uses a shared hybrid validation engine for both remote and local scanning paths.
+
+- Applies hard guards (length bounds, UUID/file-path/content-type rejection where applicable)
+- Applies optional entropy gates (`useentropy`, `minentropy`, `entropyminlength`)
+- Computes a confidence score from multiple signals instead of relying only on hardcoded keyword exclusion
+- Supports context-driven YAML controls:
+  - `requiredcontextany`
+  - `contextboostany`
+  - `contextpenaltyany`
+- Compiles `excluderegexes` once per pattern and reuses them during candidate evaluation
+
 ## Threading Model
 
 SecretHound uses a concurrent processing model with controlled parallelism:
