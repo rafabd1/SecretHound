@@ -167,7 +167,7 @@ func (c *Client) SetRateLimit(domain string, requestsPerSecond int) {
 }
 
 /*
-   Fetches JavaScript content from a URL with retry logic and adaptive rate limiting
+Fetches JavaScript content from a URL with retry logic and adaptive rate limiting
 */
 func (c *Client) GetJSContent(urlStr string) (string, error) {
 	c.mutex.Lock()
@@ -235,7 +235,7 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 					c.logger.Debug("Network error for %s, retrying (%d/%d): %v", urlStr, retryCount+1, c.maxRetries, requestErr)
 				}
 				retriesUsed++
-				retryDelay = c.calculateBackoff(retryCount, domain)
+				retryDelay = c.calculateBackoff(retryCount)
 				time.Sleep(retryDelay)
 				continue
 			}
@@ -269,27 +269,15 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 		cancel()
 
 		isRateLimited := c.filter.IsRateLimited(resp)
-		isWAFBlocked := c.filter.IsWAFBlocked(resp)
 
 		if isRateLimited {
 			c.logger.Warning("Server rate limit detected for %s (Status: %d)", urlStr, resp.StatusCode)
 			c.rateLimiter.NotifyRateLimitError(domain)
 			c.markRequestFailed()
-			return "", utils.NewError(utils.RateLimitError, fmt.Sprintf("server rate limited %s (Status %d)", urlStr, resp.StatusCode), nil)
+			return "", newErrorWithStatus(utils.RateLimitError, fmt.Sprintf("server rate limited %s (Status %d)", urlStr, resp.StatusCode), resp.StatusCode)
 		}
 
-		if isWAFBlocked {
-			c.logger.Warning("WAF block detected for %s (Status: %d)", urlStr, resp.StatusCode)
-			bodyStr := string(respBodyBytes)
-			if len(bodyStr) > 100 {
-				bodyStr = bodyStr[:100] + "..."
-			}
-			c.logger.Debug("WAF Response Body Snippet: %s", bodyStr)
-			c.markRequestFailed()
-			return "", utils.NewError(utils.WAFError, fmt.Sprintf("WAF blocked %s (Status %d)", urlStr, resp.StatusCode), nil)
-		}
-
-		shouldRetry, retryDelay = c.shouldRetryStatus(resp.StatusCode, retryCount, domain)
+		shouldRetry, retryDelay = c.shouldRetryStatus(resp.StatusCode, retryCount)
 		if shouldRetry && retryCount < c.maxRetries {
 			c.logger.Debug("Received status %d for %s, retrying (%d/%d) after %s", resp.StatusCode, urlStr, retryCount+1, c.maxRetries, retryDelay)
 			retriesUsed++
@@ -304,7 +292,7 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 		}
 		c.logger.Debug("Final Error Response Body Snippet: %s", bodyStr)
 		c.markRequestFailed()
-		return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed %s after %d retries (Status %d)", urlStr, retryCount+1, resp.StatusCode), nil)
+		return "", newErrorWithStatus(utils.NetworkError, fmt.Sprintf("failed %s after %d retries (Status %d)", urlStr, retryCount+1, resp.StatusCode), resp.StatusCode)
 	}
 
 	if resp == nil {
@@ -314,6 +302,12 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 
 	c.markRequestFailed()
 	return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed %s after retries", urlStr), nil)
+}
+
+func newErrorWithStatus(errType utils.ErrorType, message string, statusCode int) *utils.AppError {
+	e := utils.NewError(errType, message, nil)
+	e.StatusCode = statusCode
+	return e
 }
 
 func (c *Client) markRequestFailed() {
@@ -434,23 +428,15 @@ func (c *Client) GetRateLimit() int {
 	return c.rateLimiter.globalLimit
 }
 
-func (c *Client) shouldRetryStatus(statusCode int, retryCount int, domain string) (bool, time.Duration) {
-	switch {
-	case statusCode >= 500:
-		return true, c.calculateBackoff(retryCount, domain)
-	case statusCode == 429:
-		return true, c.calculateBackoff(retryCount, domain) * 2
-	case statusCode >= 400 && statusCode < 500:
-		if statusCode == 408 || statusCode == 425 {
-			return true, c.calculateBackoff(retryCount, domain)
-		}
-		return false, 0
-	default:
+func (c *Client) shouldRetryStatus(statusCode int, retryCount int) (bool, time.Duration) {
+	if statusCode == 429 {
+		return true, c.calculateBackoff(retryCount) * 2
+	} else {
 		return false, 0
 	}
 }
 
-func (c *Client) calculateBackoff(retryCount int, domain string) time.Duration {
+func (c *Client) calculateBackoff(retryCount int) time.Duration {
 	baseDelay := time.Duration(1<<uint(retryCount)) * time.Second
 
 	jitterFactor := 0.5 + 0.5*utils.RandomFloat()

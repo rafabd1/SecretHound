@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -41,8 +42,8 @@ type SchedulerStats struct {
 	StartTime        time.Time
 	EndTime          time.Time
 	RateLimitHits    int
-	WAFBlockHits     int
 	DomainRetries    map[string]int
+	HTTPStatusHits   map[int]int
 	DiscardedDomains int
 	DiscardedURLs    int
 }
@@ -50,8 +51,7 @@ type SchedulerStats struct {
 const (
 	baseRateLimitBlock                = 10 * time.Second
 	maxRateLimitBlock                 = 5 * time.Minute
-	maxRateLimitBackoffsBeforeDiscard = 6
-	wafBlockDuration                  = 60 * time.Second
+	maxRateLimitBackoffsBeforeDiscard = 2
 )
 
 func NewScheduler(domainManager *networking.DomainManager, client *networking.Client,
@@ -71,8 +71,9 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 		ctx:           ctx,
 		cancel:        cancel,
 		stats: SchedulerStats{
-			DomainRetries: make(map[string]int),
-			StartTime:     time.Now(),
+			DomainRetries:  make(map[string]int),
+			HTTPStatusHits: make(map[int]int),
+			StartTime:      time.Now(),
 		},
 		rateLimitBackoffs: make(map[string]int),
 		discardedDomains:  make(map[string]bool),
@@ -188,7 +189,10 @@ func (s *Scheduler) Schedule(urls []string) error {
 	secrets := s.stats.TotalSecrets
 	failed := s.stats.FailedURLs
 	rateLimitHits := s.stats.RateLimitHits
-	wafHits := s.stats.WAFBlockHits
+	statusHits := make(map[int]int, len(s.stats.HTTPStatusHits))
+	for code, n := range s.stats.HTTPStatusHits {
+		statusHits[code] = n
+	}
 	discardedDomains := s.stats.DiscardedDomains
 	discardedURLs := s.stats.DiscardedURLs
 	s.mutex.Unlock()
@@ -198,9 +202,11 @@ func (s *Scheduler) Schedule(urls []string) error {
 	s.logger.Info("Found %d secrets", secrets)
 	s.logger.Info("Failed to process %d URLs", failed)
 	s.logger.Info("Encountered rate limiting %d times", rateLimitHits)
-	s.logger.Info("Encountered WAF blocks %d times", wafHits)
+	if len(statusHits) > 0 {
+		s.logger.Info("HTTP status summary: %s", formatStatusSummary(statusHits))
+	}
 	if discardedDomains > 0 {
-		s.logger.Warning("Discarded %d domains and %d queued URLs due to persistent blocking", discardedDomains, discardedURLs)
+		s.logger.Info("Discarded %d domains and %d pending queued URLs due to persistent HTTP 429 blocking", discardedDomains, discardedURLs)
 	}
 
 	if s.logger.IsVerbose() {
@@ -422,8 +428,13 @@ func (s *Scheduler) incrementProcessedURLs(url string, duration time.Duration) {
 }
 
 func (s *Scheduler) registerFetchError(domain string, fetchErr error) {
-	isRateLimit := utils.IsRateLimitError(fetchErr)
-	isWAF := utils.IsWAFError(fetchErr)
+	statusCode := extractStatusCode(fetchErr)
+	isRateLimit := statusCode == 429
+	if statusCode > 0 {
+		s.mutex.Lock()
+		s.stats.HTTPStatusHits[statusCode]++
+		s.mutex.Unlock()
+	}
 
 	s.mutex.Lock()
 	if s.discardedDomains[domain] {
@@ -447,12 +458,6 @@ func (s *Scheduler) registerFetchError(domain string, fetchErr error) {
 		s.domainManager.AddBlockedDomain(domain, blockDuration)
 		s.logger.Warning("Domain %s temporarily blocked for %s after 429 (backoff %d/%d)",
 			domain, blockDuration.Round(time.Second), backoffCount, maxRateLimitBackoffsBeforeDiscard)
-	} else if isWAF {
-		s.stats.WAFBlockHits++
-		s.mutex.Unlock()
-		s.domainManager.AddBlockedDomain(domain, wafBlockDuration)
-		s.logger.Warning("Domain %s temporarily blocked for %s due to WAF detection",
-			domain, wafBlockDuration.Round(time.Second))
 	} else {
 		s.mutex.Unlock()
 	}
@@ -502,7 +507,7 @@ func (s *Scheduler) discardDomain(domain string, reason string) {
 	s.mutex.Unlock()
 
 	s.domainManager.RemoveDomain(domain)
-	s.logger.Warning("Discarded domain %s and %d queued URLs: %s", domain, removedFromQueue, reason)
+	s.logger.Info("ALERT: Discarded domain %s (removed %d pending queued URLs): %s", domain, removedFromQueue, reason)
 }
 
 func (s *Scheduler) GetNextURL() (string, bool) {
@@ -548,8 +553,8 @@ func (s *Scheduler) GetStats() SchedulerStats {
 		StartTime:        s.stats.StartTime,
 		EndTime:          s.stats.EndTime,
 		RateLimitHits:    s.stats.RateLimitHits,
-		WAFBlockHits:     s.stats.WAFBlockHits,
 		DomainRetries:    make(map[string]int),
+		HTTPStatusHits:   make(map[int]int),
 		DiscardedDomains: s.stats.DiscardedDomains,
 		DiscardedURLs:    s.stats.DiscardedURLs,
 	}
@@ -557,8 +562,55 @@ func (s *Scheduler) GetStats() SchedulerStats {
 	for domain, count := range s.stats.DomainRetries {
 		statsCopy.DomainRetries[domain] = count
 	}
+	for code, count := range s.stats.HTTPStatusHits {
+		statsCopy.HTTPStatusHits[code] = count
+	}
 
 	return statsCopy
+}
+
+func extractStatusCode(err error) int {
+	var appErr *utils.AppError
+	if errors.As(err, &appErr) {
+		return appErr.StatusCode
+	}
+	return 0
+}
+
+func formatStatusSummary(statusHits map[int]int) string {
+	ordered := []int{429, 403, 404, 500, 502, 503, 504}
+	parts := make([]string, 0, len(statusHits))
+	seen := make(map[int]bool, len(statusHits))
+
+	for _, code := range ordered {
+		if n, ok := statusHits[code]; ok && n > 0 {
+			parts = append(parts, fmt.Sprintf("%d=%d", code, n))
+			seen[code] = true
+		}
+	}
+
+	for code, n := range statusHits {
+		if seen[code] || n <= 0 {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%d=%d", code, n))
+	}
+
+	if len(parts) == 0 {
+		return "none"
+	}
+	return fmt.Sprintf("%s", joinWithComma(parts))
+}
+
+func joinWithComma(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	out := parts[0]
+	for i := 1; i < len(parts); i++ {
+		out += ", " + parts[i]
+	}
+	return out
 }
 
 func (s *Scheduler) Stop() {
