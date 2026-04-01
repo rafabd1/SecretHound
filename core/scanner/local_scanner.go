@@ -58,8 +58,8 @@ func NewLocalScanner(
 		config.Concurrency = 10
 	}
 
-	if config.MaxFileSize <= 0 {
-		config.MaxFileSize = 10 * 1024 * 1024
+	if config.MaxFileSize < 0 {
+		config.MaxFileSize = 0
 	}
 
 	secretDetector := detector.NewDetector(
@@ -87,7 +87,7 @@ func NewLocalScanner(
 }
 
 /*
-   Scans a list of files for secrets and returns stats and error information
+Scans a list of files for secrets and returns stats and error information
 */
 func (s *LocalScanner) ScanFiles(files []string) (LocalScanStats, error) {
 	s.mu.Lock()
@@ -224,7 +224,7 @@ func (s *LocalScanner) ScanFiles(files []string) (LocalScanStats, error) {
 }
 
 /*
-   Processes a single file by checking its size, content and searching for secrets
+Processes a single file by checking its size, content and searching for secrets
 */
 func (s *LocalScanner) processFile(filePath string) (int, error) {
 	select {
@@ -300,7 +300,7 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 }
 
 /*
-   Returns a deduplicated and sorted list of files for deterministic processing
+Returns a deduplicated and sorted list of files for deterministic processing
 */
 func (s *LocalScanner) getUniqueAndSortedFiles(files []string) []string {
 	uniqueMap := make(map[string]bool)

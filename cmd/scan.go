@@ -102,6 +102,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 	concurrency := vip.GetInt("concurrency")
 	inputFile := vip.GetString("input_file")
 	outputFile := vip.GetString("output")
+	maxFileSizeMB := vip.GetInt64("max_file_size")
+	maxFileSizeBytes := int64(0)
+	if maxFileSizeMB > 0 {
+		maxFileSizeBytes = maxFileSizeMB * 1024 * 1024
+	}
 
 	// --- Log Initial Configuration Summary (Conditionally) ---
 	if !silentMode {
@@ -170,7 +175,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	// --- Input Collection ---
-	inputs, err := collectInputSources(inputFile, args, logger)
+	inputs, err := collectInputSources(inputFile, args, logger, maxFileSizeBytes)
 	if err != nil {
 		return err
 	}
@@ -275,7 +280,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			secrets, err := processLocalFiles(localFiles, logger, writer, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, vip.GetInt64("max_file_size"))
+			secrets, err := processLocalFiles(localFiles, logger, writer, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, maxFileSizeMB)
 			if err != nil {
 				logger.Error("Error processing local files: %v", err)
 				mu.Lock()
@@ -328,9 +333,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 }
 
 /*
-	Gathers all input sources from arguments and input file
+Gathers all input sources from arguments and input file
 */
-func collectInputSources(inputFile string, args []string, logger *output.Logger) ([]string, error) {
+func collectInputSources(inputFile string, args []string, logger *output.Logger, maxFileSizeBytes int64) ([]string, error) {
 	var inputs []string
 
 	if len(args) > 0 {
@@ -347,7 +352,7 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 				}
 
 				if fileInfo.IsDir() {
-					dirFiles, err := collectFilesFromDirectory(arg, logger)
+					dirFiles, err := collectFilesFromDirectory(arg, logger, maxFileSizeBytes)
 					if err != nil {
 						logger.Warning("Error processing directory '%s': %v", arg, err)
 						continue
@@ -387,7 +392,7 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 		}
 
 		if fileInfo.IsDir() {
-			dirFiles, err := collectFilesFromDirectory(inputPath, logger)
+			dirFiles, err := collectFilesFromDirectory(inputPath, logger, maxFileSizeBytes)
 			if err != nil {
 				return nil, err
 			}
@@ -419,7 +424,7 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger)
 }
 
 /*
-	Determines if a file contains a list of URLs/paths
+Determines if a file contains a list of URLs/paths
 */
 func isFileURLList(filePath string) (bool, []string, error) {
 	content, err := os.ReadFile(filePath)
@@ -483,7 +488,7 @@ func isFileURLList(filePath string) (bool, []string, error) {
 }
 
 /*
-	Checks if the file extension indicates content to scan directly
+Checks if the file extension indicates content to scan directly
 */
 func isContentExtension(ext string) bool {
 	contentExtensions := map[string]bool{
@@ -509,7 +514,7 @@ func isContentExtension(ext string) bool {
 }
 
 /*
-	Checks if a string looks like a URL or file path
+Checks if a string looks like a URL or file path
 */
 func looksLikeURLOrPath(s string) bool {
 	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
@@ -531,7 +536,7 @@ func looksLikeURLOrPath(s string) bool {
 }
 
 /*
-	Checks if content appears to be code
+Checks if content appears to be code
 */
 func looksLikeCode(content string) bool {
 	codePatterns := []string{
@@ -558,9 +563,9 @@ func min(a, b int) int {
 }
 
 /*
-	Recursively collects all readable files from a directory
+Recursively collects all readable files from a directory
 */
-func collectFilesFromDirectory(dirPath string, logger *output.Logger) ([]string, error) {
+func collectFilesFromDirectory(dirPath string, logger *output.Logger, maxFileSizeBytes int64) ([]string, error) {
 	var files []string
 
 	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
@@ -573,7 +578,7 @@ func collectFilesFromDirectory(dirPath string, logger *output.Logger) ([]string,
 			return nil
 		}
 
-		if utils.IsBinaryFile(path) || info.Size() > 10*1024*1024 {
+		if utils.IsBinaryFile(path) || (maxFileSizeBytes > 0 && info.Size() > maxFileSizeBytes) {
 			logger.Debug("Skipping binary or large file: %s", path)
 			return nil
 		}
@@ -591,7 +596,7 @@ func collectFilesFromDirectory(dirPath string, logger *output.Logger) ([]string,
 }
 
 /*
-	Separates inputs into remote URLs and local files
+Separates inputs into remote URLs and local files
 */
 func categorizeInputs(inputs []string) ([]string, []string) {
 	var remoteURLs, localFiles []string
@@ -631,8 +636,8 @@ func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
 }
 
 /*
-	Processes local files using the scanner
-	Signature updated to accept silent bool
+Processes local files using the scanner
+Signature updated to accept silent bool
 */
 func processLocalFiles(files []string, logger *output.Logger, writer *output.Writer, pm *patterns.PatternManager, concurrency int, noProgress bool, silent bool, maxFileSizeMB int64) (int, error) {
 	scannerCfg := scanner.LocalScannerConfig{
@@ -731,7 +736,7 @@ func initScanCmd(cmd *cobra.Command) {
 	cmd.Flags().IntP("retries", "r", 2, "Maximum number of retries for failed HTTP requests")
 	cmd.Flags().StringP("proxy", "p", "", "Proxy URL (e.g., http://127.0.0.1:8080)")
 	cmd.Flags().StringSliceP("header", "H", []string{}, "Custom headers to include in requests (e.g., 'Cookie: session=...')")
-	cmd.Flags().Bool("insecure", false, "Disable TLS certificate verification")
+	cmd.Flags().Bool("insecure", true, "Disable TLS certificate verification (default: true)")
 	vip.BindPFlag("timeout", cmd.Flags().Lookup("timeout"))
 	vip.BindPFlag("retries", cmd.Flags().Lookup("retries"))
 	vip.BindPFlag("proxy", cmd.Flags().Lookup("proxy"))

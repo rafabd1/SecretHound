@@ -113,12 +113,12 @@ SecretHound supports the following options:
 | `-c, --concurrency` | Number of concurrent workers. | 50 |
 | `-l, --rate-limit` | Max requests per second per domain (0 for auto/unlimited). | 0 |
 | `-H, --header` | Custom HTTP header to add (e.g., "Authorization: Bearer token"). Can be used multiple times. | - |
-| `--insecure` | Disable SSL/TLS certificate verification. | false |
+| `--insecure` | Disable SSL/TLS certificate verification. | true |
 | `--include-categories` | Comma-separated list of pattern categories to include (e.g., aws,gcp). | all enabled |
 | `--exclude-categories` | Comma-separated list of pattern categories to exclude (e.g., pii,url). | none |
 | `--scan-urls` | URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters). | false |
 | `--patterns-file` | Path to a custom YAML patterns file to replace embedded defaults. | - |
-| `--max-file-size` | Maximum file size to scan in MB (0 for no limit). | 10 |
+| `--max-file-size` | Maximum file size to scan in MB (0 for no limit). | 0 |
 | `--list-patterns` | List available pattern categories and patterns, then exit. | false |
 | `-v, --verbose` | Enable verbose logging output. | false |
 | `-n, --no-progress` | Disable the progress bar display. | false |
