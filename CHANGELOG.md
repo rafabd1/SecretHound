@@ -19,13 +19,13 @@
   - load statistics now track `loaded/selected/total`
   - compile and validation failures are surfaced with detailed logs
   - invalid `excluderegexes` are reported per pattern
+- Added explicit Shannon entropy validation flow in the detection pipeline to better gate token-like candidates and reduce false positives.
+- Introduced a hybrid confidence scoring heuristic (context boosts/penalties + hard guards + entropy) replacing heavy dependence on hardcoded keyword exclusion.
 - Startup summary now reports pattern loading as `loaded/total` for clearer visibility.
 - `--list-patterns` now reflects only successfully compiled/loaded patterns.
 - Pattern taxonomy was refined:
   - `gitlab_personal_token` aligned with code/platform token category
   - multiple imported patterns recategorized to reduce ambiguity and improve filter usability.
-- README updated to reflect current scale and capabilities (no longer “60 patterns” era).
-- `docs/README.md` simplified and centralized to root documentation entrypoint.
 
 ### Bug Fixes
 - Fixed root CLI flag exposure for custom pattern files (`--patterns-file`) so it works in the standard command path.
