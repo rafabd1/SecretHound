@@ -1,6 +1,7 @@
 package detector
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/rafabd1/SecretHound/core/patterns"
@@ -28,7 +29,6 @@ type Detector struct {
 type Stats struct {
 	ContentProcessed int
 	SecretsFound     int
-	ProcessingErrors int
 }
 
 func NewDetector(patternManager *patterns.PatternManager, logger *output.Logger, config Config) *Detector {
@@ -60,18 +60,7 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 	d.logger.Debug("Using %d regex patterns for detection", len(patterns))
 
 	if len(patterns) == 0 {
-		fallback := NewFallbackDetector()
-		secrets := fallback.DetectWithFallback(content, url)
-
-		if len(secrets) > 0 {
-			d.logger.Warning("Using fallback detection mode - limited patterns available")
-
-			d.mu.Lock()
-			d.stats.SecretsFound += len(secrets)
-			d.mu.Unlock()
-
-			return secrets, nil
-		}
+		return nil, fmt.Errorf("no compiled patterns loaded; check pattern configuration")
 	}
 
 	var secrets []secret.Secret
@@ -102,16 +91,6 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 
 				secrets = append(secrets, s)
 			}
-		}
-	}
-
-	if len(secrets) == 0 && d.stats.ProcessingErrors > 5 {
-		fallback := NewFallbackDetector()
-		fallbackSecrets := fallback.DetectWithFallback(content, url)
-
-		if len(fallbackSecrets) > 0 {
-			d.logger.Warning("Detection errors detected - using fallback patterns")
-			secrets = fallbackSecrets
 		}
 	}
 
