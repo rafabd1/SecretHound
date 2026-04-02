@@ -35,7 +35,6 @@ func ResolveFindingRisk(patternType string, pm *PatternManager) FindingRisk {
 		"shopify_private_app_token",
 		"shopify_custom_app_token",
 		"stripe_secret_key",
-		"stripe_test_secret_key",
 		"supabase_service_role_key":
 		return RiskHigh
 	}
@@ -46,7 +45,8 @@ func ResolveFindingRisk(patternType string, pm *PatternManager) FindingRisk {
 		"ethereum_address",
 		"public_key",
 		"public_key_content",
-		"stripe_test_publishable_key":
+		"stripe_test_publishable_key",
+		"stripe_test_secret_key":
 		return RiskInformative
 	case "google_api_key",
 		"google_cloud_platform",
