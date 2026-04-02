@@ -273,6 +273,17 @@ func (pm *PatternManager) GetCompiledPatterns() map[string]*CompiledPattern {
 	return patterns
 }
 
+func (pm *PatternManager) GetPatternConfig(name string) (PatternConfig, bool) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	if pm.definitions == nil || pm.definitions.Patterns == nil {
+		return PatternConfig{}, false
+	}
+	cfg, ok := pm.definitions.Patterns[name]
+	return cfg, ok
+}
+
 func (pm *PatternManager) GetDefinitions() *PatternDefinitions {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()

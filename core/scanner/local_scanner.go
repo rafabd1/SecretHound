@@ -22,17 +22,19 @@ type LocalScannerConfig struct {
 	ProcessBinaryFiles bool
 	NoProgress         bool
 	Silent             bool
+	ForceInfoFindings  bool
 }
 
 type LocalScanner struct {
-	detector   *detector.Detector
-	writer     *output.Writer
-	logger     *output.Logger
-	config     LocalScannerConfig
-	stats      LocalScanStats
-	mu         sync.Mutex
-	ctx        context.Context
-	cancelFunc context.CancelFunc
+	detector       *detector.Detector
+	patternManager *patterns.PatternManager
+	writer         *output.Writer
+	logger         *output.Logger
+	config         LocalScannerConfig
+	stats          LocalScanStats
+	mu             sync.Mutex
+	ctx            context.Context
+	cancelFunc     context.CancelFunc
 }
 
 type LocalScanStats struct {
@@ -74,12 +76,13 @@ func NewLocalScanner(
 	)
 
 	return &LocalScanner{
-		detector:   secretDetector,
-		writer:     writer,
-		logger:     logger,
-		config:     config,
-		ctx:        ctx,
-		cancelFunc: cancel,
+		detector:       secretDetector,
+		patternManager: patternManager,
+		writer:         writer,
+		logger:         logger,
+		config:         config,
+		ctx:            ctx,
+		cancelFunc:     cancel,
 		stats: LocalScanStats{
 			StartTime: time.Now(),
 		},
@@ -304,11 +307,13 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 		}
 		for _, key := range order {
 			entry := groupedLogs[key]
-			s.logger.SecretFoundWithCount(entry.secretType, entry.secretValue, entry.secretURL, entry.count)
+			risk := patterns.ResolveFindingRisk(entry.secretType, s.patternManager)
+			s.logger.SecretFoundWithCountRisk(entry.secretType, entry.secretValue, entry.secretURL, entry.count, string(risk), s.config.ForceInfoFindings)
 		}
 		if s.writer != nil {
 			for _, sec := range secrets {
-				if err := s.writer.WriteSecret(sec.URL, sec.Type, sec.Value, sec.URL, sec.Context, sec.Description, sec.Line); err != nil {
+				risk := patterns.ResolveFindingRisk(sec.Type, s.patternManager)
+				if err := s.writer.WriteSecret(sec.URL, sec.Type, string(risk), sec.Value, sec.URL, sec.Context, sec.Description, sec.Line); err != nil {
 					s.logger.Error("Failed to write secret to output: %v", err)
 				}
 			}

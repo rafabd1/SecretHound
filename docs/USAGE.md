@@ -80,6 +80,8 @@ Standard JSON output:
 secrethound -i ./targets.txt -o ./output.json
 ```
 
+When using standard output modes (non-`--raw`), each finding now includes a `risk` field (`informative`, `low`, `medium`, `high`) in JSON/CSV/TXT.
+
 Grouped output:
 
 ```bash
@@ -159,9 +161,23 @@ Rate-limit behavior:
 - After the configured max backoff cycles, the domain is safely discarded and an alert is logged (except in `--silent` mode).
 - Final scan output prints an HTTP status summary (`429=...`, `403=...`, etc.) to aid diagnosis.
 
+## Finding Risk Levels
+
+SecretHound classifies each finding into one of the following risk levels:
+
+- `informative`: Usually public/low-impact data by default. Example: public keys, test publishable keys, many PII indicators.
+- `low`: Potentially sensitive in misconfigured environments, but often expected/public in normal setups. Example: many publishable/provider public API keys.
+- `medium`: Clear secret exposure risk, but impact depends more on environment scope and permissions.
+- `high`: Highly sensitive credentials with immediate abuse potential in most real scenarios. Example: private keys, personal access tokens, secret API keys.
+
+Notes:
+
+- In `--scan-urls` mode, live finding logs stay as `[INFO]` to preserve endpoint extraction behavior.
+- Risk is still written to output files (`json`, `txt`, `csv`) in non-`--raw` mode.
+
 ## Commands
 
-Version:
+Version: 
 
 ```bash
 secrethound version

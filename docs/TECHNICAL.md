@@ -101,6 +101,7 @@ SecretHound uses a specialized terminal output system to provide a responsive an
 2. **Colored Logging**: Color-coded log messages for different severity levels
 3. **Terminal Controller**: Coordinates between progress bar and log messages to prevent overlap
 4. **Rate Statistics**: Shows processing rate and ETA
+5. **Risk-Aware Findings**: Secret findings are color-coded by risk (`informative`, `low`, `medium`, `high`); in `--scan-urls` mode findings intentionally stay as `INFO`
 
 ### Result Output
 
@@ -108,6 +109,8 @@ Results can be output in multiple formats:
 
 1. **Text Format**: Human-readable format with contextual information
 2. **JSON Format**: Structured format for programmatic processing
+3. **CSV Format**: Structured tabular format for ingestion and reporting
+4. **Risk Metadata**: Non-raw outputs include the per-finding `risk` level
 
 ### Output Handling
 

@@ -12,6 +12,7 @@ import (
 
 type SecretFindingData struct {
 	Type        string   `json:"type"`
+	Risk        string   `json:"risk,omitempty"`
 	Value       string   `json:"value"`
 	SourceURL   string   `json:"source_url"`
 	Context     []string `json:"context,omitempty"`
@@ -77,7 +78,7 @@ func NewWriter(outputPath string, rawMode bool, groupedMode bool) (*Writer, erro
 	return w, nil
 }
 
-func (w *Writer) WriteSecret(sourceForGrouping, secretType, value, specificSourceURL, context, description string, line int) error {
+func (w *Writer) WriteSecret(sourceForGrouping, secretType, risk, value, specificSourceURL, context, description string, line int) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -96,6 +97,7 @@ func (w *Writer) WriteSecret(sourceForGrouping, secretType, value, specificSourc
 			}
 			w.groupedFindings[sourceForGrouping] = append(w.groupedFindings[sourceForGrouping], SecretFindingData{
 				Type:        secretType,
+				Risk:        risk,
 				Value:       value,
 				SourceURL:   specificSourceURL,
 				Occurrences: 1,
@@ -111,6 +113,7 @@ func (w *Writer) WriteSecret(sourceForGrouping, secretType, value, specificSourc
 		}
 		w.findings = append(w.findings, SecretFindingData{
 			Type:        secretType,
+			Risk:        risk,
 			Value:       value,
 			SourceURL:   specificSourceURL,
 			Occurrences: 1,
@@ -134,6 +137,7 @@ func (w *Writer) WriteSecret(sourceForGrouping, secretType, value, specificSourc
 
 		w.groupedFindings[sourceForGrouping] = append(w.groupedFindings[sourceForGrouping], SecretFindingData{
 			Type:        secretType,
+			Risk:        risk,
 			Value:       value,
 			SourceURL:   specificSourceURL,
 			Context:     contextSlice(context),
@@ -153,6 +157,7 @@ func (w *Writer) WriteSecret(sourceForGrouping, secretType, value, specificSourc
 
 	w.findings = append(w.findings, SecretFindingData{
 		Type:        secretType,
+		Risk:        risk,
 		Value:       value,
 		SourceURL:   specificSourceURL,
 		Context:     contextSlice(context),
@@ -238,10 +243,11 @@ func marshalCSV(v interface{}) ([]byte, error) {
 
 	switch data := v.(type) {
 	case []SecretFindingData:
-		sb.WriteString("Type,Value,SourceURL,Occurrences,Context,Description\n")
+		sb.WriteString("Type,Risk,Value,SourceURL,Occurrences,Context,Description\n")
 		for _, f := range data {
-			sb.WriteString(fmt.Sprintf("%s,\"%s\",\"%s\",%d,\"%s\",\"%s\"\n",
+			sb.WriteString(fmt.Sprintf("%s,%s,\"%s\",\"%s\",%d,\"%s\",\"%s\"\n",
 				f.Type,
+				escapeCsv(f.Risk),
 				escapeCsv(f.Value),
 				escapeCsv(f.SourceURL),
 				f.Occurrences,
@@ -257,8 +263,9 @@ func marshalCSV(v interface{}) ([]byte, error) {
 		sort.Strings(keys)
 		for _, source := range keys {
 			for _, f := range data[source] {
-				sb.WriteString(fmt.Sprintf("%s,\"%s\",\"%s\",%d,\"%s\",\"%s\"\n",
+				sb.WriteString(fmt.Sprintf("%s,%s,\"%s\",\"%s\",%d,\"%s\",\"%s\"\n",
 					f.Type,
+					escapeCsv(f.Risk),
 					escapeCsv(f.Value),
 					escapeCsv(source),
 					f.Occurrences,
@@ -301,6 +308,9 @@ func marshalTXT(v interface{}) ([]byte, error) {
 	case []SecretFindingData:
 		for _, f := range data {
 			sb.WriteString(fmt.Sprintf("[%s] %s\n", f.Type, f.Value))
+			if f.Risk != "" {
+				sb.WriteString(fmt.Sprintf("Risk: %s\n", f.Risk))
+			}
 			sb.WriteString(fmt.Sprintf("URL: %s\n", f.SourceURL))
 			if f.Occurrences > 1 {
 				sb.WriteString(fmt.Sprintf("Occurrences: %d\n", f.Occurrences))
@@ -323,6 +333,9 @@ func marshalTXT(v interface{}) ([]byte, error) {
 			sb.WriteString(source + ":\n")
 			for _, f := range data[source] {
 				sb.WriteString(fmt.Sprintf("\t[%s] %s\n", f.Type, f.Value))
+				if f.Risk != "" {
+					sb.WriteString(fmt.Sprintf("\tRisk: %s\n", f.Risk))
+				}
 				if f.Occurrences > 1 {
 					sb.WriteString(fmt.Sprintf("\tOccurrences: %d\n", f.Occurrences))
 				}

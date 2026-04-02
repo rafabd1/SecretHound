@@ -29,6 +29,17 @@ Secret detection combines:
 - Pattern-level constraints (`minlength`, `maxlength`, keyword filters)
 - Optional Shannon entropy validation (`useentropy`, `minentropy`, `entropyminlength`)
 
+## Risk Classification
+
+Each finding is also classified by risk level:
+
+- `informative`: generally public or low-impact indicators
+- `low`: potentially risky in misconfigured environments
+- `medium`: clear exposure risk with context-dependent impact
+- `high`: highly sensitive credentials with strong abuse potential
+
+Risk is shown in terminal finding logs (except `--scan-urls`, which keeps `INFO` finding logs) and is included in non-raw output files.
+
 ## Categories and Patterns
 
 ### Auth

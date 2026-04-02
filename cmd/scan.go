@@ -268,7 +268,18 @@ func runScan(cmd *cobra.Command, args []string) error {
 			regexManager.SetPatternManager(pm)
 			processor := core.NewProcessor(regexManager, logger)
 
-			scheduler, err := core.NewScheduler(domainManager, client, processor, writer, logger, scanConcurrency, vip.GetBool("no_progress"), silentMode)
+			scheduler, err := core.NewScheduler(
+				domainManager,
+				client,
+				processor,
+				writer,
+				logger,
+				pm,
+				scanConcurrency,
+				vip.GetBool("no_progress"),
+				silentMode,
+				scanUrlsFlag,
+			)
 			if err != nil {
 				logger.Error("Failed to create URL scheduler: %v", err)
 				mu.Lock()
@@ -298,7 +309,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			secrets, err := processLocalFiles(localFiles, logger, writer, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, maxFileSizeMB)
+			secrets, err := processLocalFiles(localFiles, logger, writer, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, maxFileSizeMB, scanUrlsFlag)
 			if err != nil {
 				logger.Error("Error processing local files: %v", err)
 				mu.Lock()
@@ -657,12 +668,13 @@ func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
 Processes local files using the scanner
 Signature updated to accept silent bool
 */
-func processLocalFiles(files []string, logger *output.Logger, writer *output.Writer, pm *patterns.PatternManager, concurrency int, noProgress bool, silent bool, maxFileSizeMB int64) (int, error) {
+func processLocalFiles(files []string, logger *output.Logger, writer *output.Writer, pm *patterns.PatternManager, concurrency int, noProgress bool, silent bool, maxFileSizeMB int64, forceInfoFindings bool) (int, error) {
 	scannerCfg := scanner.LocalScannerConfig{
-		Concurrency: concurrency,
-		MaxFileSize: maxFileSizeMB * 1024 * 1024,
-		NoProgress:  noProgress,
-		Silent:      silent,
+		Concurrency:       concurrency,
+		MaxFileSize:       maxFileSizeMB * 1024 * 1024,
+		NoProgress:        noProgress,
+		Silent:            silent,
+		ForceInfoFindings: forceInfoFindings,
 	}
 
 	localScanner := scanner.NewLocalScanner(pm, writer, logger, scannerCfg)
