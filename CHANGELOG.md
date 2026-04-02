@@ -1,5 +1,47 @@
 # SecretHound Changelog
 
+## v1.2.0 (2026-04-02)
+
+### Networking Reliability
+- Hardened URL fetching pipeline with safer retry accounting and improved domain-state handling.
+- Added adaptive HTTP `429` backoff strategy with bounded cycles and safe domain discard to avoid endless retry loops.
+- Simplified and tightened rate-limit detection to focus on explicit HTTP `429` semantics.
+- Improved scheduler/domain coordination so blocked/discarded-domain behavior is more deterministic under high concurrency.
+- Added safer queue cleanup/accounting when domains are discarded after repeated `429` responses.
+
+### Runtime Visibility
+- Final processing summary now includes clearer HTTP status insights for troubleshooting (status-code oriented reporting).
+- Domain discard alerts were improved to be explicit about the reason for discard (`persistent HTTP 429` after bounded backoff).
+- Logging flow was refined so local and remote findings are consistently emitted in real time.
+
+### Finding Risk Classification
+- Added per-finding risk classification model with four levels:
+  - `informative`
+  - `low`
+  - `medium`
+  - `high`
+- Added risk-aware colored terminal finding logs by severity level.
+- Kept URL extraction mode (`--scan-urls`) behavior stable by emitting findings as `INFO` in that mode.
+- Added structured `risk` metadata to non-raw output formats (`json`, `txt`, `csv`).
+- Implemented initial mapping by pattern type/category with targeted overrides for high-impact credentials and commonly public keys.
+- Tuned risk model and token heuristics:
+  - `session_token` classified as `low`
+  - `stripe_test_secret_key` classified as `informative`
+  - publishable/public-style keys kept in lower severity bands unless misuse risk is clearer.
+
+### Detection Quality
+- Refined `huggingface_api_token` detection regex with stricter boundaries, reducing false positives in minified payloads.
+- Reduced `session_token` false positives by tightening contextual requirements and adding penalties for common config/reference fields (for example `referenceId`, `tokenLogin`, retry config snippets).
+
+### Documentation
+- Refreshed `docs/USAGE.md` to match current CLI behavior and defaults.
+- Clarified rate-limit/backoff behavior in docs, including distinction between adaptive mode (`-l 0`) and fixed RPS mode.
+- Updated TLS verification docs to reflect current default behavior (`--verify-tls` to enable certificate verification).
+- Documented risk levels and output behavior in:
+  - `docs/USAGE.md`
+  - `docs/TECHNICAL.md`
+  - `docs/SUPPORTED_SECRETS.md`
+
 ## v1.1.0 (2026-04-01)
 
 ### New Features

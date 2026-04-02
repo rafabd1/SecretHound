@@ -1,6 +1,6 @@
 # SecretHound Usage Guide
 
-This guide documents the current CLI behavior and examples for SecretHound `v1.1.0`.
+This guide documents the current CLI behavior and examples for SecretHound `v1.2.0`.
 
 ## Basic Syntax
 
