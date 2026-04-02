@@ -52,7 +52,8 @@ func ResolveFindingRisk(patternType string, pm *PatternManager) FindingRisk {
 		"google_cloud_platform",
 		"stripe_publishable_key",
 		"supabase_anon_key",
-		"supabase_publishable_key":
+		"supabase_publishable_key",
+		"session_token":
 		return RiskLow
 	}
 
