@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rafabd1/SecretHound/core/patterns"
 	"github.com/rafabd1/SecretHound/networking"
 	"github.com/rafabd1/SecretHound/output"
 	"github.com/rafabd1/SecretHound/utils"
@@ -20,6 +21,7 @@ type Scheduler struct {
 	writer            *output.Writer
 	logger            *output.Logger
 	workerPool        *utils.WorkerPool
+	patternManager    *patterns.PatternManager
 	concurrency       int
 	mutex             sync.Mutex
 	waitingURLs       []string
@@ -29,6 +31,7 @@ type Scheduler struct {
 	stats             SchedulerStats
 	noProgress        bool
 	silent            bool
+	forceInfoFindings bool
 	rateLimitBackoffs map[string]int
 	discardedDomains  map[string]bool
 }
@@ -55,21 +58,23 @@ const (
 )
 
 func NewScheduler(domainManager *networking.DomainManager, client *networking.Client,
-	processor *Processor, writer *output.Writer, logger *output.Logger, concurrency int, noProgress bool, silent bool) (*Scheduler, error) {
+	processor *Processor, writer *output.Writer, logger *output.Logger, patternManager *patterns.PatternManager, concurrency int, noProgress bool, silent bool, forceInfoFindings bool) (*Scheduler, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Scheduler{
-		domainManager: domainManager,
-		client:        client,
-		processor:     processor,
-		writer:        writer,
-		logger:        logger,
-		concurrency:   concurrency,
-		noProgress:    noProgress,
-		silent:        silent,
-		ctx:           ctx,
-		cancel:        cancel,
+		domainManager:     domainManager,
+		client:            client,
+		processor:         processor,
+		writer:            writer,
+		logger:            logger,
+		patternManager:    patternManager,
+		concurrency:       concurrency,
+		noProgress:        noProgress,
+		silent:            silent,
+		forceInfoFindings: forceInfoFindings,
+		ctx:               ctx,
+		cancel:            cancel,
 		stats: SchedulerStats{
 			DomainRetries:  make(map[string]int),
 			HTTPStatusHits: make(map[int]int),
@@ -387,11 +392,13 @@ func (s *Scheduler) worker(id int) {
 				}
 				for _, key := range order {
 					entry := groupedLogs[key]
-					s.logger.SecretFoundWithCount(entry.secret.Type, entry.secret.Value, entry.secret.URL, entry.count)
+					risk := patterns.ResolveFindingRisk(entry.secret.Type, s.patternManager)
+					s.logger.SecretFoundWithCountRisk(entry.secret.Type, entry.secret.Value, entry.secret.URL, entry.count, string(risk), s.forceInfoFindings)
 				}
 				for _, secret := range secrets {
 					if s.writer != nil {
-						writeErr := s.writer.WriteSecret(url, secret.Type, secret.Value, url, secret.Context, "", secret.Line)
+						risk := patterns.ResolveFindingRisk(secret.Type, s.patternManager)
+						writeErr := s.writer.WriteSecret(url, secret.Type, string(risk), secret.Value, url, secret.Context, "", secret.Line)
 						if writeErr != nil {
 							s.logger.Error("Worker %d: failed to write secret to output file: %v", id, writeErr)
 						}

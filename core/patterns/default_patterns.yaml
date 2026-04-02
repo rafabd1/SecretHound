@@ -1461,6 +1461,14 @@ patterns:
         category: auth
         minlength: 40
         maxlength: 128
+        requiredcontextany:
+            - session
+            - jsessionid
+            - sid
+            - bearer
+            - authorization
+            - cookie
+            - auth
         contextboostany:
             - session
             - sid
@@ -1495,6 +1503,11 @@ patterns:
             - method
             - get
             - set
+            - referenceid
+            - tokenlogin
+            - max_retries
+            - delayms
+            - hostname
             - add
             - remove
             - data

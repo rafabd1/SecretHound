@@ -17,6 +17,7 @@ const (
 	// Levels ordered by verbosity (lower value = more verbose)
 	LevelDebug LogLevel = iota
 	LevelInfo
+	LevelFinding
 	LevelSuccess
 	LevelWarning
 	LevelError
@@ -29,6 +30,7 @@ type LogMessage struct {
 	Message  string
 	Time     time.Time
 	Critical bool
+	Risk     string
 }
 
 type Logger struct {
@@ -43,6 +45,10 @@ type Logger struct {
 	errorColor   func(format string, a ...interface{}) string
 	successColor func(format string, a ...interface{}) string
 	timeColor    func(format string, a ...interface{}) string
+	riskInfo     func(format string, a ...interface{}) string
+	riskLow      func(format string, a ...interface{}) string
+	riskMedium   func(format string, a ...interface{}) string
+	riskHigh     func(format string, a ...interface{}) string
 
 	progressBar *ProgressBar
 	progressMu  sync.Mutex
@@ -69,6 +75,10 @@ func NewLogger(verbose, silent bool) *Logger {
 		warningColor: color.New(color.FgYellow).SprintfFunc(),
 		errorColor:   color.New(color.FgRed, color.Bold).SprintfFunc(),
 		successColor: color.New(color.FgGreen, color.Bold).SprintfFunc(),
+		riskInfo:     color.New(color.FgHiBlue, color.Bold).SprintfFunc(),
+		riskLow:      color.New(color.FgGreen, color.Bold).SprintfFunc(),
+		riskMedium:   color.New(color.FgYellow, color.Bold).SprintfFunc(),
+		riskHigh:     color.New(color.FgRed, color.Bold).SprintfFunc(),
 	}
 
 	go logger.processLogs()
@@ -111,7 +121,7 @@ func (l *Logger) writeLog(msg LogMessage) {
 		}
 		// 2. Filter based on Default mode
 	} else if isDefault {
-		if msg.Level != LevelInfo && msg.Level != LevelSuccess {
+		if msg.Level != LevelInfo && msg.Level != LevelSuccess && msg.Level != LevelFinding {
 			return // Only INFO and SUCCESS messages allowed in default mode
 		}
 		// 3. Verbose mode implicitly allows all levels to pass this point
@@ -140,6 +150,9 @@ func (l *Logger) writeLog(msg LogMessage) {
 		case LevelInfo:
 			prefix = l.infoColor("[INFO]")
 			formatted = msg.Message
+		case LevelFinding:
+			prefix = l.formatFindingPrefix(msg.Risk)
+			formatted = l.formatFindingMessage(msg.Message, msg.Risk)
 		case LevelWarning:
 			prefix = l.warningColor("[WARNING]")
 			formatted = l.warningColor("%s", msg.Message)
@@ -175,6 +188,24 @@ func (l *Logger) enqueueLog(level LogLevel, format string, args ...interface{}) 
 		Message:  fmt.Sprintf(format, args...),
 		Time:     time.Now(),
 		Critical: isCriticalMessage(level, format), // Determine criticality
+	}
+
+	select {
+	case l.logQueue <- msg:
+	default:
+		l.outputMu.Lock()
+		l.writeLog(msg)
+		l.outputMu.Unlock()
+	}
+}
+
+func (l *Logger) enqueueFindingLog(risk string, format string, args ...interface{}) {
+	msg := LogMessage{
+		Level:    LevelFinding,
+		Message:  fmt.Sprintf(format, args...),
+		Time:     time.Now(),
+		Critical: false,
+		Risk:     strings.ToLower(strings.TrimSpace(risk)),
 	}
 
 	select {
@@ -266,13 +297,50 @@ func (l *Logger) SecretFound(secretType string, secretValue string, url string) 
 }
 
 func (l *Logger) SecretFoundWithCount(secretType string, secretValue string, url string, count int) {
+	l.SecretFoundWithCountRisk(secretType, secretValue, url, count, "medium", false)
+}
+
+func (l *Logger) SecretFoundWithCountRisk(secretType string, secretValue string, url string, count int, risk string, forceInfo bool) {
 	secretPart := utils.TruncateString(secretValue, 35)
+	var msg string
 	if count > 1 {
-		l.Success("Found %dx %s: %s... in %s", count, secretType, secretPart, url)
+		msg = fmt.Sprintf("Found %dx %s: %s... in %s", count, secretType, secretPart, url)
 	} else {
-		l.Success("Found %s: %s... in %s", secretType, secretPart, url)
+		msg = fmt.Sprintf("Found %s: %s... in %s", secretType, secretPart, url)
+	}
+
+	if forceInfo {
+		l.Info("%s", msg)
+	} else {
+		l.enqueueFindingLog(risk, "%s", msg)
 	}
 	time.Sleep(5 * time.Millisecond)
+}
+
+func (l *Logger) formatFindingMessage(message string, risk string) string {
+	switch risk {
+	case "informative":
+		return l.riskInfo("%s", message)
+	case "low":
+		return l.riskLow("%s", message)
+	case "high":
+		return l.riskHigh("%s", message)
+	default:
+		return l.riskMedium("%s", message)
+	}
+}
+
+func (l *Logger) formatFindingPrefix(risk string) string {
+	switch risk {
+	case "informative":
+		return l.riskInfo("[INFO-RISK]")
+	case "low":
+		return l.riskLow("[LOW]")
+	case "high":
+		return l.riskHigh("[HIGH]")
+	default:
+		return l.riskMedium("[MEDIUM]")
+	}
 }
 
 func isDigits(s string) bool {
