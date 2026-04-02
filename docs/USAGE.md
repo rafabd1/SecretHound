@@ -55,7 +55,7 @@ secrethound -i ./targets.txt -o ./results.json
 | `-c, --concurrency` | Number of concurrent workers | 50 |
 | `-l, --rate-limit` | Max req/s per domain (`0` = auto/unlimited) | 0 |
 | `-H, --header` | Custom header, repeatable | - |
-| `--insecure` | Disable TLS cert verification | true |
+| `--verify-tls` | Enable TLS cert verification for HTTPS requests | false |
 | `--max-file-size` | Max local file size in MB (`0` = no limit) | 0 |
 | `--include-categories` | Include only selected categories (comma-separated) | all enabled |
 | `--exclude-categories` | Exclude selected categories (comma-separated) | none |
@@ -148,6 +148,17 @@ Custom auth headers:
 secrethound -i ./targets.txt -H "Authorization: Bearer <token>" -H "Cookie: session=..."
 ```
 
+Rate-limit behavior:
+
+- `-l` controls request-rate behavior (RPS per domain).
+- `-l 0` (default) enables adaptive/auto rate mode.
+- `-l N` enables fixed rate mode (`N` requests/sec per domain).
+- `-c` controls only worker concurrency and does not switch rate-limit mode.
+- Domain backoff/discard logic is strict for HTTP `429` only.
+- Persistent `429` responses trigger temporary domain cooldown with escalating delay.
+- After the configured max backoff cycles, the domain is safely discarded and an alert is logged (except in `--silent` mode).
+- Final scan output prints an HTTP status summary (`429=...`, `403=...`, etc.) to aid diagnosis.
+
 ## Commands
 
 Version:
@@ -164,7 +175,7 @@ secrethound --help
 
 ## Notes
 
-- `--insecure` is enabled by default in the current release.
+- TLS certificate verification is disabled by default; use `--verify-tls` to enable it.
 - `--max-file-size 0` means unlimited local file size.
 - `pii` is disabled by default unless explicitly included.
 - For runtime truth (final loaded patterns/flags), always validate with `--help` and `--list-patterns`.

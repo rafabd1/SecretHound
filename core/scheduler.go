@@ -2,7 +2,9 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -12,35 +14,45 @@ import (
 )
 
 type Scheduler struct {
-	domainManager *networking.DomainManager
-	client        *networking.Client
-	processor     *Processor
-	writer        *output.Writer
-	logger        *output.Logger
-	workerPool    *utils.WorkerPool
-	concurrency   int
-	mutex         sync.Mutex
-	waitingURLs   []string
-	ctx           context.Context
-	cancel        context.CancelFunc
-	waitGroup     sync.WaitGroup
-	stats         SchedulerStats
-	noProgress    bool
-	silent        bool
+	domainManager     *networking.DomainManager
+	client            *networking.Client
+	processor         *Processor
+	writer            *output.Writer
+	logger            *output.Logger
+	workerPool        *utils.WorkerPool
+	concurrency       int
+	mutex             sync.Mutex
+	waitingURLs       []string
+	ctx               context.Context
+	cancel            context.CancelFunc
+	waitGroup         sync.WaitGroup
+	stats             SchedulerStats
+	noProgress        bool
+	silent            bool
+	rateLimitBackoffs map[string]int
+	discardedDomains  map[string]bool
 }
 
 type SchedulerStats struct {
-	TotalURLs      int
-	ProcessedURLs  int
-	FailedURLs     int
-	BlockedDomains int
-	TotalSecrets   int
-	StartTime      time.Time
-	EndTime        time.Time
-	RateLimitHits  int
-	WAFBlockHits   int
-	DomainRetries  map[string]int
+	TotalURLs        int
+	ProcessedURLs    int
+	FailedURLs       int
+	BlockedDomains   int
+	TotalSecrets     int
+	StartTime        time.Time
+	EndTime          time.Time
+	RateLimitHits    int
+	DomainRetries    map[string]int
+	HTTPStatusHits   map[int]int
+	DiscardedDomains int
+	DiscardedURLs    int
 }
+
+const (
+	baseRateLimitBlock                = 10 * time.Second
+	maxRateLimitBlock                 = 5 * time.Minute
+	maxRateLimitBackoffsBeforeDiscard = 2
+)
 
 func NewScheduler(domainManager *networking.DomainManager, client *networking.Client,
 	processor *Processor, writer *output.Writer, logger *output.Logger, concurrency int, noProgress bool, silent bool) (*Scheduler, error) {
@@ -59,9 +71,12 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 		ctx:           ctx,
 		cancel:        cancel,
 		stats: SchedulerStats{
-			DomainRetries: make(map[string]int),
-			StartTime:     time.Now(),
+			DomainRetries:  make(map[string]int),
+			HTTPStatusHits: make(map[int]int),
+			StartTime:      time.Now(),
 		},
+		rateLimitBackoffs: make(map[string]int),
+		discardedDomains:  make(map[string]bool),
 	}, nil
 }
 
@@ -174,7 +189,12 @@ func (s *Scheduler) Schedule(urls []string) error {
 	secrets := s.stats.TotalSecrets
 	failed := s.stats.FailedURLs
 	rateLimitHits := s.stats.RateLimitHits
-	wafHits := s.stats.WAFBlockHits
+	statusHits := make(map[int]int, len(s.stats.HTTPStatusHits))
+	for code, n := range s.stats.HTTPStatusHits {
+		statusHits[code] = n
+	}
+	discardedDomains := s.stats.DiscardedDomains
+	discardedURLs := s.stats.DiscardedURLs
 	s.mutex.Unlock()
 
 	s.logger.Info("Processing completed in %.2f seconds", duration.Seconds())
@@ -182,7 +202,12 @@ func (s *Scheduler) Schedule(urls []string) error {
 	s.logger.Info("Found %d secrets", secrets)
 	s.logger.Info("Failed to process %d URLs", failed)
 	s.logger.Info("Encountered rate limiting %d times", rateLimitHits)
-	s.logger.Info("Encountered WAF blocks %d times", wafHits)
+	if len(statusHits) > 0 {
+		s.logger.Info("HTTP status summary: %s", formatStatusSummary(statusHits))
+	}
+	if discardedDomains > 0 {
+		s.logger.Info("Discarded %d domains and %d pending queued URLs due to persistent HTTP 429 blocking", discardedDomains, discardedURLs)
+	}
 
 	if s.logger.IsVerbose() {
 		s.printDomainStatistics()
@@ -192,8 +217,8 @@ func (s *Scheduler) Schedule(urls []string) error {
 }
 
 /*
-	Builds a balanced queue of URLs by taking one URL from each domain in rounds
-	to ensure fair distribution across domains
+Builds a balanced queue of URLs by taking one URL from each domain in rounds
+to ensure fair distribution across domains
 */
 func (s *Scheduler) buildBalancedWorkQueue(domains []string) {
 	s.mutex.Lock()
@@ -229,8 +254,8 @@ func (s *Scheduler) buildBalancedWorkQueue(domains []string) {
 }
 
 /*
-	Shuffles the URLs while maintaining distance between URLs from the same domain
-	to prevent hammering a single domain with consecutive requests
+Shuffles the URLs while maintaining distance between URLs from the same domain
+to prevent hammering a single domain with consecutive requests
 */
 func (s *Scheduler) shuffleWithDomainAwareness(urls []string) {
 	if len(urls) <= 1 {
@@ -309,7 +334,7 @@ func (s *Scheduler) worker(id int) {
 			domain, err := utils.ExtractDomain(url)
 			if err != nil {
 				s.logger.Warning("Worker %d: failed to extract domain from %s: %v", id, url, err)
-				s.incrementFailedURLs(domain)
+				s.incrementFailedStatsOnly()
 				continue
 			}
 
@@ -321,7 +346,8 @@ func (s *Scheduler) worker(id int) {
 
 			if fetchErr != nil {
 				s.logger.Warning("Worker %d: Failed to fetch %s after retries: %v", id, url, fetchErr)
-				s.incrementFailedURLs(domain)
+				s.registerFetchError(domain, fetchErr)
+				s.incrementFailedURLs(url)
 				continue
 			}
 
@@ -333,11 +359,11 @@ func (s *Scheduler) worker(id int) {
 
 			if processErr != nil {
 				s.logger.Warning("Worker %d: Failed to process content from %s: %v", id, url, processErr)
-				s.incrementFailedURLs(domain)
+				s.incrementFailedURLs(url)
 				continue
 			}
 
-			s.incrementProcessedURLs(domain, totalDuration)
+			s.incrementProcessedURLs(url, totalDuration)
 
 			if len(secrets) > 0 {
 				s.mutex.Lock()
@@ -378,28 +404,130 @@ func (s *Scheduler) worker(id int) {
 	}
 }
 
-func (s *Scheduler) incrementFailedURLs(domain string) {
+func (s *Scheduler) incrementFailedStatsOnly() {
 	s.mutex.Lock()
 	s.stats.FailedURLs++
 	s.mutex.Unlock()
-	s.domainManager.RecordURLProcessed(domain, false, 0)
 }
 
-func (s *Scheduler) incrementProcessedURLs(domain string, duration time.Duration) {
+func (s *Scheduler) incrementFailedURLs(url string) {
+	s.mutex.Lock()
+	s.stats.FailedURLs++
+	s.mutex.Unlock()
+	s.domainManager.RecordURLProcessed(url, false, 0)
+}
+
+func (s *Scheduler) incrementProcessedURLs(url string, duration time.Duration) {
 	s.mutex.Lock()
 	s.stats.ProcessedURLs++
+	if domain, err := utils.ExtractDomain(url); err == nil {
+		s.rateLimitBackoffs[domain] = 0
+	}
 	s.mutex.Unlock()
-	s.domainManager.RecordURLProcessed(domain, true, duration)
+	s.domainManager.RecordURLProcessed(url, true, duration)
+}
+
+func (s *Scheduler) registerFetchError(domain string, fetchErr error) {
+	statusCode := extractStatusCode(fetchErr)
+	isRateLimit := statusCode == 429
+	if statusCode > 0 {
+		s.mutex.Lock()
+		s.stats.HTTPStatusHits[statusCode]++
+		s.mutex.Unlock()
+	}
+
+	s.mutex.Lock()
+	if s.discardedDomains[domain] {
+		s.mutex.Unlock()
+		return
+	}
+
+	s.stats.DomainRetries[domain]++
+	if isRateLimit {
+		s.stats.RateLimitHits++
+		s.rateLimitBackoffs[domain]++
+		backoffCount := s.rateLimitBackoffs[domain]
+		s.mutex.Unlock()
+
+		if backoffCount >= maxRateLimitBackoffsBeforeDiscard {
+			s.discardDomain(domain, fmt.Sprintf("persistent HTTP 429 after %d backoff cycles", backoffCount))
+			return
+		}
+
+		blockDuration := s.calculateRateLimitBlockDuration(backoffCount)
+		s.domainManager.AddBlockedDomain(domain, blockDuration)
+		s.logger.Warning("Domain %s temporarily blocked for %s after 429 (backoff %d/%d)",
+			domain, blockDuration.Round(time.Second), backoffCount, maxRateLimitBackoffsBeforeDiscard)
+	} else {
+		s.mutex.Unlock()
+	}
+
+	s.mutex.Lock()
+	s.stats.BlockedDomains = s.domainManager.GetBlockedDomainCount()
+	s.mutex.Unlock()
+}
+
+func (s *Scheduler) calculateRateLimitBlockDuration(backoffCount int) time.Duration {
+	adaptiveMode := s.client.GetRateLimit() == 0
+	base := baseRateLimitBlock
+	if !adaptiveMode {
+		base = 5 * time.Second
+	}
+
+	exp := math.Pow(2, float64(backoffCount-1))
+	d := time.Duration(float64(base) * exp)
+	if d > maxRateLimitBlock {
+		return maxRateLimitBlock
+	}
+	return d
+}
+
+func (s *Scheduler) discardDomain(domain string, reason string) {
+	s.mutex.Lock()
+	if s.discardedDomains[domain] {
+		s.mutex.Unlock()
+		return
+	}
+	s.discardedDomains[domain] = true
+	s.stats.DiscardedDomains++
+
+	filtered := make([]string, 0, len(s.waitingURLs))
+	removedFromQueue := 0
+	for _, queuedURL := range s.waitingURLs {
+		queuedDomain, err := utils.ExtractDomain(queuedURL)
+		if err == nil && queuedDomain == domain {
+			removedFromQueue++
+			continue
+		}
+		filtered = append(filtered, queuedURL)
+	}
+	s.waitingURLs = filtered
+	s.stats.FailedURLs += removedFromQueue
+	s.stats.DiscardedURLs += removedFromQueue
+	s.mutex.Unlock()
+
+	s.domainManager.RemoveDomain(domain)
+	s.logger.Info("ALERT: Discarded domain %s (removed %d pending queued URLs): %s", domain, removedFromQueue, reason)
 }
 
 func (s *Scheduler) GetNextURL() (string, bool) {
 	s.mutex.Lock()
 
 	if len(s.waitingURLs) > 0 {
-		url := s.waitingURLs[0]
-		s.waitingURLs = s.waitingURLs[1:]
-		s.mutex.Unlock()
-		return url, true
+		totalCandidates := len(s.waitingURLs)
+		for i := 0; i < totalCandidates; i++ {
+			url := s.waitingURLs[0]
+			s.waitingURLs = s.waitingURLs[1:]
+
+			domain, err := utils.ExtractDomain(url)
+			if err != nil || !s.domainManager.IsBlocked(domain) {
+				s.mutex.Unlock()
+				return url, true
+			}
+
+			// Keep blocked-domain URLs for later instead of dropping them.
+			s.waitingURLs = append(s.waitingURLs, url)
+		}
 	}
 
 	select {
@@ -417,23 +545,72 @@ func (s *Scheduler) GetStats() SchedulerStats {
 	defer s.mutex.Unlock()
 
 	statsCopy := SchedulerStats{
-		TotalURLs:      s.stats.TotalURLs,
-		ProcessedURLs:  s.stats.ProcessedURLs,
-		FailedURLs:     s.stats.FailedURLs,
-		BlockedDomains: s.stats.BlockedDomains,
-		TotalSecrets:   s.stats.TotalSecrets,
-		StartTime:      s.stats.StartTime,
-		EndTime:        s.stats.EndTime,
-		RateLimitHits:  s.stats.RateLimitHits,
-		WAFBlockHits:   s.stats.WAFBlockHits,
-		DomainRetries:  make(map[string]int),
+		TotalURLs:        s.stats.TotalURLs,
+		ProcessedURLs:    s.stats.ProcessedURLs,
+		FailedURLs:       s.stats.FailedURLs,
+		BlockedDomains:   s.stats.BlockedDomains,
+		TotalSecrets:     s.stats.TotalSecrets,
+		StartTime:        s.stats.StartTime,
+		EndTime:          s.stats.EndTime,
+		RateLimitHits:    s.stats.RateLimitHits,
+		DomainRetries:    make(map[string]int),
+		HTTPStatusHits:   make(map[int]int),
+		DiscardedDomains: s.stats.DiscardedDomains,
+		DiscardedURLs:    s.stats.DiscardedURLs,
 	}
 
 	for domain, count := range s.stats.DomainRetries {
 		statsCopy.DomainRetries[domain] = count
 	}
+	for code, count := range s.stats.HTTPStatusHits {
+		statsCopy.HTTPStatusHits[code] = count
+	}
 
 	return statsCopy
+}
+
+func extractStatusCode(err error) int {
+	var appErr *utils.AppError
+	if errors.As(err, &appErr) {
+		return appErr.StatusCode
+	}
+	return 0
+}
+
+func formatStatusSummary(statusHits map[int]int) string {
+	ordered := []int{429, 403, 404, 500, 502, 503, 504}
+	parts := make([]string, 0, len(statusHits))
+	seen := make(map[int]bool, len(statusHits))
+
+	for _, code := range ordered {
+		if n, ok := statusHits[code]; ok && n > 0 {
+			parts = append(parts, fmt.Sprintf("%d=%d", code, n))
+			seen[code] = true
+		}
+	}
+
+	for code, n := range statusHits {
+		if seen[code] || n <= 0 {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%d=%d", code, n))
+	}
+
+	if len(parts) == 0 {
+		return "none"
+	}
+	return fmt.Sprintf("%s", joinWithComma(parts))
+}
+
+func joinWithComma(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	out := parts[0]
+	for i := 1; i < len(parts); i++ {
+		out += ", " + parts[i]
+	}
+	return out
 }
 
 func (s *Scheduler) Stop() {

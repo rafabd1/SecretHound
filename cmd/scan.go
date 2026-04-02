@@ -214,15 +214,17 @@ func runScan(cmd *cobra.Command, args []string) error {
 		// Get networking config directly from viper
 		netTimeoutSeconds := vip.GetInt("timeout")
 		netRetries := vip.GetInt("retries")
-		netInsecure := vip.GetBool("insecure")
+		netVerifyTLS := vip.GetBool("verify_tls")
 		netHeaders := vip.GetStringSlice("header")
 		netRateLimit := vip.GetInt("rate_limit")
 
 		// Pass timeout as int to NewClient
 		client = networking.NewClient(netTimeoutSeconds, netRetries)
-		if netInsecure {
+		if !netVerifyTLS {
 			client.SetInsecureSkipVerify(true)
 			logger.Info("SSL/TLS certificate verification disabled")
+		} else {
+			logger.Info("SSL/TLS certificate verification enabled")
 		}
 		// Set headers
 		for _, h := range netHeaders {
@@ -750,12 +752,12 @@ func initScanCmd(cmd *cobra.Command) {
 	cmd.Flags().IntP("retries", "r", 2, "Maximum number of retries for failed HTTP requests")
 	cmd.Flags().StringP("proxy", "p", "", "Proxy URL (e.g., http://127.0.0.1:8080)")
 	cmd.Flags().StringSliceP("header", "H", []string{}, "Custom headers to include in requests (e.g., 'Cookie: session=...')")
-	cmd.Flags().Bool("insecure", true, "Disable TLS certificate verification (default: true)")
+	cmd.Flags().Bool("verify-tls", false, "Enable TLS certificate verification for HTTPS requests")
 	vip.BindPFlag("timeout", cmd.Flags().Lookup("timeout"))
 	vip.BindPFlag("retries", cmd.Flags().Lookup("retries"))
 	vip.BindPFlag("proxy", cmd.Flags().Lookup("proxy"))
 	vip.BindPFlag("headers", cmd.Flags().Lookup("header"))
-	vip.BindPFlag("insecure", cmd.Flags().Lookup("insecure"))
+	vip.BindPFlag("verify_tls", cmd.Flags().Lookup("verify-tls"))
 
 	// --- Pattern Control ---
 	cmd.Flags().StringSlice("include-categories", []string{}, "Comma-separated list of pattern categories to include (e.g., aws,gcp)")

@@ -38,7 +38,7 @@ Flag Categories:
   Input Sources:     -i, --input-file
   Output:            -o, --output | --raw
   Performance:       -c, --concurrency | -l, --rate-limit
-  Networking:        -t, --timeout | -r, --retries | -H, --header | --insecure
+  Networking:        -t, --timeout | -r, --retries | -H, --header | --verify-tls
   Pattern Control:   --include-categories | --exclude-categories | --scan-urls | --list-patterns | --patterns-file
   General Behavior:  -v, --verbose | -n, --no-progress | -s, --silent
 `,
@@ -127,11 +127,11 @@ func init() {
 	rootCmd.Flags().IntP("timeout", "t", 10, "HTTP request timeout in seconds")
 	rootCmd.Flags().IntP("retries", "r", 2, "Maximum number of retries for HTTP requests") // Default changed to 2 based on scan.go edits
 	rootCmd.Flags().StringSliceP("header", "H", []string{}, "Custom headers to add (e.g., \"Authorization: Bearer token\")")
-	rootCmd.Flags().Bool("insecure", true, "Disable SSL/TLS certificate verification (default: true)")
+	rootCmd.Flags().Bool("verify-tls", false, "Enable SSL/TLS certificate verification for HTTPS requests")
 	vip.BindPFlag("timeout", rootCmd.Flags().Lookup("timeout"))
 	vip.BindPFlag("retries", rootCmd.Flags().Lookup("retries"))
 	vip.BindPFlag("headers", rootCmd.Flags().Lookup("header"))
-	vip.BindPFlag("insecure", rootCmd.Flags().Lookup("insecure"))
+	vip.BindPFlag("verify_tls", rootCmd.Flags().Lookup("verify-tls"))
 
 	// Group: Pattern Control
 	rootCmd.Flags().StringSlice("include-categories", []string{}, "Comma-separated list of pattern categories to include (e.g., aws,gcp)")

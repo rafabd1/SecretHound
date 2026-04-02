@@ -80,16 +80,16 @@ SecretHound implements domain-aware request scheduling to avoid overloading indi
 1. **Domain Grouping**: URLs are grouped by domain before scheduling
 2. **Round-Robin Distribution**: Requests are distributed across domains in a round-robin fashion
 3. **Rate Limiting**: Per-domain rate limiting prevents overwhelming servers
-4. **Cooldown Periods**: Automatic cooldown periods between requests to the same domain
-5. **Exponential Backoff**: Automatic backoff when rate limiting is detected
+4. **429 Cooldown Periods**: Automatic cooldown periods are applied when a domain returns HTTP `429`
+5. **Escalating Backoff + Safe Discard**: Persistent HTTP `429` can trigger bounded backoff cycles and safe domain discard to avoid infinite retry loops
 
 ### HTTP Client Features
 
 1. **Request Retries**: Automatic retries with exponential backoff
 2. **Jitter**: Random jitter to prevent thundering herd problems
 3. **Timeout Management**: Configurable timeouts with context-based cancellation
-4. **Response Filtering**: Intelligent response filtering to detect rate limiting and WAF blocks
-5. **User-Agent Rotation**: Randomized user agents to avoid fingerprinting
+4. **Strict Rate-Limit Classification**: Rate-limit handling is driven by explicit HTTP `429`
+5. **Status Propagation**: HTTP status codes are attached to network errors for scheduler-level summaries and diagnostics
 
 ## Output System
 
@@ -149,9 +149,9 @@ Error handling follows these principles:
 The rate limiting strategy combines:
 
 1. **Token Bucket Algorithm**: Classic token bucket for basic rate limiting
-2. **Adaptive Timing**: Timing parameters adapt based on observed server responses
+2. **Adaptive Timing**: Timing parameters adapt based on observed `429` responses
 3. **Domain Separation**: Rate limits are enforced per domain
-4. **Probabilistic Rate Adjustment**: Rate limits are adjusted probabilistically to avoid oscillation
+4. **Bounded Backoff Policy**: Backoff cycles are finite; domains with persistent `429` are safely discarded with explicit alert logs
 
 ## Performance Considerations
 
