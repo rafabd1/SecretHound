@@ -114,7 +114,7 @@ SecretHound supports the following options:
 | `-c, --concurrency` | Number of concurrent workers. | 50 |
 | `-l, --rate-limit` | Max requests per second per domain (0 for auto/unlimited). | 0 |
 | `-H, --header` | Custom HTTP header to add (e.g., "Authorization: Bearer token"). Can be used multiple times. | - |
-| `--insecure` | Disable SSL/TLS certificate verification. | true |
+| `--verify-tls` | Enable SSL/TLS certificate verification for HTTPS requests. | false |
 | `--include-categories` | Comma-separated list of pattern categories to include (e.g., aws,gcp). | all enabled |
 | `--exclude-categories` | Comma-separated list of pattern categories to exclude (e.g., pii,url). | none |
 | `--scan-urls` | URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters). | false |
