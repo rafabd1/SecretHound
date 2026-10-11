@@ -38,13 +38,18 @@ func GenerateTempFileName(prefix, suffix string) string {
 }
 
 func FindLineNumber(content, value string) int {
-	lines := strings.Split(content, "\n")
-	for i, line := range lines {
-		if strings.Contains(line, value) {
-			return i + 1
-		}
+	offset := strings.Index(content, value)
+	if offset < 0 {
+		return 0
 	}
-	return 0
+	return FindLineNumberAtOffset(content, offset)
+}
+
+func FindLineNumberAtOffset(content string, offset int) int {
+	if offset < 0 || offset > len(content) {
+		return 0
+	}
+	return strings.Count(content[:offset], "\n") + 1
 }
 
 func IsBinaryContent(content []byte) bool {

@@ -33,21 +33,17 @@ func IsHighEntropy(s string, threshold float64) bool {
 }
 
 /*
-IsLikelyRandomSecret uses entropy plus context-independent heuristics
-for token-like values.
+IsLikelyRandomSecret checks only properties of the candidate's randomness.
+Code, documentation, and identifier signals belong to the pattern-aware
+validation layer, where they can lower confidence without discarding a
+provider-shaped credential before its format is considered.
 */
 func IsLikelyRandomSecret(s string, minEntropy float64, minLength int) bool {
 	if len(s) < minLength {
 		return false
 	}
 
-	if IsLikelyCSS(s) || IsLikelyI18nKey(s) ||
-		IsLikelyFunctionName(s) || IsLikelyUrl(s) ||
-		IsLikelyDocumentation(s, "") {
-		return false
-	}
-
-	if HasRepeatedCharacterPattern(s) || IsUUID(s) {
+	if HasRepeatedCharacterPattern(s) {
 		return false
 	}
 

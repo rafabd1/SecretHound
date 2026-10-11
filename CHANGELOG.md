@@ -1,5 +1,45 @@
 # SecretHound Changelog
 
+## v1.3.0 (2026-10-10)
+
+### Semantic False-Positive Review
+- Added an optional local semantic review queue backed by [SupersonicLabs/Julia-1](https://huggingface.co/SupersonicLabs/Julia-1).
+- Added explicit finding states for likely false positives, uncertain classifications, classifier errors, and normal-priority results.
+- Added `--suppress-likely-false-positives`; without it, flagged findings remain visible and are saved with low review priority.
+- Kept uncertain findings and classifier errors in all modes.
+- Added batching, bounded queues, inference timeouts, cache accounting, CPU/CUDA selection, and end-of-scan semantic statistics.
+- Added deterministic safeguards so model confidence alone cannot suppress a finding without clear benign evidence.
+- Added separate handling for PII while URL/domain extraction and suspicious command findings bypass secret classification.
+- Dimmed complete terminal lines for likely false positives while keeping uncertain findings neutral.
+
+### Detection Accuracy
+- Unified local and remote content detection through the same validation path.
+- Hardened match boundaries to prevent truncated tokens, identifier suffix collisions, and partial fixed-format matches.
+- Added or updated current formats for GitHub, GitLab, Slack, Cloudflare, Sentry, Postman, OpenAI, AWS, Twilio, Heroku, and other providers.
+- Added credential URI and Microsoft SQL Server connection-string validation, including named instances and common aliases.
+- Added stricter structural validation for JWTs, Basic Auth values, Web3 private keys, payment-card numbers, placeholders, and environment references.
+- Improved provider-context scoping for nested objects, YAML, adjacent assignments, minified JavaScript, and repeated values.
+- Added collision priorities so provider-specific findings replace weaker generic matches at the same occurrence.
+- Reduced RevampCRM, public identifier, asset path, and generic assignment false positives.
+- Restored URL-only extraction and improved URL punctuation and pattern-specific length handling.
+
+### PII and Context Policy
+- Added contextual person-name filtering for obvious mocks and non-person system labels while preserving plausible names.
+- Expanded deterministic checks for reserved PII examples and invalid PII shapes.
+- Recognized explicit test, fixture, example, documentation, and generated-source paths as benign evidence for semantic review.
+- Scoped semantic evidence to the exact finding occurrence so nearby unrelated comments or assignments do not change the verdict.
+
+### Output and Deduplication
+- Preserved distinct occurrences of the same value by source, line, and byte offset.
+- Added `byte_offset` to structured findings and CSV/TXT output.
+- Kept occurrence-specific semantic verdicts instead of collapsing different contexts into one result.
+- Added deterministic pattern-collision resolution before semantic review.
+- Ignored generated `secrethound_results.*` output files.
+
+### Benchmarks and Tests
+- Added semantic and PII benchmark corpora covering real-looking findings, clear false positives, uncertain cases, and entropy boundaries.
+- Added regression coverage for provider formats, credential URIs, pattern quality, collisions, output grouping, local/remote parity, and special categories.
+
 ## v1.2.0 (2026-04-02)
 
 ### Networking Reliability

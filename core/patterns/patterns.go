@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -18,6 +19,7 @@ type PatternConfig struct {
 	Regex              string   `yaml:"regex"`
 	Description        string   `yaml:"description"`
 	Enabled            bool     `yaml:"enabled"`
+	Retired            bool     `yaml:"retired,omitempty"`
 	Category           string   `yaml:"category"`
 	MinLength          int      `yaml:"minlength,omitempty"`
 	MaxLength          int      `yaml:"maxlength,omitempty"`
@@ -30,6 +32,7 @@ type PatternConfig struct {
 	UseEntropy         bool     `yaml:"useentropy,omitempty"`
 	MinEntropy         float64  `yaml:"minentropy,omitempty"`
 	EntropyMinLength   int      `yaml:"entropyminlength,omitempty"`
+	CollisionPriority  int      `yaml:"collisionpriority,omitempty"`
 }
 
 type PatternDefinitions struct {
@@ -48,6 +51,7 @@ type CompiledPattern struct {
 
 type PatternManager struct {
 	compiledPatterns   map[string]*CompiledPattern
+	orderedPatterns    []*CompiledPattern
 	exclusionPatterns  []*regexp.Regexp
 	specificExclusions map[string][]*regexp.Regexp
 	localModeEnabled   bool
@@ -63,6 +67,7 @@ type PatternLoadStats struct {
 	FailedCompilation  int
 	SkippedByCategory  int
 	SkippedByEnabled   int
+	SkippedRetired     int
 	FailedValidation   int
 	ExcludeRegexErrors int
 }
@@ -161,6 +166,10 @@ func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []st
 	useExclude := len(excludeCategories) > 0
 
 	for name, config := range pm.definitions.Patterns {
+		if config.Retired {
+			pm.lastLoadStats.SkippedRetired++
+			continue
+		}
 		categoryLower := strings.ToLower(config.Category)
 		isIncluded := useInclude && includeMap[categoryLower]
 		isExcluded := useExclude && excludeMap[categoryLower]
@@ -195,7 +204,7 @@ func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []st
 			continue
 		}
 
-		re, err := regexp.Compile(config.Regex)
+		re, err := compilePatternRegex(config.Regex)
 		if err != nil {
 			pm.lastLoadStats.FailedCompilation++
 			fmt.Fprintf(os.Stderr, "[ERROR] Failed to compile regex for pattern '%s': %v\nRegex: %s\n", name, err, config.Regex)
@@ -224,6 +233,7 @@ func (pm *PatternManager) LoadPatterns(includeCategories, excludeCategories []st
 		}
 		pm.exclusionPatterns = append(pm.exclusionPatterns, re)
 	}
+	pm.rebuildOrderedPatternsLocked()
 
 	if pm.lastLoadStats.SelectedForLoad > 0 && pm.lastLoadStats.Loaded == 0 {
 		return fmt.Errorf(
@@ -273,6 +283,14 @@ func (pm *PatternManager) GetCompiledPatterns() map[string]*CompiledPattern {
 	return patterns
 }
 
+// GetCompiledPatternsOrdered returns an ordered snapshot. The slice is copied
+// so callers cannot alter the manager's cached ordering.
+func (pm *PatternManager) GetCompiledPatternsOrdered() []*CompiledPattern {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	return append([]*CompiledPattern(nil), pm.orderedPatterns...)
+}
+
 func (pm *PatternManager) GetPatternConfig(name string) (PatternConfig, bool) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
@@ -291,7 +309,7 @@ func (pm *PatternManager) GetDefinitions() *PatternDefinitions {
 }
 
 func (pm *PatternManager) AddPattern(name, regex, description string) error {
-	re, err := regexp.Compile(regex)
+	re, err := compilePatternRegex(regex)
 	if err != nil {
 		return err
 	}
@@ -314,7 +332,22 @@ func (pm *PatternManager) AddPattern(name, regex, description string) error {
 	}
 
 	pm.definitions.Patterns[name] = pm.compiledPatterns[name].Config
+	pm.rebuildOrderedPatternsLocked()
 	return nil
+}
+
+func (pm *PatternManager) rebuildOrderedPatternsLocked() {
+	names := make([]string, 0, len(pm.compiledPatterns))
+	for name := range pm.compiledPatterns {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	ordered := make([]*CompiledPattern, 0, len(names))
+	for _, name := range names {
+		ordered = append(ordered, pm.compiledPatterns[name])
+	}
+	pm.orderedPatterns = ordered
 }
 
 func compileExcludeRegexes(patternName string, patterns []string) ([]*regexp.Regexp, int) {
@@ -337,6 +370,7 @@ func (pm *PatternManager) Reset() {
 	defer pm.mu.Unlock()
 
 	pm.compiledPatterns = make(map[string]*CompiledPattern)
+	pm.orderedPatterns = nil
 	pm.exclusionPatterns = make([]*regexp.Regexp, 0)
 	pm.specificExclusions = make(map[string][]*regexp.Regexp)
 	pm.localModeEnabled = false

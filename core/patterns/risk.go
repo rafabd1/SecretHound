@@ -19,7 +19,30 @@ func ResolveFindingRisk(patternType string, pm *PatternManager) FindingRisk {
 
 	// High-confidence sensitive types.
 	switch patternType {
-	case "private_key_content",
+	case "api_key_assignment",
+		"cloudflare_api_token",
+		"cloudflare_legacy_api_token",
+		"datadog_api_key",
+		"digitalocean_access_token",
+		"digitalocean_oauth_token",
+		"digitalocean_refresh_token",
+		"generic_password",
+		"gitlab_ci_build_token",
+		"gitlab_deploy_token",
+		"gitlab_feed_token",
+		"gitlab_incoming_email_token",
+		"gitlab_kubernetes_agent_token",
+		"gitlab_legacy_feed_token",
+		"gitlab_oauth_app_secret",
+		"gitlab_pipeline_trigger_token",
+		"gitlab_runner_registration_token",
+		"gitlab_runner_token",
+		"gitlab_scim_oauth_token",
+		"mailgun_api_key",
+		"mapbox_secret_token",
+		"netlify_access_token",
+		"postman_api_key",
+		"private_key_content",
 		"private_key_var",
 		"web3_private_key",
 		"aws_secret_key",
@@ -27,34 +50,43 @@ func ResolveFindingRisk(patternType string, pm *PatternManager) FindingRisk {
 		"github_token",
 		"github_fine_grained_token",
 		"gitlab_personal_token",
-		"gitlab_runner_token",
 		"docker_hub_token",
 		"npm_access_token",
-		"slack_token",
-		"sentry_auth_token",
+		"sendgrid_api_key",
+		"sendinblue_api_key",
+		"shopify_access_token",
 		"shopify_private_app_token",
 		"shopify_custom_app_token",
+		"shopify_shared_secret",
+		"sentry_auth_token",
+		"sentry_legacy_auth_token",
+		"sentry_org_auth_token",
+		"slack_refresh_token",
+		"slack_rotating_token",
+		"slack_token",
 		"stripe_secret_key",
-		"supabase_service_role_key":
+		"supabase_service_role_key",
+		"google_recaptcha_key",
+		"session_token":
 		return RiskHigh
 	}
 
 	// Typically public/low-impact identifiers.
 	switch patternType {
-	case "google_recaptcha_key",
-		"ethereum_address",
+	case "ethereum_address",
+		"aws_access_key",
 		"public_key",
 		"public_key_content",
-		"stripe_test_publishable_key",
-		"stripe_test_secret_key":
+		"stripe_test_publishable_key":
 		return RiskInformative
 	case "google_api_key",
 		"google_cloud_platform",
 		"stripe_publishable_key",
 		"supabase_anon_key",
-		"supabase_publishable_key",
-		"session_token":
+		"supabase_publishable_key":
 		return RiskLow
+	case "stripe_test_secret_key":
+		return RiskMedium
 	}
 
 	category := ""
@@ -65,11 +97,11 @@ func ResolveFindingRisk(patternType string, pm *PatternManager) FindingRisk {
 	}
 
 	switch category {
-	case "pii", "web3":
+	case "pii", "url":
 		return RiskInformative
 	case "gcp", "generic":
 		return RiskLow
-	case "auth", "aws", "azure", "code", "config", "crypto", "db", "llm", "payment", "ci", "bash":
+	case "auth", "aws", "azure", "code", "config", "crypto", "db", "llm", "payment", "ci", "bash", "web3":
 		return RiskHigh
 	case "cloud":
 		return RiskMedium

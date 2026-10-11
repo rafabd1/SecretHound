@@ -21,11 +21,11 @@ type Processor struct {
 }
 
 type ProcessorStats struct {
-	FilesProcessed  int
-	SecretsFound    int
-	ProcessingTime  time.Duration
-	FailedFiles     int
-	TotalBytesRead  int64
+	FilesProcessed int
+	SecretsFound   int
+	ProcessingTime time.Duration
+	FailedFiles    int
+	TotalBytesRead int64
 }
 
 func NewProcessor(regexManager *RegexManager, logger *output.Logger) *Processor {
@@ -38,27 +38,27 @@ func NewProcessor(regexManager *RegexManager, logger *output.Logger) *Processor 
 			SecretsFound:   0,
 		},
 	}
-	
+
 	RegisterProcessor(processor)
-	
+
 	return processor
 }
 
-/* 
-   Ensures the RegexManager has patterns loaded and is ready for use
+/*
+Ensures the RegexManager has patterns loaded and is ready for use
 */
 func (p *Processor) InitializeRegexManager() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	p.regexManager = NewRegexManager()
-	
+
 	err := p.regexManager.LoadPredefinedPatterns()
-	if (err != nil) {
+	if err != nil {
 		p.logger.Error("Failed to load patterns: %v", err)
 		return err
 	}
-	
+
 	p.logger.Debug("Successfully initialized RegexManager with %d patterns", p.regexManager.GetPatternCount())
 	return nil
 }
@@ -77,44 +77,18 @@ func (p *Processor) ProcessJSContent(content string, url string) ([]Secret, erro
 
 	isLocalFile := strings.HasPrefix(url, "file://")
 	if isLocalFile {
-		p.logger.Debug("Processing local file with %d patterns and %d bytes", 
+		p.logger.Debug("Processing local file with %d patterns and %d bytes",
 			p.regexManager.GetPatternCount(), len(content))
-			
-		p.regexManager.SetLocalFileMode(true)
-		defer p.regexManager.SetLocalFileMode(false)
 	}
 
-	var secrets []Secret
-	var err error
-	
-	if isLocalFile {
-		patternMatches := p.regexManager.FindMatches(content, url)
-		
-		for patternName, matches := range patternMatches {
-			for _, match := range matches {
-				context := extractContext(content, match)
-				lineNum := utils.FindLineNumber(content, match)
-				
-				secret := Secret{
-					Type:    patternName,
-					Value:   match,
-					Context: context,
-					URL:     url,
-					Line:    lineNum,
-				}
-				secrets = append(secrets, secret)
-			}
-		}
-	} else {
-		secrets, err = p.regexManager.FindSecrets(content, url)
-		if err != nil {
-			p.mu.Lock()
-			p.stats.FailedFiles++
-			p.mu.Unlock()
-			return nil, utils.NewError(utils.ProcessingError, fmt.Sprintf("failed to process content from %s", url), err)
-		}
+	secrets, err := p.regexManager.FindSecrets(content, url)
+	if err != nil {
+		p.mu.Lock()
+		p.stats.FailedFiles++
+		p.mu.Unlock()
+		return nil, utils.NewError(utils.ProcessingError, fmt.Sprintf("failed to process content from %s", url), err)
 	}
-	
+
 	p.cacheService.StoreSecrets(content, secrets)
 
 	p.mu.Lock()
@@ -124,24 +98,31 @@ func (p *Processor) ProcessJSContent(content string, url string) ([]Secret, erro
 	p.stats.ProcessingTime += time.Since(startTime)
 	p.mu.Unlock()
 
-	p.logger.Debug("Found %d secrets in %s (took %v)", 
+	p.logger.Debug("Found %d secrets in %s (took %v)",
 		len(secrets), url, time.Since(startTime))
-	
+
 	return secrets, nil
 }
 
-/* 
-   Extracts surrounding context from content around a matching string
+/*
+Extracts surrounding context from content around a matching string
 */
 func extractContext(content, match string) string {
 	idx := strings.Index(content, match)
 	if idx == -1 {
 		return ""
 	}
+	return extractContextAt(content, idx, idx+len(match))
+}
 
-	contextStart := max(0, idx-100)
-	contextEnd := min(len(content), idx+len(match)+100)
-	
+func extractContextAt(content string, start, end int) string {
+	if start < 0 || end < start || end > len(content) {
+		return ""
+	}
+
+	contextStart := max(0, start-100)
+	contextEnd := min(len(content), end+100)
+
 	return content[contextStart:contextEnd]
 }
 
@@ -190,14 +171,14 @@ func (p *Processor) ResetStats() {
 func (p *Processor) CompleteReset() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if p.regexManager != nil {
 		p.regexManager.CompleteReset()
 	}
-	
+
 	p.regexManager = NewRegexManager()
 	p.cacheService = NewCacheService()
-	
+
 	p.stats = ProcessorStats{
 		FilesProcessed: 0,
 		SecretsFound:   0,

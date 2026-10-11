@@ -37,6 +37,7 @@ func (dm *DomainManager) GroupURLsByDomain(urls []string) {
 	defer dm.mu.Unlock()
 
 	dm.domains = make(map[string][]string)
+	dm.domainStats = make(map[string]*DomainStats)
 
 	for _, url := range urls {
 		domain, err := utils.ExtractDomain(url)

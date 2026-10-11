@@ -1,0 +1,8 @@
+{
+  "openai_fixture": "sk-proj-T8mQ2xV7nR4tY9uP1kL6cB3hF5jW0zE2qS7aC8",
+  "anthropic_fixture": "sk-ant-api03-T8mQ2xV7nR4tY9uP1kL6cB3hF5jW0zE2qS7aC8",
+  "github_fixture": "ghp_TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+  "slack_fixture": "xoxb-111111111111-222222222222-333333333333-TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+  "stripe_fixture": "sk_live_TTTTTTTTTTTTTTTTTTTTTTTT",
+  "database_fixture": "mysql://fixture:T8mQ2xV7nR4tY9uP@localhost/example"
+}

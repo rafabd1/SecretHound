@@ -36,10 +36,11 @@ Examples:
 
 Flag Categories:
   Input Sources:     -i, --input-file
-  Output:            -o, --output | --raw
+	Output:            -o, --output | --raw
   Performance:       -c, --concurrency | -l, --rate-limit
   Networking:        -t, --timeout | -r, --retries | -H, --header | --verify-tls
   Pattern Control:   --include-categories | --exclude-categories | --scan-urls | --list-patterns | --patterns-file
+	Semantic Filter:   --semantic-filter | --semantic-model | --suppress-likely-false-positives
   General Behavior:  -v, --verbose | -n, --no-progress | -s, --silent
 `,
 	RunE: runScan,
@@ -144,6 +145,35 @@ func init() {
 	vip.BindPFlag("scan_urls", rootCmd.Flags().Lookup("scan-urls"))
 	vip.BindPFlag("list_patterns", rootCmd.Flags().Lookup("list-patterns"))
 	vip.BindPFlag("patterns_file", rootCmd.Flags().Lookup("patterns-file"))
+
+	rootCmd.Flags().Bool("semantic-filter", false, "Review detected secrets with a local Julia-1 false-positive filter")
+	rootCmd.Flags().String("semantic-model", "", "Path to a local Julia-1 model repository")
+	rootCmd.Flags().String("semantic-python", "python", "Python executable used by the Julia-1 worker")
+	rootCmd.Flags().String("semantic-device", "cpu", "Julia-1 inference device (cpu or cuda)")
+	rootCmd.Flags().Float64("semantic-fp-threshold", 0.80, "Minimum model score for a likely false-positive verdict")
+	rootCmd.Flags().Float64("semantic-decision-threshold", 0.60, "Minimum model score for a non-false-positive verdict")
+	rootCmd.Flags().Int("semantic-batch-size", 16, "Maximum candidates per semantic inference batch")
+	rootCmd.Flags().Int("semantic-queue-size", 512, "Maximum queued candidates awaiting semantic review")
+	rootCmd.Flags().Duration("semantic-batch-wait", 25*time.Millisecond, "Maximum wait used to fill a semantic batch")
+	rootCmd.Flags().Duration("semantic-timeout", 30*time.Second, "Timeout for each semantic inference batch")
+	rootCmd.Flags().Duration("semantic-startup-timeout", 2*time.Minute, "Timeout for loading the Julia-1 worker")
+	rootCmd.Flags().Int("semantic-max-length", 8192, "Maximum combined Julia-1 input length")
+	rootCmd.Flags().Int("semantic-head-length", 512, "Julia-1 question and answer token budget")
+	rootCmd.Flags().Bool("suppress-likely-false-positives", false, "Omit only high-confidence likely false positives")
+	vip.BindPFlag("semantic_filter", rootCmd.Flags().Lookup("semantic-filter"))
+	vip.BindPFlag("semantic_model", rootCmd.Flags().Lookup("semantic-model"))
+	vip.BindPFlag("semantic_python", rootCmd.Flags().Lookup("semantic-python"))
+	vip.BindPFlag("semantic_device", rootCmd.Flags().Lookup("semantic-device"))
+	vip.BindPFlag("semantic_fp_threshold", rootCmd.Flags().Lookup("semantic-fp-threshold"))
+	vip.BindPFlag("semantic_decision_threshold", rootCmd.Flags().Lookup("semantic-decision-threshold"))
+	vip.BindPFlag("semantic_batch_size", rootCmd.Flags().Lookup("semantic-batch-size"))
+	vip.BindPFlag("semantic_queue_size", rootCmd.Flags().Lookup("semantic-queue-size"))
+	vip.BindPFlag("semantic_batch_wait", rootCmd.Flags().Lookup("semantic-batch-wait"))
+	vip.BindPFlag("semantic_timeout", rootCmd.Flags().Lookup("semantic-timeout"))
+	vip.BindPFlag("semantic_startup_timeout", rootCmd.Flags().Lookup("semantic-startup-timeout"))
+	vip.BindPFlag("semantic_max_length", rootCmd.Flags().Lookup("semantic-max-length"))
+	vip.BindPFlag("semantic_head_length", rootCmd.Flags().Lookup("semantic-head-length"))
+	vip.BindPFlag("suppress_likely_false_positives", rootCmd.Flags().Lookup("suppress-likely-false-positives"))
 
 	// Group: Output Format (Adicionando a nova flag aqui)
 	rootCmd.Flags().Bool("group-by-source", false, "Group secrets by source URL/file in the output")
