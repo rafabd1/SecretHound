@@ -39,12 +39,44 @@ func IsLikelyBase64(s string) bool {
 }
 
 func IsLikelyFilePath(s string) bool {
-    if strings.Contains(s, "/") || strings.Contains(s, "\\") {
-        return strings.Contains(s, ".") || 
-               strings.Contains(s, "node_modules") ||
-               strings.Contains(s, "dist") ||
-               strings.Contains(s, "src") ||
-               strings.Contains(s, "modules")
+    trimmed := strings.Trim(strings.TrimSpace(s), "'\"")
+    if strings.Contains(trimmed, "://") {
+        return false
+    }
+    if IsLikelyStaticAssetName(trimmed) {
+        return true
+    }
+
+    normalized := strings.ReplaceAll(trimmed, "\\", "/")
+    lower := strings.ToLower(normalized)
+    for _, prefix := range []string{
+        "./", "../", "~/", "/bin/", "/dev/", "/etc/", "/home/", "/media/", "/mnt/", "/opt/", "/proc/", "/root/", "/run/", "/srv/", "/sys/", "/tmp/", "/usr/", "/var/", "assets/", "build/", "dist/", "modules/", "node_modules/", "public/", "src/",
+    } {
+        if strings.HasPrefix(lower, prefix) {
+            return true
+        }
+    }
+    if len(normalized) >= 3 && ((normalized[0] >= 'A' && normalized[0] <= 'Z') ||
+        (normalized[0] >= 'a' && normalized[0] <= 'z')) && normalized[1] == ':' && normalized[2] == '/' {
+        return true
+    }
+    return false
+}
+
+func IsLikelyStaticAssetName(s string) bool {
+    if s == "" || strings.ContainsAny(s, " \t\r\n") {
+        return false
+    }
+    lower := strings.ToLower(s)
+    for _, suffix := range []string{
+        ".js", ".mjs", ".cjs", ".css", ".map", ".json",
+        ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico",
+        ".woff", ".woff2", ".ttf", ".eot", ".wasm",
+    } {
+        if len(lower) > len(suffix) && strings.HasSuffix(lower, suffix) {
+            stem := strings.TrimSuffix(lower, suffix)
+            return strings.ContainsAny(stem, "/\\") || strings.Contains(stem, ".")
+        }
     }
     return false
 }
@@ -440,7 +472,7 @@ func HasRepeatedCharacterPattern(s string) bool {
 func IsLikelyDocumentation(s, context string) bool {
     docKeywords := []string{
         "example", "usage", "documentation", "wiki", "github.com", 
-        "http://", "https://", "/docs/", "/documentation/", 
+        "/docs/", "/documentation/",
         "@example", "@caption", "@see", "@link", "sample", "tutorial",
     }
     
@@ -455,10 +487,6 @@ func IsLikelyDocumentation(s, context string) bool {
 }
 
 func IsLikelyI18nKey(s string) bool {
-    if strings.Count(s, "_") >= 2 && len(s) > 20 {
-        return true
-    }
-    
     i18nPrefixes := []string{
         "message_", "label_", "error_", "success_", "button_",
         "placeholder_", "tooltip_", "hint_", "alert_", "text_",
@@ -472,26 +500,53 @@ func IsLikelyI18nKey(s string) bool {
             return true
         }
     }
+
+    parts := strings.Split(s, "_")
+    if len(parts) >= 3 && len(s) > 20 {
+        wordLike := true
+        for _, part := range parts {
+            if len(part) < 2 || len(part) > 24 {
+                wordLike = false
+                break
+            }
+            for _, character := range part {
+                if (character < 'a' || character > 'z') && (character < '0' || character > '9') {
+                    wordLike = false
+                    break
+                }
+            }
+            if !wordLike {
+                break
+            }
+        }
+        if wordLike {
+            return true
+        }
+    }
     
     return false
 }
 
 func IsLikelyFunctionName(s string) bool {
-    functionRegex := regexp.MustCompile(`^[a-z][a-zA-Z0-9]*(?:[A-Z][a-zA-Z0-9]*)+$`)
-    if functionRegex.MatchString(s) {
-        return true
-    }
-    
     actionVerbs := []string{
         "get", "set", "update", "delete", "create", "find", "fetch",
         "compute", "calculate", "validate", "parse", "format", "convert",
         "transform", "handle", "process", "initialize", "start", "stop",
         "transition", "register", "unregister", "subscribe", "unsubscribe",
     }
+
+    if len(s) > 80 || strings.IndexFunc(s, func(character rune) bool {
+        return character >= '0' && character <= '9'
+    }) >= 0 {
+        return false
+    }
     
     for _, verb := range actionVerbs {
-        if strings.HasPrefix(strings.ToLower(s), verb) {
-            return true
+        if len(s) > len(verb) && strings.HasPrefix(strings.ToLower(s), verb) {
+            next := s[len(verb)]
+            if next >= 'A' && next <= 'Z' {
+                return true
+            }
         }
     }
     

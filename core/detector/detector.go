@@ -32,13 +32,7 @@ type Stats struct {
 }
 
 func NewDetector(patternManager *patterns.PatternManager, logger *output.Logger, config Config) *Detector {
-	if config.ContextSize == 0 {
-		config.ContextSize = 100
-	}
-
-	if config.MinConfidence == 0 {
-		config.MinConfidence = 0.5
-	}
+	config = normalizeConfig(config)
 
 	return &Detector{
 		patternManager: patternManager,
@@ -53,45 +47,13 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 	d.stats.ContentProcessed++
 	d.mu.Unlock()
 
-	d.patternManager.SetLocalMode(d.config.LocalFileMode)
-
-	patterns := d.patternManager.GetCompiledPatterns()
-
-	d.logger.Debug("Using %d regex patterns for detection", len(patterns))
-
-	if len(patterns) == 0 {
-		return nil, fmt.Errorf("no compiled patterns loaded; check pattern configuration")
+	if d.patternManager != nil && d.logger != nil {
+		d.logger.Debug("Using %d regex patterns for detection", d.patternManager.GetPatternCount())
 	}
 
-	var secrets []secret.Secret
-
-	for _, pattern := range patterns {
-		matches := pattern.Regex.FindAllStringSubmatch(content, -1)
-
-		for _, match := range matches {
-			if len(match) == 0 {
-				continue
-			}
-
-			value := match[0]
-			if len(match) > 1 && match[1] != "" {
-				value = match[1]
-			}
-
-			ctx := secret.ExtractContext(content, value, d.config.ContextSize)
-
-			line := utils.FindLineNumber(content, value)
-
-			valid, confidence := d.validateSecret(pattern.Name, value, ctx)
-
-			if valid && confidence >= d.config.MinConfidence {
-				s := secret.NewSecret(pattern.Name, value, ctx, url, line)
-				s.Confidence = confidence
-				s.Description = pattern.Description
-
-				secrets = append(secrets, s)
-			}
-		}
+	secrets, err := ScanContent(d.patternManager, d.config, content, url)
+	if err != nil {
+		return nil, err
 	}
 
 	d.mu.Lock()
@@ -101,32 +63,116 @@ func (d *Detector) DetectSecrets(content, url string) ([]secret.Secret, error) {
 	return secrets, nil
 }
 
-/*
-Validates a potential secret and returns validity and confidence score
-*/
-func (d *Detector) validateSecret(
-	patternName, value, context string,
-) (bool, float64) {
-	patterns := d.patternManager.GetCompiledPatterns()
-	pattern, exists := patterns[patternName]
-	if !exists {
-		return false, 0
+// ScanContent is the shared detection path for local files and remote content.
+// Source-specific transport code must not apply different regex or length rules.
+func ScanContent(patternManager *patterns.PatternManager, config Config, content, url string) ([]secret.Secret, error) {
+	if patternManager == nil {
+		return nil, fmt.Errorf("pattern manager is nil")
 	}
 
-	config := pattern.Config
-
-	if len(value) < config.MinLength {
-		return false, 0
+	config = normalizeConfig(config)
+	compiled := patternManager.GetCompiledPatternsOrdered()
+	if len(compiled) == 0 {
+		return nil, fmt.Errorf("no compiled patterns loaded; check pattern configuration")
 	}
 
-	if config.MaxLength > 0 && len(value) > config.MaxLength {
-		return false, 0
+	var secrets []secret.Secret
+	for _, pattern := range compiled {
+		matches := pattern.Regex.FindAllStringSubmatchIndex(content, -1)
+		for _, match := range matches {
+			start, end, ok := preferredMatchBounds(match)
+			if !ok {
+				continue
+			}
+
+			value := validation.NormalizeCandidateWithBounds(
+				pattern.Name,
+				pattern,
+				content[start:end],
+				precedingByte(content, start),
+				followingByte(content, end),
+			)
+			if value == "" {
+				continue
+			}
+			end = start + len(value)
+
+			ctx, matchOffset := secret.ExtractContextAtWithMatchOffset(content, start, end, config.ContextSize)
+			contextStart := start - matchOffset
+			contextEnd := contextStart + len(ctx)
+			decision := validation.EvaluateCandidate(pattern.Name, pattern, value, ctx, validation.Options{
+				LocalMode:                   config.LocalFileMode,
+				MatchOffset:                 matchOffset,
+				HasMatchOffset:              true,
+				ContextStartsAtLineBoundary: startsAtLineBoundary(content, contextStart),
+				ContextEndsAtLineBoundary:   endsAtLineBoundary(content, contextEnd),
+			})
+			if !decision.Valid || decision.Confidence < config.MinConfidence {
+				continue
+			}
+
+			finding := secret.NewSecret(pattern.Name, value, ctx, url, utils.FindLineNumberAtOffset(content, start))
+			finding.ByteOffset = start
+			finding.ContextOffset = matchOffset
+			finding.HasContextOffset = true
+			finding.Confidence = decision.Confidence
+			finding.Description = pattern.Description
+			secrets = append(secrets, finding)
+		}
 	}
 
-	decision := validation.EvaluateCandidate(patternName, pattern, value, context, validation.Options{
-		LocalMode: d.config.LocalFileMode,
-	})
-	return decision.Valid, decision.Confidence
+	return secrets, nil
+}
+
+func startsAtLineBoundary(content string, offset int) bool {
+	return offset == 0 || offset > 0 && offset <= len(content) && content[offset-1] == '\n'
+}
+
+func endsAtLineBoundary(content string, offset int) bool {
+	if offset == len(content) {
+		return true
+	}
+	if offset < 0 || offset >= len(content) {
+		return false
+	}
+	return content[offset] == '\n' ||
+		content[offset] == '\r' && offset+1 < len(content) && content[offset+1] == '\n'
+}
+
+func normalizeConfig(config Config) Config {
+	if config.ContextSize == 0 {
+		config.ContextSize = 100
+	}
+	if config.MinConfidence == 0 {
+		config.MinConfidence = 0.5
+	}
+	return config
+}
+
+func preferredMatchBounds(match []int) (int, int, bool) {
+	if len(match) < 2 || match[0] < 0 || match[1] < 0 {
+		return 0, 0, false
+	}
+
+	start, end := match[0], match[1]
+	if len(match) >= 4 && match[2] >= 0 && match[3] >= 0 {
+		start, end = match[2], match[3]
+	}
+	return start, end, true
+}
+
+func precedingByte(content string, start int) byte {
+	if start <= 0 || start > len(content) {
+		return 0
+	}
+	return content[start-1]
+}
+
+func followingByte(content string, end int) byte {
+	if end < 0 || end >= len(content) {
+		return 0
+	}
+	return content[end]
 }
 
 func (d *Detector) GetStats() Stats {

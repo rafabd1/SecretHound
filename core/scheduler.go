@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rafabd1/SecretHound/core/patterns"
+	"github.com/rafabd1/SecretHound/core/pipeline"
 	"github.com/rafabd1/SecretHound/networking"
 	"github.com/rafabd1/SecretHound/output"
 	"github.com/rafabd1/SecretHound/utils"
@@ -18,10 +18,9 @@ type Scheduler struct {
 	domainManager     *networking.DomainManager
 	client            *networking.Client
 	processor         *Processor
-	writer            *output.Writer
+	sink              schedulerSink
 	logger            *output.Logger
 	workerPool        *utils.WorkerPool
-	patternManager    *patterns.PatternManager
 	concurrency       int
 	mutex             sync.Mutex
 	waitingURLs       []string
@@ -31,9 +30,13 @@ type Scheduler struct {
 	stats             SchedulerStats
 	noProgress        bool
 	silent            bool
-	forceInfoFindings bool
 	rateLimitBackoffs map[string]int
 	discardedDomains  map[string]bool
+	pipelineErrors    []error
+}
+
+type schedulerSink interface {
+	Process(context.Context, string, []Secret) (pipeline.Result, error)
 }
 
 type SchedulerStats struct {
@@ -58,23 +61,21 @@ const (
 )
 
 func NewScheduler(domainManager *networking.DomainManager, client *networking.Client,
-	processor *Processor, writer *output.Writer, logger *output.Logger, patternManager *patterns.PatternManager, concurrency int, noProgress bool, silent bool, forceInfoFindings bool) (*Scheduler, error) {
+	processor *Processor, sink *pipeline.Sink, logger *output.Logger, concurrency int, noProgress bool, silent bool) (*Scheduler, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Scheduler{
-		domainManager:     domainManager,
-		client:            client,
-		processor:         processor,
-		writer:            writer,
-		logger:            logger,
-		patternManager:    patternManager,
-		concurrency:       concurrency,
-		noProgress:        noProgress,
-		silent:            silent,
-		forceInfoFindings: forceInfoFindings,
-		ctx:               ctx,
-		cancel:            cancel,
+		domainManager: domainManager,
+		client:        client,
+		processor:     processor,
+		sink:          sink,
+		logger:        logger,
+		concurrency:   concurrency,
+		noProgress:    noProgress,
+		silent:        silent,
+		ctx:           ctx,
+		cancel:        cancel,
 		stats: SchedulerStats{
 			DomainRetries:  make(map[string]int),
 			HTTPStatusHits: make(map[int]int),
@@ -86,12 +87,19 @@ func NewScheduler(domainManager *networking.DomainManager, client *networking.Cl
 }
 
 func (s *Scheduler) Schedule(urls []string) error {
+	s.domainManager.GroupURLsByDomain(urls)
+	invalidURLs := len(urls) - s.domainManager.GetURLCount()
+
 	s.mutex.Lock()
 	s.stats.TotalURLs = len(urls)
+	s.stats.FailedURLs = invalidURLs
 	s.stats.StartTime = time.Now()
+	s.pipelineErrors = nil
 	s.mutex.Unlock()
 
-	s.domainManager.GroupURLsByDomain(urls)
+	if invalidURLs > 0 {
+		s.logger.Warning("Rejected %d invalid URL(s) before scheduling", invalidURLs)
+	}
 	domains := s.domainManager.GetDomainList()
 
 	s.buildBalancedWorkQueue(domains)
@@ -151,13 +159,15 @@ func (s *Scheduler) Schedule(urls []string) error {
 				return
 			case <-completionTicker.C:
 				s.mutex.Lock()
-				totalCompleted := s.stats.ProcessedURLs + s.stats.FailedURLs
+				processedCount := s.stats.ProcessedURLs
+				failedCount := s.stats.FailedURLs
+				totalCompleted := processedCount + failedCount
 				totalExpected := s.stats.TotalURLs
 				s.mutex.Unlock()
 
 				if totalCompleted >= totalExpected {
 					s.logger.Debug("Completion monitor: All %d URLs accounted for (%d processed, %d failed). Canceling context.",
-						totalExpected, s.stats.ProcessedURLs, s.stats.FailedURLs)
+						totalExpected, processedCount, failedCount)
 					s.cancel()
 					return
 				}
@@ -200,6 +210,7 @@ func (s *Scheduler) Schedule(urls []string) error {
 	}
 	discardedDomains := s.stats.DiscardedDomains
 	discardedURLs := s.stats.DiscardedURLs
+	pipelineErrors := append([]error(nil), s.pipelineErrors...)
 	s.mutex.Unlock()
 
 	s.logger.Info("Processing completed in %.2f seconds", duration.Seconds())
@@ -218,7 +229,7 @@ func (s *Scheduler) Schedule(urls []string) error {
 		s.printDomainStatistics()
 	}
 
-	return nil
+	return errors.Join(pipelineErrors...)
 }
 
 /*
@@ -368,47 +379,37 @@ func (s *Scheduler) worker(id int) {
 				continue
 			}
 
-			s.incrementProcessedURLs(url, totalDuration)
-
 			if len(secrets) > 0 {
+				sinkResult := pipeline.Result{Detected: len(secrets), Emitted: len(secrets)}
+				if s.sink != nil {
+					var sinkErr error
+					sinkResult, sinkErr = s.sink.Process(s.ctx, url, secrets)
+					if sinkErr != nil {
+						wrappedErr := fmt.Errorf("write findings for %s: %w", url, sinkErr)
+						s.logger.Error("Worker %d: %v", id, wrappedErr)
+						s.recordPipelineFailure(url, wrappedErr)
+						continue
+					}
+				}
 				s.mutex.Lock()
-				s.stats.TotalSecrets += len(secrets)
+				s.stats.TotalSecrets += sinkResult.Emitted
 				s.mutex.Unlock()
-				s.logger.Debug("Worker %d found %d secrets in %s (Process took %v)", id, len(secrets), url, processingDuration)
-				type groupedLog struct {
-					secret Secret
-					count  int
-				}
-				groupedLogs := make(map[string]*groupedLog)
-				order := make([]string, 0, len(secrets))
-				for _, sec := range secrets {
-					key := sec.Type + "\x00" + sec.Value + "\x00" + sec.URL
-					if existing, ok := groupedLogs[key]; ok {
-						existing.count++
-					} else {
-						groupedLogs[key] = &groupedLog{secret: sec, count: 1}
-						order = append(order, key)
-					}
-				}
-				for _, key := range order {
-					entry := groupedLogs[key]
-					risk := patterns.ResolveFindingRisk(entry.secret.Type, s.patternManager)
-					s.logger.SecretFoundWithCountRisk(entry.secret.Type, entry.secret.Value, entry.secret.URL, entry.count, string(risk), s.forceInfoFindings)
-				}
-				for _, secret := range secrets {
-					if s.writer != nil {
-						risk := patterns.ResolveFindingRisk(secret.Type, s.patternManager)
-						writeErr := s.writer.WriteSecret(url, secret.Type, string(risk), secret.Value, url, secret.Context, "", secret.Line)
-						if writeErr != nil {
-							s.logger.Error("Worker %d: failed to write secret to output file: %v", id, writeErr)
-						}
-					}
-				}
+				s.logger.Debug("Worker %d found %d candidates and emitted %d findings in %s (Process took %v)", id, sinkResult.Detected, sinkResult.Emitted, url, processingDuration)
 			} else {
 				s.logger.Debug("Worker %d found 0 secrets in %s (Process took %v)", id, url, processingDuration)
 			}
+
+			s.incrementProcessedURLs(url, totalDuration)
 		}
 	}
+}
+
+func (s *Scheduler) recordPipelineFailure(url string, err error) {
+	s.mutex.Lock()
+	s.stats.FailedURLs++
+	s.pipelineErrors = append(s.pipelineErrors, err)
+	s.mutex.Unlock()
+	s.domainManager.RecordURLProcessed(url, false, 0)
 }
 
 func (s *Scheduler) incrementFailedStatsOnly() {

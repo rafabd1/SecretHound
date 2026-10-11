@@ -1,0 +1,22 @@
+email = "maria.santos@northwind.dev"
+server_ip = "45.77.12.34"
+ipv6_address = "fd12:3456:789a:0001:0000:0000:0000:0042"
+mac_address = "02:42:ac:11:00:02"
+phone = "+1 404-287-6391"
+serial = "NX7Q-4M9K-2P8R"
+postal_code = 94107
+customer_name = "Marina Costa"
+O cliente é João da Silva
+beneficiary is Renée O'Connor
+employee_name = "Ana-Maria dos Santos"
+nome_completo = "Érica d'Ávila"
+recipient: "Li Wei"
+titular = "MARIA DAS DORES"
+{"customer_name":"Mário d'Ávila"}
+employee_name = "Engineering Manager"
+email = "first.last@acme.com"
+email = "test@test.com"
+server_ip = "10.0.0.5"
+ipv6_address = "fd12:3456::42"
+hw_addr = "02:42:ac:11:00:03"
+post_code = 02139

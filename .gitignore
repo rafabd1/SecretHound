@@ -7,6 +7,8 @@
 *.dll
 *.so
 *.dylib
+*.py[cod]
+__pycache__/
 /secrethound
 
 # Test binary, built with `go test -c`
@@ -39,10 +41,20 @@ go.work.sum
 # env file
 .env
 
-dev/
+dev/*
+!dev/filesTest/
+dev/filesTest/*
+!dev/filesTest/semantic_benchmark/
+!dev/filesTest/semantic_benchmark/**
+!dev/filesTest/pii_benchmark/
+!dev/filesTest/pii_benchmark/**
+dev/filesTest/**/__pycache__/
+dev/filesTest/**/*.pyc
 
 output.*
 output_*
+/secrethound_results.*
+/semantic-mock-*.json
 
 .cursor
 

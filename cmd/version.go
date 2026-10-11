@@ -10,7 +10,7 @@ import (
 
 // Build information
 var (
-	Version = "1.2.0"
+	Version = "1.3.0"
 )
 
 // versionCmd represents the version command
@@ -18,10 +18,10 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
 	Long:  `Display build, version, and runtime information about SecretHound.`,
-	Run: func(cmd *cobra.Command, args []string) {	
+	Run: func(cmd *cobra.Command, args []string) {
 		cyan := color.New(color.FgCyan).SprintFunc()
 		green := color.New(color.FgGreen).SprintFunc()
-		
+
 		fmt.Println(cyan("SecretHound Version Information"))
 		fmt.Printf("%s: %s\n", cyan("Version"), green(Version))
 		fmt.Printf("%s: %s\n", cyan("Go Version"), green(runtime.Version()))

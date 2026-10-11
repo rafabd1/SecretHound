@@ -1,6 +1,6 @@
 # SecretHound Usage Guide
 
-This guide documents the current CLI behavior and examples for SecretHound `v1.2.0`.
+This guide documents the current CLI behavior and examples for SecretHound `v1.3.0`.
 
 ## Basic Syntax
 
@@ -62,6 +62,11 @@ secrethound -i ./targets.txt -o ./results.json
 | `--scan-urls` | Scan only URL/endpoint patterns | false |
 | `--patterns-file` | Use custom YAML patterns file | built-in |
 | `--list-patterns` | List loaded categories/patterns and exit | false |
+| `--semantic-filter` | Review validated findings with local Julia-1 inference | false |
+| `--semantic-model` | Path to the downloaded Julia-1 repository and weights | - |
+| `--semantic-python` | Python executable used by the model worker | python |
+| `--semantic-device` | Inference device (`cpu`, `cuda`, or `cuda:N`) | cpu |
+| `--suppress-likely-false-positives` | Omit only findings classified as likely false positives | false |
 | `-v, --verbose` | Verbose logs | false |
 | `-n, --no-progress` | Disable progress bar | false |
 | `-s, --silent` | Suppress progress/info logs | false |
@@ -129,6 +134,32 @@ secrethound -i ./targets.txt --scan-urls
 ```
 
 This mode overrides category filtering and scans only URL/endpoint patterns.
+
+## Optional Semantic False-Positive Filter
+
+The semantic filter runs after the normal pattern, context, entropy, and shape checks. It reviews the remaining findings; it does not replace detection. By default, likely false positives remain visible and are saved with their filter status. `--suppress-likely-false-positives` removes only findings with clear benign evidence. Uncertain findings and classifier errors remain in the results.
+
+Download the official [SupersonicLabs/Julia-1 model](https://huggingface.co/SupersonicLabs/Julia-1) and install its local Python runtime:
+
+```bash
+python -m pip install huggingface_hub
+python -c "from huggingface_hub import snapshot_download; snapshot_download('SupersonicLabs/Julia-1', local_dir='Julia-1')"
+python -m pip install -e ./Julia-1
+```
+
+Review findings without suppressing them:
+
+```bash
+secrethound ./source --semantic-filter --semantic-model ./Julia-1 -o results.json
+```
+
+Suppress only high-confidence likely false positives:
+
+```bash
+secrethound ./source --semantic-filter --semantic-model ./Julia-1 --suppress-likely-false-positives -o results.json
+```
+
+CPU inference needs no GPU. For CUDA, install the matching PyTorch build first. URL/domain extraction and suspicious command findings bypass the secret classifier. PII uses its own semantic question and deterministic checks.
 
 ## Networking and Performance Examples
 

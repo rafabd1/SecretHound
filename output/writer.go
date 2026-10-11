@@ -6,18 +6,25 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
 
 type SecretFindingData struct {
-	Type        string   `json:"type"`
-	Risk        string   `json:"risk,omitempty"`
-	Value       string   `json:"value"`
-	SourceURL   string   `json:"source_url"`
-	Context     []string `json:"context,omitempty"`
-	Occurrences int      `json:"occurrences,omitempty"`
-	Description string   `json:"description,omitempty"`
+	Type           string   `json:"type"`
+	Risk           string   `json:"risk,omitempty"`
+	Value          string   `json:"value"`
+	SourceURL      string   `json:"source_url"`
+	Line           int      `json:"line,omitempty"`
+	ByteOffset     int      `json:"byte_offset"`
+	Context        []string `json:"context,omitempty"`
+	Occurrences    int      `json:"occurrences,omitempty"`
+	Description    string   `json:"description,omitempty"`
+	Confidence     float64  `json:"confidence,omitempty"`
+	ReviewPriority string   `json:"review_priority,omitempty"`
+	FilterStatus   string   `json:"filter_status,omitempty"`
+	FilterScore    float64  `json:"filter_score,omitempty"`
 }
 
 type Writer struct {
@@ -79,10 +86,26 @@ func NewWriter(outputPath string, rawMode bool, groupedMode bool) (*Writer, erro
 }
 
 func (w *Writer) WriteSecret(sourceForGrouping, secretType, risk, value, specificSourceURL, context, description string, line int) error {
+	return w.WriteFinding(sourceForGrouping, SecretFindingData{
+		Type:        secretType,
+		Risk:        risk,
+		Value:       value,
+		SourceURL:   specificSourceURL,
+		Line:        line,
+		Context:     contextSlice(context),
+		Occurrences: 1,
+		Description: description,
+	})
+}
+
+func (w *Writer) WriteFinding(sourceForGrouping string, finding SecretFindingData) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	w.count++
+	if finding.Occurrences <= 0 {
+		finding.Occurrences = 1
+	}
 
 	if w.rawMode {
 		if w.isGroupedBySource {
@@ -90,34 +113,26 @@ func (w *Writer) WriteSecret(sourceForGrouping, secretType, risk, value, specifi
 				w.groupedFindings[sourceForGrouping] = []SecretFindingData{}
 				w.groupedIndex[sourceForGrouping] = map[string]int{}
 			}
-			key := secretType + "\x00" + value + "\x00" + specificSourceURL
+			key := findingKey(finding)
 			if idx, ok := w.groupedIndex[sourceForGrouping][key]; ok {
-				w.groupedFindings[sourceForGrouping][idx].Occurrences++
+				w.groupedFindings[sourceForGrouping][idx].Occurrences += finding.Occurrences
 				return nil
 			}
-			w.groupedFindings[sourceForGrouping] = append(w.groupedFindings[sourceForGrouping], SecretFindingData{
-				Type:        secretType,
-				Risk:        risk,
-				Value:       value,
-				SourceURL:   specificSourceURL,
-				Occurrences: 1,
-			})
+			finding.Context = nil
+			finding.Description = ""
+			w.groupedFindings[sourceForGrouping] = append(w.groupedFindings[sourceForGrouping], finding)
 			w.groupedIndex[sourceForGrouping][key] = len(w.groupedFindings[sourceForGrouping]) - 1
 			return nil
 		}
 
-		key := secretType + "\x00" + value + "\x00" + specificSourceURL
+		key := findingKey(finding)
 		if idx, ok := w.findingIndex[key]; ok {
-			w.findings[idx].Occurrences++
+			w.findings[idx].Occurrences += finding.Occurrences
 			return nil
 		}
-		w.findings = append(w.findings, SecretFindingData{
-			Type:        secretType,
-			Risk:        risk,
-			Value:       value,
-			SourceURL:   specificSourceURL,
-			Occurrences: 1,
-		})
+		finding.Context = nil
+		finding.Description = ""
+		w.findings = append(w.findings, finding)
 		w.findingIndex[key] = len(w.findings) - 1
 		return nil
 	}
@@ -128,42 +143,24 @@ func (w *Writer) WriteSecret(sourceForGrouping, secretType, risk, value, specifi
 			w.groupedIndex[sourceForGrouping] = map[string]int{}
 		}
 
-		key := secretType + "\x00" + value + "\x00" + specificSourceURL
+		key := findingKey(finding)
 		if idx, ok := w.groupedIndex[sourceForGrouping][key]; ok {
-			w.groupedFindings[sourceForGrouping][idx].Context = appendUniqueString(w.groupedFindings[sourceForGrouping][idx].Context, context)
-			w.groupedFindings[sourceForGrouping][idx].Occurrences++
+			mergeFinding(&w.groupedFindings[sourceForGrouping][idx], finding)
 			return nil
 		}
 
-		w.groupedFindings[sourceForGrouping] = append(w.groupedFindings[sourceForGrouping], SecretFindingData{
-			Type:        secretType,
-			Risk:        risk,
-			Value:       value,
-			SourceURL:   specificSourceURL,
-			Context:     contextSlice(context),
-			Occurrences: 1,
-			Description: description,
-		})
+		w.groupedFindings[sourceForGrouping] = append(w.groupedFindings[sourceForGrouping], finding)
 		w.groupedIndex[sourceForGrouping][key] = len(w.groupedFindings[sourceForGrouping]) - 1
 		return nil
 	}
 
-	key := secretType + "\x00" + value + "\x00" + specificSourceURL
+	key := findingKey(finding)
 	if idx, ok := w.findingIndex[key]; ok {
-		w.findings[idx].Context = appendUniqueString(w.findings[idx].Context, context)
-		w.findings[idx].Occurrences++
+		mergeFinding(&w.findings[idx], finding)
 		return nil
 	}
 
-	w.findings = append(w.findings, SecretFindingData{
-		Type:        secretType,
-		Risk:        risk,
-		Value:       value,
-		SourceURL:   specificSourceURL,
-		Context:     contextSlice(context),
-		Occurrences: 1,
-		Description: description,
-	})
+	w.findings = append(w.findings, finding)
 	w.findingIndex[key] = len(w.findings) - 1
 	return nil
 }
@@ -243,19 +240,26 @@ func marshalCSV(v interface{}) ([]byte, error) {
 
 	switch data := v.(type) {
 	case []SecretFindingData:
-		sb.WriteString("Type,Risk,Value,SourceURL,Occurrences,Context,Description\n")
+		sb.WriteString("Type,Risk,ReviewPriority,FilterStatus,FilterScore,Confidence,Value,SourceURL,Line,ByteOffset,Occurrences,Context,Description\n")
 		for _, f := range data {
-			sb.WriteString(fmt.Sprintf("%s,%s,\"%s\",\"%s\",%d,\"%s\",\"%s\"\n",
+			sb.WriteString(fmt.Sprintf("%s,%s,%s,%s,%.6f,%.6f,\"%s\",\"%s\",%d,%d,%d,\"%s\",\"%s\"\n",
 				f.Type,
 				escapeCsv(f.Risk),
+				escapeCsv(f.ReviewPriority),
+				escapeCsv(f.FilterStatus),
+				f.FilterScore,
+				f.Confidence,
 				escapeCsv(f.Value),
 				escapeCsv(f.SourceURL),
+				f.Line,
+				f.ByteOffset,
 				f.Occurrences,
 				escapeCsv(strings.Join(f.Context, " | ")),
 				escapeCsv(f.Description),
 			))
 		}
 	case map[string][]SecretFindingData:
+		sb.WriteString("Type,Risk,ReviewPriority,FilterStatus,FilterScore,Confidence,Value,SourceURL,Line,ByteOffset,Occurrences,Context,Description\n")
 		keys := make([]string, 0, len(data))
 		for k := range data {
 			keys = append(keys, k)
@@ -263,11 +267,17 @@ func marshalCSV(v interface{}) ([]byte, error) {
 		sort.Strings(keys)
 		for _, source := range keys {
 			for _, f := range data[source] {
-				sb.WriteString(fmt.Sprintf("%s,%s,\"%s\",\"%s\",%d,\"%s\",\"%s\"\n",
+				sb.WriteString(fmt.Sprintf("%s,%s,%s,%s,%.6f,%.6f,\"%s\",\"%s\",%d,%d,%d,\"%s\",\"%s\"\n",
 					f.Type,
 					escapeCsv(f.Risk),
+					escapeCsv(f.ReviewPriority),
+					escapeCsv(f.FilterStatus),
+					f.FilterScore,
+					f.Confidence,
 					escapeCsv(f.Value),
 					escapeCsv(source),
+					f.Line,
+					f.ByteOffset,
 					f.Occurrences,
 					escapeCsv(strings.Join(f.Context, " | ")),
 					escapeCsv(f.Description),
@@ -311,7 +321,12 @@ func marshalTXT(v interface{}) ([]byte, error) {
 			if f.Risk != "" {
 				sb.WriteString(fmt.Sprintf("Risk: %s\n", f.Risk))
 			}
+			writeTXTFilterMetadata(&sb, "", f)
 			sb.WriteString(fmt.Sprintf("URL: %s\n", f.SourceURL))
+			if f.Line > 0 {
+				sb.WriteString(fmt.Sprintf("Line: %d\n", f.Line))
+			}
+			sb.WriteString(fmt.Sprintf("Byte offset: %d\n", f.ByteOffset))
 			if f.Occurrences > 1 {
 				sb.WriteString(fmt.Sprintf("Occurrences: %d\n", f.Occurrences))
 			}
@@ -336,6 +351,11 @@ func marshalTXT(v interface{}) ([]byte, error) {
 				if f.Risk != "" {
 					sb.WriteString(fmt.Sprintf("\tRisk: %s\n", f.Risk))
 				}
+				writeTXTFilterMetadata(&sb, "\t", f)
+				if f.Line > 0 {
+					sb.WriteString(fmt.Sprintf("\tLine: %d\n", f.Line))
+				}
+				sb.WriteString(fmt.Sprintf("\tByte offset: %d\n", f.ByteOffset))
 				if f.Occurrences > 1 {
 					sb.WriteString(fmt.Sprintf("\tOccurrences: %d\n", f.Occurrences))
 				}
@@ -390,6 +410,61 @@ func appendUniqueString(items []string, value string) []string {
 		}
 	}
 	return append(items, value)
+}
+
+func findingKey(finding SecretFindingData) string {
+	return finding.Type + "\x00" + finding.Value + "\x00" + finding.SourceURL + "\x00" +
+		strconv.Itoa(finding.Line) + "\x00" + strconv.Itoa(finding.ByteOffset) + "\x00" + finding.FilterStatus
+}
+
+func mergeFinding(existing *SecretFindingData, incoming SecretFindingData) {
+	for _, context := range incoming.Context {
+		existing.Context = appendUniqueString(existing.Context, context)
+	}
+	existing.Occurrences += incoming.Occurrences
+	if existing.Line == 0 || (incoming.Line > 0 && incoming.Line < existing.Line) {
+		existing.Line = incoming.Line
+	}
+	if incoming.Confidence > existing.Confidence {
+		existing.Confidence = incoming.Confidence
+	}
+	if filterStatusRank(incoming.FilterStatus) > filterStatusRank(existing.FilterStatus) {
+		existing.FilterStatus = incoming.FilterStatus
+		existing.FilterScore = incoming.FilterScore
+	}
+	if existing.FilterStatus == "likely_false_positive" {
+		existing.ReviewPriority = "low"
+	} else {
+		existing.ReviewPriority = incoming.ReviewPriority
+		if existing.ReviewPriority == "low" {
+			existing.ReviewPriority = ""
+		}
+	}
+}
+
+func filterStatusRank(status string) int {
+	switch status {
+	case "not_likely_false_positive":
+		return 4
+	case "classification_error":
+		return 3
+	case "uncertain":
+		return 2
+	case "likely_false_positive":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func writeTXTFilterMetadata(sb *strings.Builder, prefix string, finding SecretFindingData) {
+	if finding.ReviewPriority != "" {
+		sb.WriteString(fmt.Sprintf("%sReview priority: %s\n", prefix, finding.ReviewPriority))
+	}
+	if finding.FilterStatus != "" {
+		sb.WriteString(fmt.Sprintf("%sFilter status: %s\n", prefix, finding.FilterStatus))
+		sb.WriteString(fmt.Sprintf("%sFilter score: %.6f\n", prefix, finding.FilterScore))
+	}
 }
 
 func escapeCsv(field string) string {

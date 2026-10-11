@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Build script for SecretHound
-VERSION="0.2.0"
+VERSION="1.3.0"
 
 # Display build info
 echo "Building SecretHound $VERSION"

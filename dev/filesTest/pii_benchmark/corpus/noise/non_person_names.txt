@@ -1,0 +1,6 @@
+name = "Docker Compose"
+project_name = "Secret Hound"
+The Customer Success Team owns this service.
+recipient_id = "Marina Costa"
+command_name = "Git Status"
+interface_name = "User Profile"

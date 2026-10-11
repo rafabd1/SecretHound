@@ -12,7 +12,9 @@ import (
 	"github.com/fatih/color"
 	"github.com/rafabd1/SecretHound/core"
 	"github.com/rafabd1/SecretHound/core/patterns"
+	"github.com/rafabd1/SecretHound/core/pipeline"
 	"github.com/rafabd1/SecretHound/core/scanner"
+	"github.com/rafabd1/SecretHound/core/semantic"
 	"github.com/rafabd1/SecretHound/networking"
 	"github.com/rafabd1/SecretHound/output"
 	"github.com/rafabd1/SecretHound/utils"
@@ -53,6 +55,42 @@ func runScan(cmd *cobra.Command, args []string) error {
 	includeCats := vip.GetStringSlice("include_categories")
 	excludeCats := vip.GetStringSlice("exclude_categories")
 	scanUrlsFlag := vip.GetBool("scan_urls")
+	semanticEnabled := vip.GetBool("semantic_filter")
+	suppressLikelyFalsePositives := vip.GetBool("suppress_likely_false_positives")
+	if suppressLikelyFalsePositives && !semanticEnabled {
+		return fmt.Errorf("--suppress-likely-false-positives requires --semantic-filter")
+	}
+	if semanticEnabled && scanUrlsFlag {
+		return fmt.Errorf("--semantic-filter cannot be combined with --scan-urls")
+	}
+	if semanticEnabled {
+		if strings.TrimSpace(vip.GetString("semantic_model")) == "" {
+			return fmt.Errorf("--semantic-model is required with --semantic-filter")
+		}
+		device := strings.ToLower(strings.TrimSpace(vip.GetString("semantic_device")))
+		if device != "cpu" && device != "cuda" && !strings.HasPrefix(device, "cuda:") {
+			return fmt.Errorf("--semantic-device must be cpu, cuda, or cuda:N")
+		}
+		for name, value := range map[string]float64{
+			"--semantic-fp-threshold":       vip.GetFloat64("semantic_fp_threshold"),
+			"--semantic-decision-threshold": vip.GetFloat64("semantic_decision_threshold"),
+		} {
+			if value <= 0 || value > 1 {
+				return fmt.Errorf("%s must be greater than 0 and no greater than 1", name)
+			}
+		}
+		if vip.GetInt("semantic_batch_size") <= 0 || vip.GetInt("semantic_queue_size") <= 0 {
+			return fmt.Errorf("--semantic-batch-size and --semantic-queue-size must be greater than 0")
+		}
+		maxLength := vip.GetInt("semantic_max_length")
+		headLength := vip.GetInt("semantic_head_length")
+		if maxLength <= 0 || headLength <= 0 || headLength+4 >= maxLength {
+			return fmt.Errorf("--semantic-max-length must leave room beyond --semantic-head-length")
+		}
+		if vip.GetDuration("semantic_batch_wait") <= 0 || vip.GetDuration("semantic_timeout") <= 0 || vip.GetDuration("semantic_startup_timeout") <= 0 {
+			return fmt.Errorf("semantic wait and timeout values must be greater than 0")
+		}
+	}
 
 	var finalIncludeCategories []string
 	var finalExcludeCategories []string
@@ -120,6 +158,36 @@ func runScan(cmd *cobra.Command, args []string) error {
 		maxFileSizeBytes = maxFileSizeMB * 1024 * 1024
 	}
 
+	var semanticFilter *semantic.Filter
+	semanticClosed := false
+	if semanticEnabled {
+		classifier, classifierErr := semantic.NewJuliaClassifier(semantic.JuliaConfig{
+			PythonExecutable:  vip.GetString("semantic_python"),
+			ModelPath:         vip.GetString("semantic_model"),
+			Device:            vip.GetString("semantic_device"),
+			MaxLength:         vip.GetInt("semantic_max_length"),
+			HeadLength:        vip.GetInt("semantic_head_length"),
+			FPThreshold:       vip.GetFloat64("semantic_fp_threshold"),
+			DecisionThreshold: vip.GetFloat64("semantic_decision_threshold"),
+			StartupTimeout:    vip.GetDuration("semantic_startup_timeout"),
+		})
+		if classifierErr != nil {
+			return classifierErr
+		}
+		semanticFilter = semantic.NewFilter(classifier, semantic.FilterConfig{
+			BatchSize:                    vip.GetInt("semantic_batch_size"),
+			QueueSize:                    vip.GetInt("semantic_queue_size"),
+			BatchWait:                    vip.GetDuration("semantic_batch_wait"),
+			ClassificationTimeout:        vip.GetDuration("semantic_timeout"),
+			SuppressLikelyFalsePositives: suppressLikelyFalsePositives,
+		})
+		defer func() {
+			if !semanticClosed {
+				_ = semanticFilter.Close()
+			}
+		}()
+	}
+
 	// --- Log Initial Configuration Summary (Conditionally) ---
 	if !silentMode {
 		rateLimitStr := "auto"
@@ -131,11 +199,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		httpConfigLog := fmt.Sprintf("HTTP config: %d sec timeout | %d max retries | %s", timeout, maxRetries, rateLimitStr)
 		netHeaders := vip.GetStringSlice("headers")
 		if len(netHeaders) > 0 {
-			if len(netHeaders) == 1 {
-				httpConfigLog += fmt.Sprintf(" | Custom Header: %s", netHeaders[0])
-			} else {
-				httpConfigLog += fmt.Sprintf(" | Custom Headers: %d configured", len(netHeaders))
-			}
+			httpConfigLog += fmt.Sprintf(" | Custom Headers: %d configured", len(netHeaders))
 		}
 
 		// Update pattern info based on final include/exclude lists
@@ -157,6 +221,14 @@ func runScan(cmd *cobra.Command, args []string) error {
 			timeStrLog,
 			color.CyanString("[INFO]"),
 			concurrency, patternInfo)
+		if semanticEnabled {
+			mode := "mark likely false positives"
+			if suppressLikelyFalsePositives {
+				mode = "suppress likely false positives"
+			}
+			fmt.Fprintf(os.Stderr, "%s %s Semantic filter: Julia-1 on %s | %s\n",
+				timeStrLog, color.CyanString("[INFO]"), vip.GetString("semantic_device"), mode)
+		}
 
 		if outputFile != "" {
 			fmt.Fprintf(os.Stderr, "%s %s Output: Results will be saved to %s\n",
@@ -189,6 +261,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 			}
 		}()
 	}
+	findingSink := pipeline.NewSink(pm, writer, logger, semanticFilter, scanUrlsFlag)
 
 	// --- Input Collection ---
 	inputs, err := collectInputSources(inputFile, args, logger, maxFileSizeBytes)
@@ -215,7 +288,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 		netTimeoutSeconds := vip.GetInt("timeout")
 		netRetries := vip.GetInt("retries")
 		netVerifyTLS := vip.GetBool("verify_tls")
-		netHeaders := vip.GetStringSlice("header")
 		netRateLimit := vip.GetInt("rate_limit")
 
 		// Pass timeout as int to NewClient
@@ -226,18 +298,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		} else {
 			logger.Info("SSL/TLS certificate verification enabled")
 		}
-		// Set headers
-		for _, h := range netHeaders {
-			parts := strings.SplitN(h, ":", 2)
-			if len(parts) == 2 {
-				name := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
-				client.SetRequestHeader(name, value)
-				logger.Debug("Set custom header: %s: %s", name, value)
-			} else {
-				logger.Warning("Invalid header format (should be 'Name: Value'): %s", h)
-			}
-		}
+		applyConfiguredRequestHeaders(vip, client, logger)
 		if netRateLimit > 0 {
 			client.SetGlobalRateLimit(netRateLimit)
 		}
@@ -272,13 +333,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 				domainManager,
 				client,
 				processor,
-				writer,
+				findingSink,
 				logger,
-				pm,
 				scanConcurrency,
 				vip.GetBool("no_progress"),
 				silentMode,
-				scanUrlsFlag,
 			)
 			if err != nil {
 				logger.Error("Failed to create URL scheduler: %v", err)
@@ -309,7 +368,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			secrets, err := processLocalFiles(localFiles, logger, writer, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, maxFileSizeMB, scanUrlsFlag)
+			secrets, err := processLocalFiles(localFiles, logger, findingSink, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, maxFileSizeMB, scanUrlsFlag)
 			if err != nil {
 				logger.Error("Error processing local files: %v", err)
 				mu.Lock()
@@ -331,6 +390,29 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}()
 
 	<-done
+	if semanticFilter != nil {
+		closeErr := semanticFilter.Close()
+		semanticClosed = true
+		if closeErr != nil {
+			logger.Error("Semantic filter worker stopped with an error: %v", closeErr)
+			mu.Lock()
+			if finalErr == nil {
+				finalErr = closeErr
+			}
+			mu.Unlock()
+		}
+		stats := semanticFilter.Stats()
+		logger.Info(
+			"Semantic filter: reviewed=%d model_evaluated=%d cache_hits=%d likely_false_positive=%d uncertain=%d errors=%d suppressed=%d",
+			stats.Reviewed,
+			stats.ModelEvaluated,
+			stats.CacheHits,
+			stats.LikelyFalsePos,
+			stats.Uncertain,
+			stats.Errors,
+			stats.Suppressed,
+		)
+	}
 
 	logger.Flush()
 
@@ -338,16 +420,18 @@ func runScan(cmd *cobra.Command, args []string) error {
 	time.Sleep(100 * time.Millisecond)
 
 	if !silentMode {
-		if outputFile != "" {
-			logger.Success("Found a total of %d secrets", totalSecretsFound)
+		resultKind := "secrets"
+		if scanUrlsFlag {
+			resultKind = "URL/domain findings"
+		}
+		logger.Success("Found a total of %d %s", totalSecretsFound, resultKind)
 
+		if outputFile != "" {
 			timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
 			fmt.Fprintf(os.Stderr, "%s %s %s\n",
 				timeStrLog,
 				color.CyanString("[INFO]"),
 				fmt.Sprintf("Results saved to: %s", outputFile))
-		} else {
-			logger.Success("Found a total of %d secrets", totalSecretsFound)
 		}
 
 		timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
@@ -369,11 +453,11 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger,
 
 	if len(args) > 0 {
 		for _, arg := range args {
-			arg = filepath.FromSlash(arg)
-
-			if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
-				inputs = append(inputs, arg)
+			source := strings.TrimSpace(arg)
+			if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
+				inputs = append(inputs, source)
 			} else {
+				arg = filepath.FromSlash(source)
 				fileInfo, err := os.Stat(arg)
 				if err != nil {
 					logger.Warning("Failed to access '%s': %v", arg, err)
@@ -450,6 +534,21 @@ func collectInputSources(inputFile string, args []string, logger *output.Logger,
 	}
 
 	return inputs, nil
+}
+
+func applyConfiguredRequestHeaders(vip *viper.Viper, client *networking.Client, logger *output.Logger) {
+	for index, header := range vip.GetStringSlice("headers") {
+		parts := strings.SplitN(header, ":", 2)
+		if len(parts) != 2 {
+			logger.Warning("Invalid custom header format at position %d (expected 'Name: Value')", index+1)
+			continue
+		}
+
+		name := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		client.SetRequestHeader(name, value)
+		logger.Debug("Set custom header: %s", name)
+	}
 }
 
 /*
@@ -653,6 +752,9 @@ func categorizeInputs(inputs []string) ([]string, []string) {
 }
 
 func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
+	if logger.IsSilent() {
+		return
+	}
 	if len(localFiles) > 0 {
 		timeColor := color.New(color.FgHiBlack).SprintfFunc()
 		timeStr := timeColor("[%s]", time.Now().Format("15:04:05"))
@@ -668,7 +770,7 @@ func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
 Processes local files using the scanner
 Signature updated to accept silent bool
 */
-func processLocalFiles(files []string, logger *output.Logger, writer *output.Writer, pm *patterns.PatternManager, concurrency int, noProgress bool, silent bool, maxFileSizeMB int64, forceInfoFindings bool) (int, error) {
+func processLocalFiles(files []string, logger *output.Logger, sink *pipeline.Sink, pm *patterns.PatternManager, concurrency int, noProgress bool, silent bool, maxFileSizeMB int64, forceInfoFindings bool) (int, error) {
 	scannerCfg := scanner.LocalScannerConfig{
 		Concurrency:       concurrency,
 		MaxFileSize:       maxFileSizeMB * 1024 * 1024,
@@ -677,7 +779,7 @@ func processLocalFiles(files []string, logger *output.Logger, writer *output.Wri
 		ForceInfoFindings: forceInfoFindings,
 	}
 
-	localScanner := scanner.NewLocalScanner(pm, writer, logger, scannerCfg)
+	localScanner := scanner.NewLocalScanner(pm, sink, logger, scannerCfg)
 
 	stats, scanErr := localScanner.ScanFiles(files)
 

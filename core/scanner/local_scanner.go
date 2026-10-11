@@ -11,6 +11,7 @@ import (
 
 	"github.com/rafabd1/SecretHound/core/detector"
 	"github.com/rafabd1/SecretHound/core/patterns"
+	"github.com/rafabd1/SecretHound/core/pipeline"
 	"github.com/rafabd1/SecretHound/output"
 	"github.com/rafabd1/SecretHound/utils"
 )
@@ -26,15 +27,14 @@ type LocalScannerConfig struct {
 }
 
 type LocalScanner struct {
-	detector       *detector.Detector
-	patternManager *patterns.PatternManager
-	writer         *output.Writer
-	logger         *output.Logger
-	config         LocalScannerConfig
-	stats          LocalScanStats
-	mu             sync.Mutex
-	ctx            context.Context
-	cancelFunc     context.CancelFunc
+	detector   *detector.Detector
+	sink       *pipeline.Sink
+	logger     *output.Logger
+	config     LocalScannerConfig
+	stats      LocalScanStats
+	mu         sync.Mutex
+	ctx        context.Context
+	cancelFunc context.CancelFunc
 }
 
 type LocalScanStats struct {
@@ -50,7 +50,7 @@ type LocalScanStats struct {
 
 func NewLocalScanner(
 	patternManager *patterns.PatternManager,
-	writer *output.Writer,
+	sink *pipeline.Sink,
 	logger *output.Logger,
 	config LocalScannerConfig,
 ) *LocalScanner {
@@ -76,13 +76,12 @@ func NewLocalScanner(
 	)
 
 	return &LocalScanner{
-		detector:       secretDetector,
-		patternManager: patternManager,
-		writer:         writer,
-		logger:         logger,
-		config:         config,
-		ctx:            ctx,
-		cancelFunc:     cancel,
+		detector:   secretDetector,
+		sink:       sink,
+		logger:     logger,
+		config:     config,
+		ctx:        ctx,
+		cancelFunc: cancel,
 		stats: LocalScanStats{
 			StartTime: time.Now(),
 		},
@@ -278,49 +277,17 @@ func (s *LocalScanner) processFile(filePath string) (int, error) {
 	}
 
 	secretCount := len(secrets)
-	if secretCount > 0 {
-		s.mu.Lock()
-		s.stats.TotalSecrets += secretCount
-		s.stats.TotalBytes += fi.Size()
-		s.mu.Unlock()
-		type groupedLog struct {
-			secretType  string
-			secretValue string
-			secretURL   string
-			count       int
-		}
-		groupedLogs := make(map[string]*groupedLog)
-		order := make([]string, 0, len(secrets))
-		for _, sec := range secrets {
-			key := sec.Type + "\x00" + sec.Value + "\x00" + sec.URL
-			if existing, ok := groupedLogs[key]; ok {
-				existing.count++
-			} else {
-				groupedLogs[key] = &groupedLog{
-					secretType:  sec.Type,
-					secretValue: sec.Value,
-					secretURL:   sec.URL,
-					count:       1,
-				}
-				order = append(order, key)
-			}
-		}
-		for _, key := range order {
-			entry := groupedLogs[key]
-			risk := patterns.ResolveFindingRisk(entry.secretType, s.patternManager)
-			s.logger.SecretFoundWithCountRisk(entry.secretType, entry.secretValue, entry.secretURL, entry.count, string(risk), s.config.ForceInfoFindings)
-		}
-		if s.writer != nil {
-			for _, sec := range secrets {
-				risk := patterns.ResolveFindingRisk(sec.Type, s.patternManager)
-				if err := s.writer.WriteSecret(sec.URL, sec.Type, string(risk), sec.Value, sec.URL, sec.Context, sec.Description, sec.Line); err != nil {
-					s.logger.Error("Failed to write secret to output: %v", err)
-				}
-			}
+	if s.sink != nil && secretCount > 0 {
+		result, sinkErr := s.sink.Process(s.ctx, fileURL, secrets)
+		secretCount = result.Emitted
+		if sinkErr != nil {
+			s.logger.Error("Failed to write findings for %s: %v", filePath, sinkErr)
 		}
 	}
 
 	s.mu.Lock()
+	s.stats.TotalSecrets += secretCount
+	s.stats.TotalBytes += fi.Size()
 	s.stats.ProcessedFiles++
 	s.mu.Unlock()
 
