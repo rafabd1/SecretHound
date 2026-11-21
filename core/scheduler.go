@@ -62,8 +62,15 @@ const (
 
 func NewScheduler(domainManager *networking.DomainManager, client *networking.Client,
 	processor *Processor, sink *pipeline.Sink, logger *output.Logger, concurrency int, noProgress bool, silent bool) (*Scheduler, error) {
+	return NewSchedulerWithContext(context.Background(), domainManager, client, processor, sink, logger, concurrency, noProgress, silent)
+}
 
-	ctx, cancel := context.WithCancel(context.Background())
+func NewSchedulerWithContext(parent context.Context, domainManager *networking.DomainManager, client *networking.Client,
+	processor *Processor, sink *pipeline.Sink, logger *output.Logger, concurrency int, noProgress bool, silent bool) (*Scheduler, error) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
 
 	return &Scheduler{
 		domainManager: domainManager,
@@ -357,10 +364,13 @@ func (s *Scheduler) worker(id int) {
 			s.logger.Debug("Worker %d: Requesting URL %s", id, url)
 			startTime := time.Now()
 
-			content, fetchErr := s.client.GetJSContent(url)
+			content, fetchErr := s.client.GetJSContentContext(s.ctx, url)
 			requestDuration := time.Since(startTime)
 
 			if fetchErr != nil {
+				if s.ctx.Err() != nil {
+					return
+				}
 				s.logger.Warning("Worker %d: Failed to fetch %s after retries: %v", id, url, fetchErr)
 				s.registerFetchError(domain, fetchErr)
 				s.incrementFailedURLs(url)

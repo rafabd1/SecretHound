@@ -154,6 +154,7 @@ SecretHound supports the following options:
 | `-r, --retries` | Maximum number of retry attempts for HTTP requests. | 2 |
 | `-c, --concurrency` | Number of concurrent workers. | 50 |
 | `-l, --rate-limit` | Max requests per second per domain (0 for auto/unlimited). | 0 |
+| `--max-duration` | Maximum scan duration (`30s`, `10m`, `2h`); partial results are finalized normally. | 0 (disabled) |
 | `-H, --header` | Custom HTTP header to add (e.g., "Authorization: Bearer token"). Can be used multiple times. | - |
 | `--verify-tls` | Enable SSL/TLS certificate verification for HTTPS requests. | false |
 | `--include-categories` | Comma-separated list of pattern categories to include (e.g., aws,gcp). | all enabled |

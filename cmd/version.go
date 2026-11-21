@@ -10,7 +10,7 @@ import (
 
 // Build information
 var (
-	Version = "1.3.0"
+	Version = "1.3.1"
 )
 
 // versionCmd represents the version command

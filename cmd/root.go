@@ -37,7 +37,7 @@ Examples:
 Flag Categories:
   Input Sources:     -i, --input-file
 	Output:            -o, --output | --raw
-  Performance:       -c, --concurrency | -l, --rate-limit
+  Performance:       -c, --concurrency | -l, --rate-limit | --max-duration
   Networking:        -t, --timeout | -r, --retries | -H, --header | --verify-tls
   Pattern Control:   --include-categories | --exclude-categories | --scan-urls | --list-patterns | --patterns-file
 	Semantic Filter:   --semantic-filter | --semantic-model | --suppress-likely-false-positives
@@ -121,8 +121,10 @@ func init() {
 	// Group: Performance
 	rootCmd.Flags().IntP("concurrency", "c", 50, "Number of concurrent workers")                            // Default changed to 50 based on scan.go edits
 	rootCmd.Flags().IntP("rate-limit", "l", 0, "Max requests per second per domain (0 for auto/unlimited)") // Moved from persistent
+	rootCmd.Flags().Duration("max-duration", 0, "Maximum scan duration (for example 30s, 10m, or 2h; 0 disables the limit)")
 	vip.BindPFlag("concurrency", rootCmd.Flags().Lookup("concurrency"))
 	vip.BindPFlag("rate_limit", rootCmd.Flags().Lookup("rate-limit"))
+	vip.BindPFlag("max_duration", rootCmd.Flags().Lookup("max-duration"))
 
 	// Group: Networking
 	rootCmd.Flags().IntP("timeout", "t", 10, "HTTP request timeout in seconds")

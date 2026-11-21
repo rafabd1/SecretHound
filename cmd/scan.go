@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -153,6 +155,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 	inputFile := vip.GetString("input_file")
 	outputFile := vip.GetString("output")
 	maxFileSizeMB := vip.GetInt64("max_file_size")
+	maxDuration := vip.GetDuration("max_duration")
+	if maxDuration < 0 {
+		return fmt.Errorf("--max-duration cannot be negative")
+	}
 	maxFileSizeBytes := int64(0)
 	if maxFileSizeMB > 0 {
 		maxFileSizeBytes = maxFileSizeMB * 1024 * 1024
@@ -221,6 +227,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 			timeStrLog,
 			color.CyanString("[INFO]"),
 			concurrency, patternInfo)
+		if maxDuration > 0 {
+			fmt.Fprintf(os.Stderr, "%s %s Scan time limit: %s\n",
+				timeStrLog, color.CyanString("[INFO]"), maxDuration)
+		}
 		if semanticEnabled {
 			mode := "mark likely false positives"
 			if suppressLikelyFalsePositives {
@@ -313,6 +323,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	// --- Execute Scans (with corrected logic for passing patterns) ---
+	var scanCtx context.Context = context.Background()
+	cancelScan := func() {}
+	if maxDuration > 0 {
+		scanCtx, cancelScan = context.WithTimeout(scanCtx, maxDuration)
+	}
+	defer cancelScan()
+
 	var wg sync.WaitGroup
 	var totalSecretsFound int32
 	var finalErr error
@@ -329,7 +346,8 @@ func runScan(cmd *cobra.Command, args []string) error {
 			regexManager.SetPatternManager(pm)
 			processor := core.NewProcessor(regexManager, logger)
 
-			scheduler, err := core.NewScheduler(
+			scheduler, err := core.NewSchedulerWithContext(
+				scanCtx,
 				domainManager,
 				client,
 				processor,
@@ -368,7 +386,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			secrets, err := processLocalFiles(localFiles, logger, findingSink, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, maxFileSizeMB, scanUrlsFlag)
+			secrets, err := processLocalFiles(scanCtx, localFiles, logger, findingSink, pm, scanConcurrency, vip.GetBool("no_progress"), silentMode, maxFileSizeMB, scanUrlsFlag)
 			if err != nil {
 				logger.Error("Error processing local files: %v", err)
 				mu.Lock()
@@ -390,6 +408,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}()
 
 	<-done
+	timedOut := errors.Is(scanCtx.Err(), context.DeadlineExceeded)
 	if semanticFilter != nil {
 		closeErr := semanticFilter.Close()
 		semanticClosed = true
@@ -412,6 +431,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 			stats.Errors,
 			stats.Suppressed,
 		)
+	}
+	if timedOut && !silentMode {
+		timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
+		fmt.Fprintf(os.Stderr, "%s %s Maximum scan duration of %s reached; partial results were finalized normally\n",
+			timeStrLog, color.YellowString("[WARNING]"), maxDuration)
 	}
 
 	logger.Flush()
@@ -770,7 +794,7 @@ func logInputSummary(logger *output.Logger, remoteURLs, localFiles []string) {
 Processes local files using the scanner
 Signature updated to accept silent bool
 */
-func processLocalFiles(files []string, logger *output.Logger, sink *pipeline.Sink, pm *patterns.PatternManager, concurrency int, noProgress bool, silent bool, maxFileSizeMB int64, forceInfoFindings bool) (int, error) {
+func processLocalFiles(ctx context.Context, files []string, logger *output.Logger, sink *pipeline.Sink, pm *patterns.PatternManager, concurrency int, noProgress bool, silent bool, maxFileSizeMB int64, forceInfoFindings bool) (int, error) {
 	scannerCfg := scanner.LocalScannerConfig{
 		Concurrency:       concurrency,
 		MaxFileSize:       maxFileSizeMB * 1024 * 1024,
@@ -779,7 +803,8 @@ func processLocalFiles(files []string, logger *output.Logger, sink *pipeline.Sin
 		ForceInfoFindings: forceInfoFindings,
 	}
 
-	localScanner := scanner.NewLocalScanner(pm, sink, logger, scannerCfg)
+	localScanner := scanner.NewLocalScannerWithContext(ctx, pm, sink, logger, scannerCfg)
+	defer localScanner.Cleanup()
 
 	stats, scanErr := localScanner.ScanFiles(files)
 

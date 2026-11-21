@@ -26,6 +26,49 @@ type schedulerTestSink struct {
 	calls    int
 }
 
+func TestSchedulerHonorsParentDeadlineDuringRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		select {
+		case <-request.Context().Done():
+		case <-time.After(5 * time.Second):
+			writer.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	logger := output.NewLogger(false, true)
+	t.Cleanup(logger.Close)
+	regexManager := NewRegexManager()
+	processor := NewProcessor(regexManager, logger)
+	scheduler, err := NewSchedulerWithContext(
+		ctx,
+		networking.NewDomainManager(),
+		networking.NewClient(5, 2),
+		processor,
+		nil,
+		logger,
+		1,
+		true,
+		true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started := time.Now()
+	if err := scheduler.Schedule([]string{server.URL + "/slow.js"}); err != nil {
+		t.Fatalf("Schedule() error = %v, want controlled completion", err)
+	}
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatalf("parent context error = %v, want deadline exceeded", ctx.Err())
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("scheduler cancellation took %s, want less than 1s", elapsed)
+	}
+}
+
 func (s *schedulerTestSink) Process(ctx context.Context, _ string, findings []Secret) (pipeline.Result, error) {
 	s.mu.Lock()
 	s.calls++

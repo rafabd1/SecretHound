@@ -25,6 +25,16 @@ func TestCollectInputSourcesPreservesHTTPURL(t *testing.T) {
 	}
 }
 
+func TestMaxDurationFlagIsRegisteredAndDisabledByDefault(t *testing.T) {
+	flag := rootCmd.Flags().Lookup("max-duration")
+	if flag == nil {
+		t.Fatal("max-duration flag is not registered")
+	}
+	if flag.DefValue != "0s" {
+		t.Fatalf("max-duration default = %q, want 0s", flag.DefValue)
+	}
+}
+
 func TestApplyConfiguredRequestHeadersUsesBoundHeadersKey(t *testing.T) {
 	received := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
