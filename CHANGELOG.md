@@ -1,5 +1,16 @@
 # SecretHound Changelog
 
+## v1.3.2 (2026-11-21)
+
+### CLI Output Contract
+- Writes finding lines to `stdout` while keeping the banner, scan status, warnings, and summary on `stderr`.
+- Keeps semantic verdicts and URL extraction findings on the result stream.
+- Stops emitting cursor-clear controls when no progress bar is active, including with `--no-progress`.
+- Makes `--list-patterns` a clean `stdout` command with no success banner on `stderr`.
+- Lists every pattern definition with its default state and reports active, opt-in, retired, and unavailable counts separately.
+- Rewords scan startup counts to distinguish active patterns from total definitions.
+- Adds subprocess stream-contract tests and focused logger and terminal tests.
+
 ## v1.3.1 (2026-11-21)
 
 ### Controlled Scan Duration

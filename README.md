@@ -176,7 +176,7 @@ SecretHound supports the following options:
 | `--semantic-head-length` | Julia-1 question and options token budget. | 512 |
 | `--suppress-likely-false-positives` | Omit only findings classified as likely false positives. | false |
 | `--max-file-size` | Maximum file size to scan in MB (0 for no limit). | 0 |
-| `--list-patterns` | List available pattern categories and patterns, then exit. | false |
+| `--list-patterns` | List all pattern definitions, default states, and categories, then exit. | false |
 | `-v, --verbose` | Enable verbose logging output. | false |
 | `-n, --no-progress` | Disable the progress bar display. | false |
 | `-s, --silent` | Silent mode (suppress progress bar and info logs). | false |

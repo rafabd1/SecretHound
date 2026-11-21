@@ -70,7 +70,9 @@ func (tc *TerminalController) CoordinateOutput(fn func()) {
     tc.BeginOutput()
     defer tc.EndOutput()
     
-    tc.ClearLine()
+    if tc.HasProgressBar() {
+        tc.ClearLine()
+    }
     
     fn()
 }
