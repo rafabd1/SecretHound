@@ -1,5 +1,14 @@
 # SecretHound Changelog
 
+## v1.3.1 (2026-11-21)
+
+### Controlled Scan Duration
+- Added `--max-duration` with Go duration values such as `30s`, `10m`, and `2h`.
+- Stops pending local and remote work when the limit is reached, including active HTTP requests and retry waits.
+- Preserves completed findings, finalizes semantic review and configured output, and prints the normal summary with a timeout warning.
+- Treats the time limit as a controlled completion and keeps the default behavior unchanged when the flag is not set.
+- Added cancellation and deadline tests for local scanning, remote scheduling, and HTTP requests.
+
 ## v1.3.0 (2026-10-10)
 
 ### Semantic False-Positive Review
