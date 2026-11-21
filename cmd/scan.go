@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -34,10 +35,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	timeColorLog := color.New(color.FgHiBlack).SprintfFunc()
 
-	if !silentMode {
-		printHeader()
-	}
-
 	// --- List Patterns Handling ---
 	if vip.GetBool("list_patterns") {
 		pm := patterns.NewPatternManager()
@@ -49,8 +46,12 @@ func runScan(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("failed to compile custom patterns from %s: %w", patternsFile, err)
 			}
 		}
-		printPatternList(pm)
+		printPatternList(os.Stdout, pm)
 		return nil
+	}
+
+	if !silentMode {
+		printHeader()
 	}
 
 	// --- Validate Category Flags & Determine Final Filters ---
@@ -209,13 +210,16 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 
 		// Update pattern info based on final include/exclude lists
-		patternInfo := fmt.Sprintf("%d/%d patterns loaded", loadStats.Loaded, loadStats.TotalDefinitions)
+		patternInfo := fmt.Sprintf("%d active patterns loaded; %d definitions total", loadStats.Loaded, loadStats.TotalDefinitions)
+		if loadStats.SkippedByEnabled > 0 || loadStats.SkippedRetired > 0 {
+			patternInfo += fmt.Sprintf(" (%d opt-in, %d retired)", loadStats.SkippedByEnabled, loadStats.SkippedRetired)
+		}
 		if scanUrlsFlag {
-			patternInfo = fmt.Sprintf("%d/%d URL patterns loaded (selected: %d)", loadStats.Loaded, loadStats.TotalDefinitions, loadStats.SelectedForLoad)
+			patternInfo = fmt.Sprintf("%d URL patterns loaded; %d definitions total (%d selected)", loadStats.Loaded, loadStats.TotalDefinitions, loadStats.SelectedForLoad)
 		} else if len(finalIncludeCategories) > 0 {
-			patternInfo = fmt.Sprintf("%d/%d patterns loaded (selected: %d) from categories: %v", loadStats.Loaded, loadStats.TotalDefinitions, loadStats.SelectedForLoad, finalIncludeCategories)
+			patternInfo = fmt.Sprintf("%d patterns loaded; %d definitions total (%d selected) from categories: %v", loadStats.Loaded, loadStats.TotalDefinitions, loadStats.SelectedForLoad, finalIncludeCategories)
 		} else if len(finalExcludeCategories) > 0 {
-			patternInfo = fmt.Sprintf("%d/%d patterns loaded (selected: %d) excluding categories: %v", loadStats.Loaded, loadStats.TotalDefinitions, loadStats.SelectedForLoad, finalExcludeCategories)
+			patternInfo = fmt.Sprintf("%d patterns loaded; %d definitions total (%d selected) excluding categories: %v", loadStats.Loaded, loadStats.TotalDefinitions, loadStats.SelectedForLoad, finalExcludeCategories)
 		}
 
 		timeStrLog := timeColorLog("[%s]", time.Now().Format("15:04:05"))
@@ -821,22 +825,42 @@ func processLocalFiles(ctx context.Context, files []string, logger *output.Logge
 	return stats.TotalSecrets, scanErr
 }
 
-// printPatternList prints available patterns
-func printPatternList(pm *patterns.PatternManager) {
-	fmt.Println("Available Pattern Categories and Patterns:")
-	fmt.Println("===========================================")
+// printPatternList prints every pattern definition and its default state.
+func printPatternList(writer io.Writer, pm *patterns.PatternManager) {
+	fmt.Fprintln(writer, "Pattern Definitions")
+	fmt.Fprintln(writer, "===================")
 
 	categorized := make(map[string][]struct {
 		Name   string
 		Config patterns.PatternConfig
+		Status string
 	})
 	var categories []string
 	categoryMap := make(map[string]bool)
+	compiled := pm.GetCompiledPatterns()
+	definitions := pm.GetDefinitions().Patterns
+	activeCount := 0
+	optInCount := 0
+	retiredCount := 0
+	unavailableCount := 0
 
-	for name, compiled := range pm.GetCompiledPatterns() {
-		config := compiled.Config
+	for name, config := range definitions {
 		if config.Category == "" {
 			config.Category = "uncategorized"
+		}
+		status := "unavailable"
+		switch {
+		case config.Retired:
+			status = "retired"
+			retiredCount++
+		case compiled[name] != nil:
+			status = "active"
+			activeCount++
+		case !config.Enabled:
+			status = "opt-in"
+			optInCount++
+		default:
+			unavailableCount++
 		}
 		if !categoryMap[config.Category] {
 			categories = append(categories, config.Category)
@@ -845,24 +869,29 @@ func printPatternList(pm *patterns.PatternManager) {
 		categorized[config.Category] = append(categorized[config.Category], struct {
 			Name   string
 			Config patterns.PatternConfig
-		}{Name: name, Config: config})
+			Status string
+		}{Name: name, Config: config, Status: status})
 	}
+
+	fmt.Fprintf(writer, "Definitions: %d total | Active by default: %d | Opt-in: %d | Retired: %d | Unavailable: %d\n",
+		len(definitions), activeCount, optInCount, retiredCount, unavailableCount)
+	fmt.Fprintln(writer, "States: active = loaded by default; opt-in = loaded only when its category is included; retired = never loaded.")
 
 	sort.Strings(categories)
 
 	for _, category := range categories {
-		fmt.Printf("\n[%s]\n", strings.ToUpper(category))
+		fmt.Fprintf(writer, "\n[%s]\n", strings.ToUpper(category))
 		categoryPatterns := categorized[category]
 		sort.Slice(categoryPatterns, func(i, j int) bool {
 			return categoryPatterns[i].Name < categoryPatterns[j].Name
 		})
 
 		for _, p := range categoryPatterns {
-			fmt.Printf("  - %-30s : %s\n", p.Name, p.Config.Description)
+			fmt.Fprintf(writer, "  - %-30s [%-11s] : %s\n", p.Name, p.Status, p.Config.Description)
 		}
 	}
-	fmt.Println("===========================================")
-	fmt.Println("\nNote: Use category names with --include-categories or --exclude-categories flags.")
+	fmt.Fprintln(writer, "===================")
+	fmt.Fprintln(writer, "Use category names with --include-categories or --exclude-categories.")
 }
 
 // Initialization function (called by Cobra/Viper)
@@ -902,7 +931,7 @@ func initScanCmd(cmd *cobra.Command) {
 	cmd.Flags().StringSlice("include-categories", []string{}, "Comma-separated list of pattern categories to include (e.g., aws,gcp)")
 	cmd.Flags().StringSlice("exclude-categories", []string{}, "Comma-separated list of pattern categories to exclude (e.g., pii,generic)")
 	cmd.Flags().Bool("scan-urls", false, "URL Extraction Mode: Scan ONLY for URL/Endpoint patterns (overrides category filters)") // Updated description
-	cmd.Flags().Bool("list-patterns", false, "List available pattern categories and exit")
+	cmd.Flags().Bool("list-patterns", false, "List pattern definitions, default states, and categories, then exit")
 	cmd.Flags().String("patterns-file", "", "Path to a custom YAML patterns file to replace embedded defaults")
 	vip.BindPFlag("include_categories", cmd.Flags().Lookup("include-categories"))
 	vip.BindPFlag("exclude_categories", cmd.Flags().Lookup("exclude-categories"))

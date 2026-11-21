@@ -2,6 +2,7 @@ package output
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -34,6 +35,7 @@ type LogMessage struct {
 	Critical bool
 	Risk     string
 	Dim      bool
+	Result   bool
 }
 
 type Logger struct {
@@ -54,8 +56,10 @@ type Logger struct {
 	riskHigh     func(format string, a ...interface{}) string
 	semanticDim  func(format string, a ...interface{}) string
 
-	progressBar *ProgressBar
-	progressMu  sync.Mutex
+	progressBar  *ProgressBar
+	progressMu   sync.Mutex
+	resultWriter io.Writer
+	logWriter    io.Writer
 }
 
 // NewLogger now accepts verbose and silent flags to determine the minimum log level
@@ -84,6 +88,8 @@ func NewLogger(verbose, silent bool) *Logger {
 		riskMedium:   color.New(color.FgYellow, color.Bold).SprintfFunc(),
 		riskHigh:     color.New(color.FgRed, color.Bold).SprintfFunc(),
 		semanticDim:  color.New(color.Faint).SprintfFunc(),
+		resultWriter: os.Stdout,
+		logWriter:    os.Stderr,
 	}
 
 	go logger.processLogs()
@@ -144,7 +150,11 @@ func (l *Logger) writeLog(msg LogMessage) {
 	}
 
 	tc.CoordinateOutput(func() {
-		fmt.Fprintln(os.Stderr, l.formatLogLine(msg))
+		writer := l.logWriter
+		if msg.Result {
+			writer = l.resultWriter
+		}
+		fmt.Fprintln(writer, l.formatLogLine(msg))
 	})
 
 	if pb != nil {
@@ -182,6 +192,26 @@ func (l *Logger) enqueueFindingLogWithStyle(risk string, dim bool, format string
 		Critical: false,
 		Risk:     strings.ToLower(strings.TrimSpace(risk)),
 		Dim:      dim,
+		Result:   true,
+	}
+
+	select {
+	case l.logQueue <- msg:
+	default:
+		l.outputMu.Lock()
+		l.writeLog(msg)
+		l.outputMu.Unlock()
+	}
+}
+
+func (l *Logger) enqueueResultLog(level LogLevel, risk string, dim bool, format string, args ...interface{}) {
+	msg := LogMessage{
+		Level:   level,
+		Message: fmt.Sprintf(format, args...),
+		Time:    time.Now(),
+		Risk:    strings.ToLower(strings.TrimSpace(risk)),
+		Dim:     dim,
+		Result:  true,
 	}
 
 	select {
@@ -256,7 +286,7 @@ func (l *Logger) Fatal(format string, args ...interface{}) {
 	formatted := l.errorColor(format, args...)
 
 	tc.CoordinateOutput(func() {
-		fmt.Fprintf(os.Stderr, "%s %s %s\n", timestamp, prefix, formatted)
+		fmt.Fprintf(l.logWriter, "%s %s %s\n", timestamp, prefix, formatted)
 	})
 
 	l.Close() // Attempt to close gracefully
@@ -268,7 +298,7 @@ Logs a discovered secret while avoiding duplicates
 */
 func (l *Logger) SecretFound(secretType string, secretValue string, url string) {
 	secretPart := utils.TruncateString(secretValue, 35)
-	l.Success("Found %s: %s... in %s", secretType, secretPart, url)
+	l.enqueueResultLog(LevelSuccess, "", false, "Found %s: %s... in %s", secretType, secretPart, url)
 	time.Sleep(5 * time.Millisecond)
 }
 
@@ -304,7 +334,7 @@ func (l *Logger) SecretFoundWithCountReview(secretType string, secretValue strin
 	if likelyFalsePositive {
 		l.enqueueFindingLogWithStyle(risk, true, "%s", msg)
 	} else if forceInfo {
-		l.Info("%s", msg)
+		l.enqueueResultLog(LevelInfo, risk, false, "%s", msg)
 	} else {
 		l.enqueueFindingLog(risk, "%s", msg)
 	}

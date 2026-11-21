@@ -1,6 +1,6 @@
 # SecretHound Usage Guide
 
-This guide documents the current CLI behavior and examples for SecretHound `v1.3.0`.
+This guide documents the current CLI behavior and examples for SecretHound `v1.3.2`.
 
 ## Basic Syntax
 
@@ -62,7 +62,7 @@ secrethound -i ./targets.txt -o ./results.json
 | `--exclude-categories` | Exclude selected categories (comma-separated) | none |
 | `--scan-urls` | Scan only URL/endpoint patterns | false |
 | `--patterns-file` | Use custom YAML patterns file | built-in |
-| `--list-patterns` | List loaded categories/patterns and exit | false |
+| `--list-patterns` | List all pattern definitions, default states, and categories, then exit | false |
 | `--semantic-filter` | Review validated findings with local Julia-1 inference | false |
 | `--semantic-model` | Path to the downloaded Julia-1 repository and weights | - |
 | `--semantic-python` | Python executable used by the model worker | python |
@@ -73,6 +73,8 @@ secrethound -i ./targets.txt -o ./results.json
 | `-s, --silent` | Suppress progress/info logs | false |
 
 ## Output Modes
+
+When no output file is configured, finding lines are written to `stdout`. The banner, scan status, warnings, and final summary are written to `stderr`. This keeps findings pipeable while leaving operational details visible. `--list-patterns` writes its successful listing only to `stdout`. With `--no-progress`, SecretHound does not emit progress cursor controls.
 
 Standard TXT output:
 
@@ -102,11 +104,13 @@ secrethound -i ./targets.txt --raw -o ./raw.txt
 
 ## Pattern and Category Control
 
-List all currently loaded patterns:
+List every pattern definition and its default state:
 
 ```bash
 secrethound --list-patterns
 ```
+
+The listing distinguishes definitions that are `active` by default, `opt-in` through `--include-categories`, `retired`, or unavailable. Runtime status reports active patterns and total definitions as separate counts.
 
 Include only specific categories:
 

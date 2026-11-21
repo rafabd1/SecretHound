@@ -1,6 +1,7 @@
 package output
 
 import (
+	"bytes"
 	"os"
 	"strings"
 	"testing"
@@ -79,10 +80,51 @@ func TestLikelyFalsePositiveOverridesForcedInfoLogging(t *testing.T) {
 	)
 
 	message := <-logger.logQueue
-	if message.Level != LevelFinding || message.Risk != "low" || !message.Dim {
-		t.Fatalf("likely false positive queued with level=%v risk=%q dim=%v", message.Level, message.Risk, message.Dim)
+	if message.Level != LevelFinding || message.Risk != "low" || !message.Dim || !message.Result {
+		t.Fatalf("likely false positive queued with level=%v risk=%q dim=%v result=%v", message.Level, message.Risk, message.Dim, message.Result)
 	}
 	if !strings.HasSuffix(message.Message, likelyFalsePositiveSuffix) {
 		t.Fatalf("missing likely false-positive suffix: %q", message.Message)
+	}
+}
+
+func TestFindingsUseStdoutAndDiagnosticsUseStderr(t *testing.T) {
+	logger := NewLogger(false, false)
+	defer logger.Close()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	logger.resultWriter = &stdout
+	logger.logWriter = &stderr
+
+	logger.writeLog(LogMessage{
+		Level:   LevelFinding,
+		Message: "Found api_key: value... in file:///source.js [SEMANTIC UNCERTAIN]",
+		Time:    time.Date(2026, time.November, 21, 19, 0, 0, 0, time.UTC),
+		Risk:    "low",
+		Result:  true,
+	})
+	logger.writeLog(LogMessage{
+		Level:   LevelInfo,
+		Message: "Scan completed",
+		Time:    time.Date(2026, time.November, 21, 19, 0, 1, 0, time.UTC),
+	})
+
+	if !strings.Contains(stdout.String(), "SEMANTIC UNCERTAIN") {
+		t.Fatalf("finding was not written to stdout: %q", stdout.String())
+	}
+	if strings.Contains(stderr.String(), "SEMANTIC UNCERTAIN") {
+		t.Fatalf("finding leaked to stderr: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Scan completed") {
+		t.Fatalf("diagnostic was not written to stderr: %q", stderr.String())
+	}
+}
+
+func TestForcedInfoFindingRemainsAResult(t *testing.T) {
+	logger := &Logger{logQueue: make(chan LogMessage, 1)}
+	logger.SecretFoundWithCountReview("url", "https://example.com", "file:///source.js", 1, "informative", true, "", "")
+	message := <-logger.logQueue
+	if message.Level != LevelInfo || !message.Result {
+		t.Fatalf("forced-info finding queued with level=%v result=%v", message.Level, message.Result)
 	}
 }
