@@ -170,6 +170,13 @@ func (c *Client) SetRateLimit(domain string, requestsPerSecond int) {
 Fetches JavaScript content from a URL with retry logic and adaptive rate limiting
 */
 func (c *Client) GetJSContent(urlStr string) (string, error) {
+	return c.GetJSContentContext(context.Background(), urlStr)
+}
+
+func (c *Client) GetJSContentContext(parent context.Context, urlStr string) (string, error) {
+	if parent == nil {
+		parent = context.Background()
+	}
 	c.mutex.Lock()
 	c.stats.RequestsAttempted++
 	c.mutex.Unlock()
@@ -200,18 +207,25 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 	)
 
 	for retryCount = 0; retryCount <= c.maxRetries; retryCount++ {
+		if err := parent.Err(); err != nil {
+			c.markRequestFailed()
+			return "", err
+		}
 		if err := c.checkRateLimit(domain); err != nil {
 			c.logger.Debug("Internal rate limit hit for %s, waiting... (%v)", domain, err)
 			waitTime := time.Second / time.Duration(c.rateLimiter.getCurrentRate(domain))
 			if waitTime < 10*time.Millisecond {
 				waitTime = 10 * time.Millisecond
 			}
-			time.Sleep(waitTime + time.Duration(rand.Intn(50))*time.Millisecond)
+			if !sleepWithContext(parent, waitTime+time.Duration(rand.Intn(50))*time.Millisecond) {
+				c.markRequestFailed()
+				return "", parent.Err()
+			}
 			retryCount--
 			continue
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), c.httpClient.Timeout)
+		ctx, cancel := context.WithTimeout(parent, c.httpClient.Timeout)
 
 		req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 		if err != nil {
@@ -227,6 +241,10 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 		resp, requestErr := c.httpClient.Do(req)
 		if requestErr != nil {
 			cancel()
+			if parent.Err() != nil {
+				c.markRequestFailed()
+				return "", parent.Err()
+			}
 
 			if retryCount < c.maxRetries {
 				if c.filter.IsTimeout(requestErr) {
@@ -236,7 +254,10 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 				}
 				retriesUsed++
 				retryDelay = c.calculateBackoff(retryCount)
-				time.Sleep(retryDelay)
+				if !sleepWithContext(parent, retryDelay) {
+					c.markRequestFailed()
+					return "", parent.Err()
+				}
 				continue
 			}
 
@@ -281,7 +302,10 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 		if shouldRetry && retryCount < c.maxRetries {
 			c.logger.Debug("Received status %d for %s, retrying (%d/%d) after %s", resp.StatusCode, urlStr, retryCount+1, c.maxRetries, retryDelay)
 			retriesUsed++
-			time.Sleep(retryDelay)
+			if !sleepWithContext(parent, retryDelay) {
+				c.markRequestFailed()
+				return "", parent.Err()
+			}
 			continue
 		}
 
@@ -302,6 +326,17 @@ func (c *Client) GetJSContent(urlStr string) (string, error) {
 
 	c.markRequestFailed()
 	return "", utils.NewError(utils.NetworkError, fmt.Sprintf("failed %s after retries", urlStr), nil)
+}
+
+func sleepWithContext(ctx context.Context, duration time.Duration) bool {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 func newErrorWithStatus(errType utils.ErrorType, message string, statusCode int) *utils.AppError {

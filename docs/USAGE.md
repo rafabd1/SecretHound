@@ -54,6 +54,7 @@ secrethound -i ./targets.txt -o ./results.json
 | `-r, --retries` | Max HTTP retries | 2 |
 | `-c, --concurrency` | Number of concurrent workers | 50 |
 | `-l, --rate-limit` | Max req/s per domain (`0` = auto/unlimited) | 0 |
+| `--max-duration` | Stop scanning after a duration such as `30s`, `10m`, or `2h`; `0` disables the limit | 0 |
 | `-H, --header` | Custom header, repeatable | - |
 | `--verify-tls` | Enable TLS cert verification for HTTPS requests | false |
 | `--max-file-size` | Max local file size in MB (`0` = no limit) | 0 |
@@ -168,6 +169,14 @@ Higher throughput:
 ```bash
 secrethound -i ./targets.txt -c 80 -r 1
 ```
+
+Limit a scan while preserving findings completed before the deadline:
+
+```bash
+secrethound -i ./targets.txt --max-duration 10m -o ./results.json
+```
+
+When the limit is reached, SecretHound stops pending local and remote work, finalizes semantic review and output, prints the normal result summary, and adds a timeout warning. Reaching this limit is treated as a controlled completion rather than a scan error.
 
 Fixed domain rate:
 

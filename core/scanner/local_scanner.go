@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -54,7 +55,20 @@ func NewLocalScanner(
 	logger *output.Logger,
 	config LocalScannerConfig,
 ) *LocalScanner {
-	ctx, cancel := context.WithCancel(context.Background())
+	return NewLocalScannerWithContext(context.Background(), patternManager, sink, logger, config)
+}
+
+func NewLocalScannerWithContext(
+	parent context.Context,
+	patternManager *patterns.PatternManager,
+	sink *pipeline.Sink,
+	logger *output.Logger,
+	config LocalScannerConfig,
+) *LocalScanner {
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
 
 	if config.Concurrency <= 0 {
 		config.Concurrency = 10
@@ -165,7 +179,11 @@ func (s *LocalScanner) ScanFiles(files []string) (LocalScanStats, error) {
 		go func(filePath string) {
 			defer wg.Done()
 
-			sem <- struct{}{}
+			select {
+			case sem <- struct{}{}:
+			case <-s.ctx.Done():
+				return
+			}
 			defer func() { <-sem }()
 
 			_, err := s.processFile(filePath)
@@ -192,6 +210,9 @@ func (s *LocalScanner) ScanFiles(files []string) (LocalScanStats, error) {
 	filesProcessed := 0
 
 	for err := range errorChan {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			continue
+		}
 		errorList = append(errorList, err)
 		filesProcessed++
 	}
@@ -231,7 +252,7 @@ Processes a single file by checking its size, content and searching for secrets
 func (s *LocalScanner) processFile(filePath string) (int, error) {
 	select {
 	case <-s.ctx.Done():
-		return 0, fmt.Errorf("processing interrupted")
+		return 0, s.ctx.Err()
 	default:
 	}
 
