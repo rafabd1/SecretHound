@@ -1,6 +1,6 @@
 # SecretHound Changelog
 
-## Unreleased
+## v1.3.3 (2026-11-21)
 
 ### Semantic Model
 - Added text-only Julia-2-Flash support and made it the recommended semantic model.
