@@ -1,6 +1,7 @@
 import argparse
 import json
 import math
+from pathlib import Path
 import sys
 import traceback
 
@@ -18,7 +19,7 @@ def parse_args():
     parser.add_argument("--max-length", type=int, default=8192)
     parser.add_argument("--head-length", type=int, default=512)
     parser.add_argument("--fp-threshold", type=float, default=0.80)
-    parser.add_argument("--decision-threshold", type=float, default=0.60)
+    parser.add_argument("--decision-threshold", type=float, default=0.50)
     return parser.parse_args()
 
 
@@ -64,34 +65,68 @@ def inference_group_for(candidate):
     return task_for(candidate)
 
 
-def question_for(candidate):
+def question_for(candidate, rules_first=False):
+    if not rules_first:
+        if detector_type_for(candidate) == "person_name":
+            return "Classify the semantic role of this person_name candidate."
+        if task_for(candidate) == "pii":
+            return (
+                f"Which description matches this candidate detected as PII type {detector_name(candidate)}? "
+                "Judge its semantic role, not whether it belongs to a known person."
+            )
+        return (
+            f"Which description matches this candidate detected as {detector_name(candidate)}? "
+            "Judge its semantic role, not whether the credential works."
+        )
+
     if detector_type_for(candidate) == "person_name":
-        return "Classify the semantic role of this person_name candidate."
+        return (
+            "Does this exact value represent a person's name? Choose likely false positive only when the value or nearby "
+            "context clearly shows a role, group, product, command, placeholder, mock, or other non-person label."
+        )
     if task_for(candidate) == "pii":
         return (
-            f"Which description matches this candidate detected as PII type {detector_name(candidate)}? "
-            "Judge its semantic role, not whether it belongs to a known person."
+            f"Is this exact value semantically compatible with PII type {detector_name(candidate)}? "
+            "Do not verify who it belongs to. Choose likely false positive only when the value, source, or nearby context "
+            "clearly proves that it is a placeholder, mock, unrelated fragment, or incompatible data type."
         )
     return (
-        f"Which description matches this candidate detected as {detector_name(candidate)}? "
-        "Judge its semantic role, not whether the credential works."
+        f"Is this exact value semantically compatible with credential type {detector_name(candidate)}? "
+        "Do not test whether it works. Choose likely false positive only when the value, source, or nearby context clearly "
+        "proves that it is an example, placeholder, mock, unrelated fragment, or incompatible data type."
     )
 
 
-def options_for(candidate):
+def options_for(candidate, rules_first=False):
+    if not rules_first:
+        if detector_type_for(candidate) == "person_name":
+            return [
+                "Personal name of an individual. Keep it.",
+                "Non-person label, role, group, product, title, command, placeholder, or mock. Likely false positive.",
+            ]
+        if task_for(candidate) == "pii":
+            return [
+                "A value of the detected PII type. Keep it.",
+                "Unrelated text, an incompatible fragment, or an obvious placeholder or mock. Likely false positive.",
+            ]
+        return [
+            "A value of the detected credential type, whether active or inactive. Keep it.",
+            "Unrelated harmless text, a placeholder, mock, path, domain, command, identifier, or fragment. Likely false positive.",
+        ]
+
     if detector_type_for(candidate) == "person_name":
         return [
-            "Personal name of an individual. Keep it.",
-            "Non-person label, role, group, product, title, command, placeholder, or mock. Likely false positive.",
+            "Keep: it can be a person's name and there is no clear false-positive evidence.",
+            "Likely false positive: clear evidence shows a non-person label, placeholder, or mock.",
         ]
     if task_for(candidate) == "pii":
         return [
-            "A value of the detected PII type. Keep it.",
-            "Unrelated text, an incompatible fragment, or an obvious placeholder or mock. Likely false positive.",
+            "Keep: it is compatible with the detected PII type and there is no clear false-positive evidence.",
+            "Likely false positive: clear evidence shows a placeholder, mock, unrelated fragment, or incompatible value.",
         ]
     return [
-        "A value of the detected credential type, whether active or inactive. Keep it.",
-        "Unrelated harmless text, a placeholder, mock, path, domain, command, identifier, or fragment. Likely false positive.",
+        "Keep: it is compatible with the detected credential type and there is no clear false-positive evidence.",
+        "Likely false positive: clear evidence shows an example, placeholder, mock, unrelated fragment, or incompatible value.",
     ]
 
 
@@ -165,7 +200,71 @@ def infer(engine, rows):
     return engine.predict(rows)
 
 
-def classify(engine, candidates, fp_threshold, decision_threshold):
+class Julia2Engine:
+    def __init__(self, runtime):
+        self.runtime = runtime
+
+    def predict(self, rows):
+        requests = []
+        for row in rows:
+            criteria = {str(index): option for index, option in enumerate(row["options"])}
+            requests.append(
+                {
+                    "state": row["state"],
+                    "questions": {
+                        "verdict": {
+                            "type": "choice",
+                            "instructions": row["question"],
+                            "criteria": criteria,
+                        }
+                    },
+                }
+            )
+
+        predictions = self.runtime.predict_batch(requests)
+        results = []
+        for prediction in predictions:
+            answer = prediction["answers"]["verdict"]
+            probabilities = answer.get("probabilities", {})
+            values = [float(probabilities.get(str(index), 0.0)) for index in range(len(LABELS))]
+            choice = str(answer.get("choice", "2"))
+            index = int(choice) if choice.isdigit() else 2
+            results.append({"index": index, "probabilities": values})
+        return results
+
+
+def load_engine(args):
+    model_root = Path(args.model).resolve()
+    bundled_runtime = model_root / "runtime"
+    if (bundled_runtime / "julia2" / "__init__.py").is_file():
+        sys.path.insert(0, str(bundled_runtime))
+        from julia2 import Runtime
+
+        runtime = Runtime(str(model_root), device=args.device, max_len=args.max_length, modalities=("text",))
+        return Julia2Engine(runtime), "julia-2"
+
+    if (bundled_runtime / "julia15" / "__init__.py").is_file():
+        sys.path.insert(0, str(bundled_runtime))
+        from julia15 import Runtime
+
+        return Runtime(str(model_root), device=args.device, strict=True), "julia-1.5"
+
+    sys.path.insert(0, str(model_root))
+    from julia import load_model
+
+    return (
+        load_model(
+            str(model_root),
+            device=args.device,
+            strict_encoding=True,
+            max_length=args.max_length,
+            head_length=args.head_length,
+        ),
+        "julia-1",
+    )
+
+
+def classify(engine, candidates, fp_threshold, decision_threshold, model_family):
     raw_results = [None] * len(candidates)
     groups = {}
     for index, candidate in enumerate(candidates):
@@ -175,8 +274,8 @@ def classify(engine, candidates, fp_threshold, decision_threshold):
         rows = [
             {
                 "state": candidate_state(candidates[index]),
-                "question": question_for(candidates[index]),
-                "options": options_for(candidates[index]),
+                "question": question_for(candidates[index], rules_first=model_family == "julia-2"),
+                "options": options_for(candidates[index], rules_first=model_family == "julia-2"),
                 "type": "choice",
             }
             for index in indexes
@@ -202,6 +301,9 @@ def classify(engine, candidates, fp_threshold, decision_threshold):
         elif verdict == "not_likely_false_positive" and top_score < decision_threshold:
             verdict = "uncertain"
 
+        if task_for(candidate) == "pii" and verdict == "not_likely_false_positive":
+            verdict = "uncertain"
+
         results.append(
             {
                 "verdict": verdict,
@@ -214,23 +316,14 @@ def classify(engine, candidates, fp_threshold, decision_threshold):
 
 def main():
     args = parse_args()
-    sys.path.insert(0, args.model)
 
     try:
-        from julia import load_model
-
-        engine = load_model(
-            args.model,
-            device=args.device,
-            strict_encoding=True,
-            max_length=args.max_length,
-            head_length=args.head_length,
-        )
+        engine, model_family = load_engine(args)
     except Exception as exc:
         emit({"type": "startup_error", "error": f"{type(exc).__name__}: {exc}"})
         return 1
 
-    emit({"type": "ready"})
+    emit({"type": "ready", "model_family": model_family})
 
     for line in sys.stdin:
         try:
@@ -253,6 +346,7 @@ def main():
                 request.get("candidates") or [],
                 args.fp_threshold,
                 args.decision_threshold,
+                model_family,
             )
             emit({"type": "result", "id": request.get("id"), "results": results})
         except Exception as exc:
