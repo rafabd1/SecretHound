@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--fp-threshold", type=float, default=0.80)
+    parser.add_argument("--decision-threshold", type=float, default=0.50)
     parser.add_argument("--detector-only", action="store_true")
     parser.add_argument("--skip-suppression-check", action="store_true")
     parser.add_argument("--strict-semantic-labels", action="store_true")
@@ -70,6 +71,8 @@ def run_scan(args, scan_root, output_path, suppress):
                 args.device,
                 "--semantic-fp-threshold",
                 str(args.fp_threshold),
+                "--semantic-decision-threshold",
+                str(args.decision_threshold),
             ]
         )
         if suppress:

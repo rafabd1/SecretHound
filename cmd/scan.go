@@ -240,7 +240,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 			if suppressLikelyFalsePositives {
 				mode = "suppress likely false positives"
 			}
-			fmt.Fprintf(os.Stderr, "%s %s Semantic filter: Julia-1 on %s | %s\n",
+			fmt.Fprintf(os.Stderr, "%s %s Semantic filter: local Julia model on %s | %s\n",
 				timeStrLog, color.CyanString("[INFO]"), vip.GetString("semantic_device"), mode)
 		}
 

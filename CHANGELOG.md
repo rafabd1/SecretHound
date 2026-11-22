@@ -1,5 +1,12 @@
 # SecretHound Changelog
 
+## v1.3.3 (2026-11-21)
+
+### Semantic Model
+- Added text-only Julia-2-Flash support and made it the recommended semantic model.
+- Added a direct rule-based prompt for Julia 2 while retaining Julia-1 and Julia-1.5 compatibility.
+- Changed the normal-priority threshold to 0.50; the separate false-positive suppression threshold remains 0.80.
+
 ## v1.3.2 (2026-11-21)
 
 ### CLI Output Contract

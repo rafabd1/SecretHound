@@ -77,7 +77,7 @@ func NewJuliaClassifier(config JuliaConfig) (*JuliaClassifier, error) {
 		config.FPThreshold = 0.80
 	}
 	if config.DecisionThreshold <= 0 || config.DecisionThreshold > 1 {
-		config.DecisionThreshold = 0.60
+		config.DecisionThreshold = 0.50
 	}
 	if config.StartupTimeout <= 0 {
 		config.StartupTimeout = 2 * time.Minute
